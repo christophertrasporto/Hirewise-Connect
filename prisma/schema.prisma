@@ -166,6 +166,77 @@ enum JobStatus {
   FAILED
 }
 
+enum AuthTokenKind {
+  MAGIC_LINK
+  EMAIL_VERIFY
+  PASSWORD_RESET
+}
+
+enum TaskStatus {
+  OPEN
+  IN_PROGRESS
+  DONE
+  CANCELLED
+}
+
+// ---------------------------------------------------------------------------
+// Authentication (Phase 1). Database sessions; tokens stored hashed.
+// ---------------------------------------------------------------------------
+
+model Session {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// SHA-256 of the cookie value. The raw token never touches the database.
+  tokenHash  String   @unique
+  /// True once TOTP has been verified for this session (or MFA is not required for the role).
+  mfaPassed  Boolean  @default(false)
+  ipAddress  String?
+  userAgent  String?
+  expiresAt  DateTime
+  lastSeenAt DateTime @default(now())
+  createdAt  DateTime @default(now())
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model AuthToken {
+  id        String        @id @default(cuid())
+  kind      AuthTokenKind
+  /// SHA-256 of the emailed token.
+  tokenHash String        @unique
+  userId    String?
+  user      User?         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  email     String        @db.Citext
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime      @default(now())
+
+  @@index([email, kind])
+}
+
+model Task {
+  id             String     @id @default(cuid())
+  assigneeUserId String?
+  assignee       User?      @relation("TaskAssignee", fields: [assigneeUserId], references: [id])
+  /// When no assignee, the task belongs to a role queue (for example SALES).
+  queueRole      RoleKey?
+  type           String
+  title          String
+  dueAt          DateTime?
+  status         TaskStatus @default(OPEN)
+  relatedType    String?
+  relatedId      String?
+  createdById    String?
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+
+  @@index([assigneeUserId, status])
+  @@index([queueRole, status])
+  @@index([relatedType, relatedId])
+}
+
 // ---------------------------------------------------------------------------
 // 4.1 Identity and access
 // ---------------------------------------------------------------------------
@@ -177,11 +248,18 @@ model User {
   status       UserStatus @default(ACTIVE)
   roleId       String
   role         Role       @relation(fields: [roleId], references: [id])
+  emailVerifiedAt DateTime?
   mfaEnabled   Boolean    @default(false)
+  /// TOTP secret, AES-256-GCM encrypted with AUTH_SECRET. Never returned by any view.
+  mfaSecretEnc String?
   lastLoginAt  DateTime?
   deletedAt    DateTime?
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
+
+  sessions            Session[]
+  authTokens          AuthToken[]
+  tasksAssigned       Task[]                   @relation("TaskAssignee")
 
   permissionOverrides UserPermissionOverride[] @relation("OverrideSubject")
   grantedOverrides    UserPermissionOverride[] @relation("OverrideGrantor")

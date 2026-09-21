@@ -1,0 +1,119 @@
+import type { AgentProfileStatus, AvailabilityStatus, ExperienceLevel, SkillLevel, WorkSetup } from "@prisma/client";
+import type { Db } from "@/server/db/types";
+
+/** Everything the agent's own dashboard and wizard need. Private contact included; strip in views. */
+export function agentSelfInclude() {
+  return {
+    privateContact: true,
+    skills: { include: { skill: true } },
+    experiences: { orderBy: { startDate: "desc" as const } },
+    industryExperiences: true,
+    softwareExperiences: { include: { software: true } },
+    videos: { orderBy: { createdAt: "desc" as const } },
+    recordings: { orderBy: { createdAt: "desc" as const } },
+    portfolioItems: { orderBy: { createdAt: "desc" as const } },
+  } as const;
+}
+
+export const agentRepository = {
+  createForUser(db: Db, d: { userId: string; displayName: string; fullLegalName: string; personalEmail: string; phone: string | null; locationCity: string | null; locationCountry: string | null; timezone: string | null; primaryRole: string | null; yearsExperience: number | null }) {
+    return db.agentProfile.create({
+      data: {
+        userId: d.userId,
+        displayName: d.displayName,
+        locationCity: d.locationCity ?? undefined,
+        locationCountry: d.locationCountry ?? undefined,
+        timezone: d.timezone ?? undefined,
+        primaryRole: d.primaryRole ?? undefined,
+        yearsExperience: d.yearsExperience ?? undefined,
+        status: "DRAFT",
+        availabilityStatus: "UNAVAILABLE",
+        privateContact: { create: { fullLegalName: d.fullLegalName, personalEmail: d.personalEmail, phone: d.phone ?? undefined } },
+      },
+    });
+  },
+
+  findSelf(db: Db, agentProfileId: string) {
+    return db.agentProfile.findUnique({ where: { id: agentProfileId, deletedAt: null }, include: agentSelfInclude() });
+  },
+
+  findByIdForStaff(db: Db, id: string) {
+    return db.agentProfile.findUnique({ where: { id, deletedAt: null }, include: { ...agentSelfInclude(), user: { select: { email: true, status: true } } } });
+  },
+
+  updatePersonal(db: Db, id: string, d: { displayName: string; locationCity: string | null; locationCountry: string | null; timezone: string | null; languages: string[]; workSetup: WorkSetup | null; preferredShift: string | null; equipmentSummary: string | null; internetSummary: string | null }, priv: { fullLegalName: string; phone: string | null; addressLine: string | null }) {
+    return db.agentProfile.update({
+      where: { id },
+      data: {
+        displayName: d.displayName,
+        locationCity: d.locationCity,
+        locationCountry: d.locationCountry,
+        timezone: d.timezone,
+        languages: d.languages,
+        workSetup: d.workSetup,
+        preferredShift: d.preferredShift,
+        equipmentSummary: d.equipmentSummary,
+        internetSummary: d.internetSummary,
+        privateContact: { upsert: { create: { fullLegalName: priv.fullLegalName, phone: priv.phone ?? undefined, addressLine: priv.addressLine ?? undefined }, update: { fullLegalName: priv.fullLegalName, phone: priv.phone, addressLine: priv.addressLine } } },
+      },
+    });
+  },
+
+  updateProfessional(db: Db, id: string, d: { headline: string | null; primaryRole: string | null; summary: string | null; yearsExperience: number | null; experienceLevel: ExperienceLevel | null }) {
+    return db.agentProfile.update({ where: { id }, data: d });
+  },
+
+  async replaceSkills(db: Db, id: string, skills: Array<{ skillId: string; level: SkillLevel; yearsUsed: number | null }>) {
+    await db.agentSkill.deleteMany({ where: { agentProfileId: id } });
+    if (skills.length) await db.agentSkill.createMany({ data: skills.map((s) => ({ agentProfileId: id, skillId: s.skillId, level: s.level, yearsUsed: s.yearsUsed ?? undefined })) });
+  },
+
+  async replaceSoftware(db: Db, id: string, items: Array<{ softwareId: string; level: SkillLevel }>) {
+    await db.softwareExperience.deleteMany({ where: { agentProfileId: id } });
+    if (items.length) await db.softwareExperience.createMany({ data: items.map((s) => ({ agentProfileId: id, softwareId: s.softwareId, level: s.level })) });
+  },
+
+  async replaceIndustries(db: Db, id: string, items: Array<{ industry: string; years: number }>) {
+    await db.industryExperience.deleteMany({ where: { agentProfileId: id } });
+    if (items.length) await db.industryExperience.createMany({ data: items.map((s) => ({ agentProfileId: id, industry: s.industry, years: s.years })) });
+  },
+
+  async setAvailability(db: Db, id: string, status: AvailabilityStatus, meta: { setById: string | null; reason?: string; availableFrom?: Date | null }) {
+    await db.agentProfile.update({ where: { id }, data: { availabilityStatus: status, availableFrom: meta.availableFrom ?? undefined } });
+    await db.agentAvailability.create({ data: { agentProfileId: id, status, reason: meta.reason, setById: meta.setById ?? undefined, availableFrom: meta.availableFrom ?? undefined } });
+  },
+
+  addExperience(db: Db, id: string, d: { company: string | null; title: string; industry: string | null; startDate: Date; endDate: Date | null; description: string | null; isCampaign: boolean; campaignType: string | null }) {
+    return db.experience.create({ data: { agentProfileId: id, ...d, company: d.company ?? undefined, industry: d.industry ?? undefined, endDate: d.endDate ?? undefined, description: d.description ?? undefined, campaignType: d.campaignType ?? undefined } });
+  },
+
+  removeExperience(db: Db, agentProfileId: string, experienceId: string) {
+    // Scoped by agentProfileId so an agent cannot delete another agent's row by id.
+    return db.experience.deleteMany({ where: { id: experienceId, agentProfileId } });
+  },
+
+  setResumeKey(db: Db, id: string, resumeKey: string) {
+    return db.agentPrivateContact.update({ where: { agentProfileId: id }, data: { resumeKey } });
+  },
+
+  setCompletion(db: Db, id: string, profileCompletion: number) {
+    return db.agentProfile.update({ where: { id }, data: { profileCompletion } });
+  },
+
+  setStatus(db: Db, id: string, status: AgentProfileStatus, extra: { submittedAt?: Date; approvedAt?: Date; approvedById?: string; hiddenAt?: Date | null; suspendedAt?: Date | null } = {}) {
+    return db.agentProfile.update({ where: { id }, data: { status, ...extra } });
+  },
+
+  listByStatus(db: Db, status: AgentProfileStatus | undefined, take = 100) {
+    return db.agentProfile.findMany({
+      where: { deletedAt: null, ...(status ? { status } : {}) },
+      include: { user: { select: { email: true } }, skills: { include: { skill: true } } },
+      orderBy: { submittedAt: "desc" },
+      take,
+    });
+  },
+
+  countByStatus(db: Db) {
+    return db.agentProfile.groupBy({ by: ["status"], _count: { _all: true }, where: { deletedAt: null } });
+  },
+};
