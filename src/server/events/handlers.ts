@@ -39,7 +39,7 @@ export const EVENT_HANDLERS: { [T in DomainEventType]: EventHandler<T> } = {
       dedupeKey: `NEW_CLIENT:${p.clientId}`,
       email: true,
     });
-    const existing = await db.task.findFirst({ where: { type: "QUALIFY_CLIENT", relatedType: "Client", relatedId: p.clientId }, select: { id: true } });
+    const existing = await taskRepository.findOpenByRelated(db, "QUALIFY_CLIENT", "Client", p.clientId);
     if (!existing) {
       await taskRepository.create(db, { type: "QUALIFY_CLIENT", title: `Qualify and activate ${p.companyName}`, queueRole: "SALES", dueAt: new Date(Date.now() + 24 * 60 * 60_000), relatedType: "Client", relatedId: p.clientId });
     }
@@ -74,7 +74,7 @@ export const EVENT_HANDLERS: { [T in DomainEventType]: EventHandler<T> } = {
       dedupeKey: `PROFILE_SUBMITTED:${p.agentProfileId}`,
       email: true,
     });
-    const existing = await db.task.findFirst({ where: { type: "REVIEW_PROFILE", relatedType: "AgentProfile", relatedId: p.agentProfileId, status: { in: ["OPEN", "IN_PROGRESS"] } }, select: { id: true } });
+    const existing = await taskRepository.findOpenByRelated(db, "REVIEW_PROFILE", "AgentProfile", p.agentProfileId);
     if (!existing) {
       await taskRepository.create(db, { type: "REVIEW_PROFILE", title: `Review profile: ${p.displayName}`, queueRole: "RECRUITER", dueAt: new Date(Date.now() + 2 * 24 * 60 * 60_000), relatedType: "AgentProfile", relatedId: p.agentProfileId });
     }

@@ -87,7 +87,7 @@ export class LocalDiskStorage implements StorageAdapter {
     const expires = Date.now() + ttlSeconds * 1000;
     return `${this.appUrl}/api/storage/${encodeURIComponent(key)}?exp=${expires}&sig=${this.sign(key, expires, "GET")}`;
   }
-  async put(key: string, body: Buffer | Uint8Array) {
+  async put(key: string, body: Buffer | Uint8Array, _contentType?: string) {
     const p = this.abs(key);
     await fs.mkdir(path.dirname(p), { recursive: true });
     await fs.writeFile(p, body);

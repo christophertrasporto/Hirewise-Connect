@@ -1,0 +1,33 @@
+import { LayoutDashboard, UserCircle, Building2, FileSignature, Users, Briefcase, Bell, Film } from "lucide-react";
+import { prisma } from "@/server/db/client";
+import { requireAuth } from "@/server/auth/require-actor";
+import { can } from "@/server/policies/authorize";
+import { ROLE_NAMES } from "@/server/policies/permissions";
+import { notificationRepository } from "@/server/repositories/notification.repository";
+import { AppShell, type NavItem } from "@/components/app/AppShell";
+import { logoutAction } from "@/app/(auth)/actions";
+
+export default async function AppLayout({ children }: { children: React.ReactNode }) {
+  const auth = await requireAuth();
+  const { actor } = auth;
+
+  const nav: NavItem[] = [{ href: "/dashboard", label: "Dashboard", icon: <LayoutDashboard /> }];
+  if (actor.role === "AGENT") {
+    nav.push({ href: "/profile", label: "My profile", icon: <UserCircle /> });
+    nav.push({ href: "/profile/media", label: "Video & voice", icon: <Film /> });
+  }
+  if (actor.role === "CLIENT") nav.push({ href: "/company", label: "Company", icon: <Building2 /> });
+  if (can(actor, "client.read")) nav.push({ href: "/staff/clients", label: "Clients", icon: <Building2 /> });
+  if (can(actor, "agent.read_public") && actor.role !== "COACH") nav.push({ href: "/staff/talent", label: "Talent", icon: <Users /> });
+  if (actor.role === "AGENT" || actor.role === "CLIENT") nav.push({ href: "/account/agreements", label: "Agreements", icon: <FileSignature /> });
+  nav.push({ href: "/notifications", label: "Notifications", icon: <Bell /> });
+  if (actor.role === "COACH") nav.push({ href: "/dashboard#courses", label: "My courses", icon: <Briefcase /> });
+
+  const unread = (await notificationRepository.listForUser(prisma, actor.userId, 50)).filter((n) => !n.readAt).length;
+
+  return (
+    <AppShell nav={nav} email={auth.email} roleLabel={ROLE_NAMES[actor.role].name} unread={unread} onLogout={logoutAction}>
+      {children}
+    </AppShell>
+  );
+}

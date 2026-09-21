@@ -85,7 +85,5 @@ export async function requireActor(): Promise<Actor> {
   return (await requireAuth()).actor;
 }
 
-/** Landing page after login or a completed gate, by role. */
-export function homeFor(role: Actor["role"]): string {
-  return "/dashboard";
-}
+/** Landing page after login or a completed gate. The dashboard renders per role. */
+export const HOME_PATH = "/dashboard";

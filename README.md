@@ -12,7 +12,8 @@ Claude Code are in [CLAUDE.md](./CLAUDE.md).
 |---|---|
 | Corporate site + auth screens | Done (UI only) |
 | Phase 0 — Scaffold and foundations | Done: schema, RBAC, audit, outbox/jobs, adapters, seed, CI |
-| Phase 1 — Foundation (auth, registration, profiles, media, search, shortlists) | Next |
+| Phase 1A — Auth, agreements, registration, profile wizard, uploads, review pipeline | Done |
+| Phase 1B — Media review queue, talent search, candidate profile, shortlists | Next |
 | Phases 2–5 | Planned |
 
 ## Run locally
@@ -23,7 +24,7 @@ npm run db:local      # terminal 1: embedded PostgreSQL on :5433 (no Docker need
 npm run db:migrate    # terminal 2
 npm run db:seed
 npm run dev           # http://localhost:3000
-npm run worker        # terminal 3, optional: outbox + job worker
+npm run worker        # terminal 3: outbox + job worker (delivers emails and notifications)
 ```
 
 With Docker instead: `docker compose up` gives Postgres 16, MinIO, and Mailpit; set `DATABASE_URL` to port 5432.
@@ -42,9 +43,16 @@ npm test              # boots a throwaway Postgres, applies migrations, runs uni
 |---|---|
 | `/` | Corporate landing page |
 | `/for-clients`, `/for-talent`, `/academy`, `/how-it-works`, `/about`, `/contact` | Corporate sub-pages |
-| `/login`, `/forgot-password` | Sign-in screens (UI only until Phase 1) |
-| `/register`, `/register/client`, `/register/talent` | Account-type chooser and registration outlines |
+| `/login`, `/forgot-password`, `/reset-password/[token]` | Authentication |
+| `/register`, `/register/client`, `/register/talent` | Registration |
+| `/verify-email`, `/agreements`, `/mfa/*` | Gates every user passes before the app |
+| `/dashboard`, `/profile/*`, `/company`, `/notifications`, `/account/agreements` | Authenticated app |
+| `/staff/clients`, `/staff/talent/*` | Hirewise staff console |
 | `/legal/*` | Agreement outlines marked `LEGAL_PLACEHOLDER` |
+
+## Demo accounts
+
+After `npm run db:seed`, every account uses the password `Hirewise!2026`: `owner@`, `admin@`, `sales@`, `recruiter@`, `coach@`, `ops@` at `hirewise.example`, plus `hiring@acme-solar.example` (active client) and `maria@talent.example` (draft agent). Admin roles are asked to enrol TOTP on first login. Set `DEV_EXPOSE_LINKS=true` in `.env` to see emailed links in the UI locally.
 
 ## Stack
 

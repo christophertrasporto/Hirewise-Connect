@@ -33,7 +33,7 @@ src/server/db/           Prisma client + type-only re-exports (@/server/db/types
 ```
 
 Rules that tooling enforces:
-- `@prisma/client` and `@/server/db/client` may be imported only in `src/server/db/**` and `src/server/repositories/**`. Elsewhere, name a transaction with `import type { Tx, Db } from "@/server/db/types"`. ESLint fails otherwise, and `tests/lint/prisma-boundary.test.ts` proves it.
+- `@prisma/client` may be imported only in `src/server/db/**` and `src/server/repositories/**`. Elsewhere, name a transaction with `import type { Tx, Db } from "@/server/db/types"`. The client handle (`@/server/db/client`) may additionally be imported by the entry layer (`src/app/**` pages, server actions, route handlers, and `require-actor.ts`) solely to pass into services; services receive it as a parameter. ESLint fails otherwise, and `tests/lint/prisma-boundary.test.ts` proves it.
 - `AuditLog` is append-only. A trigger rejects UPDATE and DELETE.
 - Money is integer minor units + ISO currency + rate unit. Never floats.
 - `AgentCompensation` and `ClientBillingRate` are separate tables with separate permissions (Phase 4).

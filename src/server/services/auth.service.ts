@@ -40,6 +40,14 @@ async function enqueueEmail(db: PrismaClient, to: string, t: { subject: string; 
   await jobRepository.enqueue(db, "SEND_EMAIL", { to, subject: t.subject, text: t.text, html: t.html });
 }
 
+/**
+ * Development aid: with DEV_EXPOSE_LINKS=true (never in production) the emailed
+ * URL is returned to the caller so a local tester can follow it without a mailbox.
+ */
+function devLink(url: string): string | undefined {
+  return process.env.NODE_ENV !== "production" && process.env.DEV_EXPOSE_LINKS === "true" ? url : undefined;
+}
+
 // ---------------------------------------------------------------------------
 // Password login
 // ---------------------------------------------------------------------------
@@ -69,15 +77,17 @@ export async function logout(db: PrismaClient, token: string | undefined) {
 // Magic link
 // ---------------------------------------------------------------------------
 
-export async function requestMagicLink(db: PrismaClient, p: { email: string } & RequestMeta): Promise<void> {
+export async function requestMagicLink(db: PrismaClient, p: { email: string } & RequestMeta): Promise<{ devUrl?: string }> {
   const email = emailSchema.parse(p.email);
   rateLimit(`magic:${p.ipAddress ?? "unknown"}`, 10, 15 * 60_000);
   rateLimit(`magic:${email}`, 3, 15 * 60_000);
   const user = await userRepository.findByEmail(db, email);
   // Always behave the same whether or not the account exists.
-  if (!user || user.status !== "ACTIVE") return;
+  if (!user || user.status !== "ACTIVE") return {};
   const raw = await issueToken(db, "MAGIC_LINK", email, user.id);
-  await enqueueEmail(db, email, templates.magicLink(`${getEnv().APP_URL}/api/auth/magic/${raw}`));
+  const url = `${getEnv().APP_URL}/api/auth/magic/${raw}`;
+  await enqueueEmail(db, email, templates.magicLink(url));
+  return { devUrl: devLink(url) };
 }
 
 export async function consumeMagicLink(db: PrismaClient, p: { token: string } & RequestMeta) {
@@ -100,10 +110,12 @@ export async function consumeMagicLink(db: PrismaClient, p: { token: string } & 
 // Email verification
 // ---------------------------------------------------------------------------
 
-export async function requestEmailVerification(db: PrismaClient, p: { userId: string; email: string } & RequestMeta): Promise<void> {
+export async function requestEmailVerification(db: PrismaClient, p: { userId: string; email: string } & RequestMeta): Promise<{ devUrl?: string }> {
   rateLimit(`verify:${p.userId}`, 5, 60 * 60_000);
   const raw = await issueToken(db, "EMAIL_VERIFY", p.email, p.userId);
-  await enqueueEmail(db, p.email, templates.verifyEmail(`${getEnv().APP_URL}/api/auth/verify-email/${raw}`));
+  const url = `${getEnv().APP_URL}/api/auth/verify-email/${raw}`;
+  await enqueueEmail(db, p.email, templates.verifyEmail(url));
+  return { devUrl: devLink(url) };
 }
 
 export async function verifyEmail(db: PrismaClient, token: string): Promise<{ userId: string }> {
@@ -119,14 +131,16 @@ export async function verifyEmail(db: PrismaClient, token: string): Promise<{ us
 // Password reset
 // ---------------------------------------------------------------------------
 
-export async function requestPasswordReset(db: PrismaClient, p: { email: string } & RequestMeta): Promise<void> {
+export async function requestPasswordReset(db: PrismaClient, p: { email: string } & RequestMeta): Promise<{ devUrl?: string }> {
   const email = emailSchema.parse(p.email);
   rateLimit(`reset:${p.ipAddress ?? "unknown"}`, 10, 15 * 60_000);
   rateLimit(`reset:${email}`, 3, 60 * 60_000);
   const user = await userRepository.findByEmail(db, email);
-  if (!user || user.status !== "ACTIVE") return;
+  if (!user || user.status !== "ACTIVE") return {};
   const raw = await issueToken(db, "PASSWORD_RESET", email, user.id);
-  await enqueueEmail(db, email, templates.passwordReset(`${getEnv().APP_URL}/reset-password/${raw}`));
+  const url = `${getEnv().APP_URL}/reset-password/${raw}`;
+  await enqueueEmail(db, email, templates.passwordReset(url));
+  return { devUrl: devLink(url) };
 }
 
 export async function resetPassword(db: PrismaClient, p: { token: string; password: string }): Promise<void> {

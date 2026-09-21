@@ -92,6 +92,10 @@ export const agentRepository = {
     return db.experience.deleteMany({ where: { id: experienceId, agentProfileId } });
   },
 
+  setPhotoKey(db: Db, id: string, photoKey: string) {
+    return db.agentProfile.update({ where: { id }, data: { photoKey } });
+  },
+
   setResumeKey(db: Db, id: string, resumeKey: string) {
     return db.agentPrivateContact.update({ where: { agentProfileId: id }, data: { resumeKey } });
   },
@@ -115,5 +119,9 @@ export const agentRepository = {
 
   countByStatus(db: Db) {
     return db.agentProfile.groupBy({ by: ["status"], _count: { _all: true }, where: { deletedAt: null } });
+  },
+
+  countAvailable(db: Db) {
+    return db.agentProfile.count({ where: { status: "APPROVED", availabilityStatus: { in: ["AVAILABLE", "AVAILABLE_SOON"] }, deletedAt: null } });
   },
 };

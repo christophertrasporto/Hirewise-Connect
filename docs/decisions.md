@@ -27,4 +27,10 @@ Answers to MASTER_PROMPT.md Section 14. On 2026-09-21 Hirewise chose **"use the 
 
 - **Postgres 17, not 16, for local development.** The machine has no Docker. Local dev and tests use real Postgres binaries via `embedded-postgres` (17.x). Docker Compose and CI still pin `postgres:16`. Nothing in the schema is version-specific. See ADR-004.
 - **Local disk storage and console email drivers** exist alongside the S3 and SMTP adapters, because MinIO and Mailpit need Docker. Production uses S3 and SMTP.
-- **Password hashing deferred to Phase 1** together with Auth.js. Seeded staff users have no password yet.
+- **Password hashing** is argon2id via `@node-rs/argon2` (Phase 1A). Seeded accounts share the demo password `Hirewise!2026`.
+
+## Phase 1A deviations
+
+- **Auth.js was not used.** Sessions, tokens, and TOTP are implemented directly so that per-session MFA state and the agreements gate live in the service layer. See ADR-005.
+- **Import boundary refined:** the entry layer may import the Prisma client handle to pass into services; queries stay in repositories (ADR-002).
+- **Sales never sees agent login email or phone** in lists or details, matching Section 6 footnote 1.

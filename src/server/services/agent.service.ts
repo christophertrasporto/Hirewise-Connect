@@ -244,7 +244,9 @@ export async function submitForReview(db: PrismaClient, actor: Actor) {
 export async function listAgentsForStaff(db: PrismaClient, actor: Actor, status?: AgentProfileStatus) {
   authorize(actor, "agent.read_public");
   const rows = await agentRepository.listByStatus(db, status);
-  return rows.map(toAgentStaffListView);
+  // Login email is contact information: only with agent.read_private_contact (Section 6, footnote 1).
+  const canContact = actor.permissions.has("agent.read_private_contact");
+  return rows.map((r) => ({ ...toAgentStaffListView(r), email: canContact ? r.user.email : null }));
 }
 
 export async function getAgentForStaff(db: PrismaClient, actor: Actor, agentProfileId: string) {
