@@ -42,5 +42,14 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - run: npm run build
+      - name: Seed and run end-to-end tests
+        run: |
+          npx prisma migrate deploy
+          npm run db:seed
+          npx playwright install --with-deps chromium
+          npm run test:e2e
+        env:
+          AUTH_SECRET: ci-auth-secret-not-for-production
+          DEV_EXPOSE_LINKS: "false"
       - run: npm audit --audit-level=high
         continue-on-error: true

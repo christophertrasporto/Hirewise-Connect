@@ -80,6 +80,25 @@ export const EVENT_HANDLERS: { [T in DomainEventType]: EventHandler<T> } = {
     }
   },
 
+  MEDIA_REVIEWED: async (db, p) => {
+    const label = p.type === "VIDEO" ? "video introduction" : `voice sample “${p.title}”`;
+    const copy = {
+      APPROVED: { title: `Your ${label} is approved`, body: "Clients can now see it on your profile." },
+      REVISION_REQUIRED: { title: `Your ${label} needs changes`, body: p.feedback ? `Hirewise feedback: ${p.feedback}` : "Hirewise requested changes." },
+      REJECTED: { title: `Your ${label} was not approved`, body: p.feedback ? `Hirewise feedback: ${p.feedback}` : "Upload a new one when you are ready." },
+    }[p.outcome];
+    await notifyUser(db, { userId: p.userId, type: `MEDIA_${p.outcome}`, title: copy.title, body: copy.body, email: { to: p.email }, dedupeKey: `MEDIA_${p.outcome}:${p.mediaId}` });
+  },
+
+  CANDIDATE_SHORTLISTED: async (db, p) => {
+    // Daily digest per account manager (Section 9): one notification per client per day.
+    const day = new Date().toISOString().slice(0, 10);
+    const recipients = p.accountManagerUserId ? [{ id: p.accountManagerUserId }] : await userRepository.idsByRole(db, ["SALES"]);
+    for (const r of recipients) {
+      await notifyUser(db, { userId: r.id, type: "CANDIDATE_SHORTLISTED", title: `${p.companyName} is shortlisting talent`, body: `Latest: ${p.displayName}. Open the shortlist activity view for details.`, dedupeKey: `SHORTLIST:${p.clientId}:${day}` });
+    }
+  },
+
   PROFILE_REVIEWED: async (db, p) => {
     const copy = {
       APPROVED: { title: "Your profile is approved", body: "Your Hirewise Connect profile is now visible to vetted clients. Keep your availability up to date." },

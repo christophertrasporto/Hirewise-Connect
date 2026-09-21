@@ -9,3 +9,5 @@ out
 .pgdata
 .storage
 tsconfig.tsbuildinfo
+test-results
+playwright-report

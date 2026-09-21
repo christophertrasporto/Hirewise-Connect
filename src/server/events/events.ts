@@ -9,6 +9,8 @@ export type DomainEventMap = {
   CLIENT_ACTIVATED: { clientId: string; userId: string; companyName: string; email: string };
   AGENT_REGISTERED: { agentProfileId: string; userId: string; displayName: string; email: string };
   PROFILE_SUBMITTED: { agentProfileId: string; userId: string; displayName: string };
+  MEDIA_REVIEWED: { type: "VIDEO" | "RECORDING"; mediaId: string; agentProfileId: string; userId: string; email: string; outcome: "APPROVED" | "REJECTED" | "REVISION_REQUIRED"; feedback: string | null; title: string };
+  CANDIDATE_SHORTLISTED: { clientId: string; companyName: string; agentProfileId: string; displayName: string; accountManagerUserId: string | null };
   PROFILE_REVIEWED: { agentProfileId: string; userId: string; displayName: string; email: string; outcome: "APPROVED" | "REVISION_REQUIRED" | "REJECTED"; feedback: string | null };
 };
 

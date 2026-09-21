@@ -84,6 +84,34 @@ export function toCandidateClientView(a: AgentSelfRecord) {
   };
 }
 
+export type CandidateCardView = ReturnType<typeof toCandidateCardView> & { shortlisted?: boolean; tzDiffHours?: number | null };
+
+/** Search result card for clients: the smallest client-safe subset. */
+export function toCandidateCardView(a: AgentSelfRecord) {
+  return {
+    id: a.id,
+    displayName: a.displayName,
+    headline: a.headline,
+    primaryRole: a.primaryRole,
+    photoKey: a.photoKey,
+    yearsExperience: a.yearsExperience,
+    experienceLevel: a.experienceLevel,
+    locationCountry: a.locationCountry,
+    timezone: a.timezone,
+    languages: a.languages,
+    workSetup: a.workSetup,
+    verificationLevel: a.verificationLevel,
+    availabilityStatus: a.availabilityStatus,
+    availableFrom: a.availableFrom,
+    approvedAt: a.approvedAt,
+    skills: a.skills.slice(0, 6).map((s) => ({ name: s.skill.name, level: s.level })),
+    industries: a.industryExperiences.map((i) => i.industry),
+    hasVideo: a.videos.some((v) => v.status === "APPROVED"),
+    approvedRecordings: a.recordings.filter((r) => r.status === "APPROVED").length,
+    campaignExperience: a.experiences.some((e) => e.isCampaign),
+  };
+}
+
 /** Recruiter and admin queue row. Includes login email (staff need it) but no password or MFA fields. */
 export function toAgentStaffListView(a: { id: string; displayName: string; primaryRole: string | null; status: string; verificationLevel: string; availabilityStatus: string; profileCompletion: number; submittedAt: Date | null; createdAt: Date; user: { email: string }; skills: Array<{ skill: { name: string } }> }) {
   return {

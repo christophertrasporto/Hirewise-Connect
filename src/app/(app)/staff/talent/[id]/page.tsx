@@ -11,6 +11,8 @@ import { PageHeader, Card, StatusBadge, EmptyState, fmtDate } from "@/components
 import { ReviewActions } from "@/components/staff/ReviewActions";
 import { MediaPlayer } from "@/components/profile/MediaPlayer";
 import { ResumeLink } from "@/components/staff/ResumeLink";
+import { NotesPanel } from "@/components/staff/NotesPanel";
+import { listNotesForStaff } from "@/server/services/note.service";
 import { labelFor } from "@/lib/options";
 
 export const metadata: Metadata = { title: "Agent profile" };
@@ -26,6 +28,7 @@ export default async function StaffAgentPage({ params }: { params: Promise<{ id:
     throw e;
   }
 
+  const notes = actor.permissions.has("note.internal.read") ? await listNotesForStaff(prisma, actor, "AGENT", a.id) : [];
   const allowed = AGENT_PROFILE_TRANSITIONS.filter((t) => t.from === a.status && t.permission !== "OWNER" && actor.permissions.has(t.permission)).map((t) => ({ to: t.to, requiresReason: !!t.requiresReason }));
 
   return (
@@ -112,6 +115,11 @@ export default async function StaffAgentPage({ params }: { params: Promise<{ id:
               <p className="text-[13.5px] text-ink-400">Hidden.</p>
             )}
           </Card>
+          {actor.permissions.has("note.internal.read") && (
+            <Card title="Internal notes" description="Never shown to the agent or clients unless you mark a note visible.">
+              <NotesPanel subjectType="AGENT" subjectId={a.id} notes={notes} canWrite={actor.permissions.has("note.internal.write")} />
+            </Card>
+          )}
           <Card title="Timeline">
             <dl className="space-y-2 text-[14px]">
               <Item k="Submitted" v={fmtDate(a.submittedAt)} />

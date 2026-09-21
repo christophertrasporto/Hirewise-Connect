@@ -21,8 +21,13 @@ export function assertClientOwns(
     if (!actor.clientId || actor.clientId !== resource.clientId) throw new NotFoundError();
     return;
   }
+  // Sales reps act only on clients assigned to them (Section 7: "assigned clients"), whatever
+  // catalog permissions their role carries. Admins, Operations, and Super Admins use the permission.
+  if (actor.role === "SALES") {
+    if (actor.salesAssignedClientIds?.includes(resource.clientId)) return;
+    throw new ForbiddenError("This client is not assigned to you");
+  }
   if (staffPermission && actor.permissions.has(staffPermission)) return;
-  if (actor.role === "SALES" && actor.salesAssignedClientIds?.includes(resource.clientId)) return;
   throw new ForbiddenError("Not the owner and no staff permission for this resource");
 }
 

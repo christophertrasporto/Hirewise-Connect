@@ -1,5 +1,20 @@
-import type { AgentProfileStatus, AvailabilityStatus, ExperienceLevel, SkillLevel, WorkSetup } from "@prisma/client";
+import type { AgentProfileStatus, AvailabilityStatus, ExperienceLevel, SkillLevel, VerificationLevel, WorkSetup } from "@prisma/client";
 import type { Db } from "@/server/db/types";
+
+export type SearchWhere = {
+  text?: string;
+  role?: string;
+  skillIds?: string[];
+  softwareIds?: string[];
+  industry?: string;
+  experienceLevels?: ExperienceLevel[];
+  availability?: AvailabilityStatus[];
+  workSetup?: WorkSetup;
+  languages?: string[];
+  /** Levels at or above the requested minimum. */
+  minVerification?: VerificationLevel[];
+  campaignOnly?: boolean;
+};
 
 /** Everything the agent's own dashboard and wizard need. Private contact included; strip in views. */
 export function agentSelfInclude() {
@@ -115,6 +130,38 @@ export const agentRepository = {
       orderBy: { submittedAt: "desc" },
       take,
     });
+  },
+
+  /** Client-visible candidates: APPROVED only (Section 5.1), with optional SQL-level filters. */
+  searchApproved(db: Db, f: SearchWhere, take = 200) {
+    return db.agentProfile.findMany({
+      where: {
+        deletedAt: null,
+        status: "APPROVED",
+        ...(f.availability?.length ? { availabilityStatus: { in: f.availability } } : { availabilityStatus: { not: "UNAVAILABLE" } }),
+        ...(f.role ? { primaryRole: { equals: f.role, mode: "insensitive" } } : {}),
+        ...(f.experienceLevels?.length ? { experienceLevel: { in: f.experienceLevels } } : {}),
+        ...(f.workSetup ? { workSetup: f.workSetup } : {}),
+        ...(f.languages?.length ? { languages: { hasEvery: f.languages } } : {}),
+        ...(f.minVerification ? { verificationLevel: { in: f.minVerification } } : {}),
+        ...(f.skillIds?.length ? { AND: f.skillIds.map((skillId) => ({ skills: { some: { skillId } } })) } : {}),
+        ...(f.softwareIds?.length ? { softwareExperiences: { some: { softwareId: { in: f.softwareIds } } } } : {}),
+        ...(f.industry ? { industryExperiences: { some: { industry: { equals: f.industry, mode: "insensitive" } } } } : {}),
+        ...(f.campaignOnly ? { experiences: { some: { isCampaign: true } } } : {}),
+        ...(f.text ? { OR: [{ headline: { contains: f.text, mode: "insensitive" } }, { summary: { contains: f.text, mode: "insensitive" } }, { displayName: { contains: f.text, mode: "insensitive" } }] } : {}),
+      },
+      include: agentSelfInclude(),
+      orderBy: [{ approvedAt: "desc" }],
+      take,
+    });
+  },
+
+  findApprovedById(db: Db, id: string) {
+    return db.agentProfile.findFirst({ where: { id, status: "APPROVED", deletedAt: null }, include: agentSelfInclude() });
+  },
+
+  findManyApproved(db: Db, ids: string[]) {
+    return db.agentProfile.findMany({ where: { id: { in: ids }, status: "APPROVED", deletedAt: null }, include: agentSelfInclude() });
   },
 
   countByStatus(db: Db) {

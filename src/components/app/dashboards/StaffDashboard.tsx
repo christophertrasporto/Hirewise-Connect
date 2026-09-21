@@ -29,10 +29,11 @@ export function StaffDashboard({ role, stats, notifications }: Props) {
       {stats.visibility.clients && (
         <section className="mb-6">
           <h2 className="mb-3 text-[12px] font-semibold uppercase tracking-[0.16em] text-ink-400">Clients</h2>
-          <div className="grid gap-3 sm:grid-cols-3">
+          <div className="grid gap-3 sm:grid-cols-4">
             <StatTile label="Total clients" value={stats.clients.total} href="/staff/clients" />
             <StatTile label="Awaiting activation" value={stats.clients.pending} href="/staff/clients?status=PENDING_REVIEW" />
             <StatTile label="Active" value={stats.clients.active} href="/staff/clients?status=ACTIVE" />
+            <StatTile label="Shortlisted candidates" value={stats.shortlists} href="/staff/shortlists" hint="Across all clients" />
           </div>
         </section>
       )}
@@ -41,8 +42,8 @@ export function StaffDashboard({ role, stats, notifications }: Props) {
         <section className="mb-6">
           <h2 className="mb-3 text-[12px] font-semibold uppercase tracking-[0.16em] text-ink-400">Media review</h2>
           <div className="grid gap-3 sm:grid-cols-2">
-            <StatTile label="Videos awaiting approval" value={stats.media.videosPending} hint="Review from the agent's profile" />
-            <StatTile label="Recordings awaiting approval" value={stats.media.recordingsPending} hint="Review from the agent's profile" />
+            <StatTile label="Videos awaiting approval" value={stats.media.videosPending} href="/staff/media" />
+            <StatTile label="Recordings awaiting approval" value={stats.media.recordingsPending} href="/staff/media" />
           </div>
         </section>
       )}

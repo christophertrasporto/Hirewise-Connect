@@ -179,6 +179,100 @@ enum TaskStatus {
   CANCELLED
 }
 
+enum IntroductionEvent {
+  VIEW
+  SHORTLIST
+  INTERVIEW
+}
+
+enum NoteSubjectType {
+  AGENT
+  CLIENT
+  PLACEMENT
+  INTERVIEW_REQUEST
+}
+
+enum NoteVisibility {
+  INTERNAL
+  AGENT
+  CLIENT
+}
+
+// ---------------------------------------------------------------------------
+// 4.5 Marketplace (Phase 1B)
+// ---------------------------------------------------------------------------
+
+model Shortlist {
+  id          String   @id @default(cuid())
+  clientId    String
+  client      Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  name        String   @default("My Shortlist")
+  createdById String
+  isDefault   Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  candidates ShortlistCandidate[]
+
+  @@index([clientId])
+}
+
+/// Active membership is enforced by a partial unique index (shortlistId, agentProfileId) WHERE removedAt IS NULL.
+model ShortlistCandidate {
+  id             String       @id @default(cuid())
+  shortlistId    String
+  shortlist      Shortlist    @relation(fields: [shortlistId], references: [id], onDelete: Cascade)
+  agentProfileId String
+  agentProfile   AgentProfile @relation(fields: [agentProfileId], references: [id], onDelete: Cascade)
+  addedById      String
+  addedAt        DateTime     @default(now())
+  note           String?
+  removedAt      DateTime?
+
+  @@index([shortlistId, removedAt])
+  @@index([agentProfileId])
+}
+
+model CandidateView {
+  id             String       @id @default(cuid())
+  clientId       String
+  client         Client       @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  agentProfileId String
+  agentProfile   AgentProfile @relation(fields: [agentProfileId], references: [id], onDelete: Cascade)
+  viewedAt       DateTime     @default(now())
+
+  @@index([clientId, viewedAt])
+  @@index([agentProfileId])
+}
+
+/// First recorded exposure of an agent to a client. Evidence for non-circumvention (Section 8.8).
+model Introduction {
+  id             String            @id @default(cuid())
+  clientId       String
+  client         Client            @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  agentProfileId String
+  agentProfile   AgentProfile      @relation(fields: [agentProfileId], references: [id], onDelete: Cascade)
+  firstEvent     IntroductionEvent
+  firstAt        DateTime          @default(now())
+
+  @@unique([clientId, agentProfileId])
+}
+
+/// Internal notes. Never returned to Agent or Client roles unless visibility says so (INV-P4).
+model AdminNote {
+  id           String          @id @default(cuid())
+  subjectType  NoteSubjectType
+  subjectId    String
+  authorUserId String
+  body         String
+  visibility   NoteVisibility  @default(INTERNAL)
+  pinned       Boolean         @default(false)
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+
+  @@index([subjectType, subjectId, createdAt])
+}
+
 // ---------------------------------------------------------------------------
 // Authentication (Phase 1). Database sessions; tokens stored hashed.
 // ---------------------------------------------------------------------------
@@ -351,6 +445,9 @@ model Client {
   onboarding   ClientOnboarding?
   requirements ClientRequirement[]
   reservations Reservation[]
+  shortlists   Shortlist[]
+  candidateViews CandidateView[]
+  introductions  Introduction[]
 
   @@index([status])
   @@index([accountManagerUserId])
@@ -467,6 +564,9 @@ model AgentProfile {
   videos              Video[]
   recordings          Recording[]
   portfolioItems      Portfolio[]
+  shortlistEntries    ShortlistCandidate[]
+  candidateViews      CandidateView[]
+  introductions       Introduction[]
 
   @@index([status])
   @@index([availabilityStatus])

@@ -7,6 +7,8 @@ import { StaffDashboard } from "@/components/app/dashboards/StaffDashboard";
 import { getOwnProfile, computeCompletion } from "@/server/services/agent.service";
 import { getOwnClient } from "@/server/services/client.service";
 import { staffDashboard, listNotifications } from "@/server/services/dashboard.service";
+import { recommendedForClient, recentlyViewedForClient } from "@/server/services/search.service";
+import { getOwnShortlist } from "@/server/services/shortlist.service";
 
 export const metadata: Metadata = { title: "Dashboard" };
 
@@ -20,7 +22,9 @@ export default async function DashboardPage() {
   }
   if (actor.role === "CLIENT") {
     const client = await getOwnClient(prisma, actor);
-    return <ClientDashboard client={client} notifications={notifications} />;
+    const active = client.status === "ACTIVE";
+    const [recommended, recentlyViewed, shortlist] = active ? await Promise.all([recommendedForClient(prisma, actor), recentlyViewedForClient(prisma, actor), getOwnShortlist(prisma, actor)]) : [[], [], null];
+    return <ClientDashboard client={client} notifications={notifications} recommended={recommended} recentlyViewed={recentlyViewed} shortlistCount={shortlist?.candidates.length ?? 0} />;
   }
   const stats = await staffDashboard(prisma, actor);
   return <StaffDashboard role={actor.role} email={email} stats={stats} notifications={notifications} />;

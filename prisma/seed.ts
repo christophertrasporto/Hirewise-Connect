@@ -203,12 +203,65 @@ async function main() {
   }
   await prisma.agentProfile.update({ where: { id: agent.id }, data: { profileCompletion: 55 } });
 
+  // Approved, searchable agents for the marketplace demo and the e2e isolation tests.
+  const salesUser = await prisma.user.findUniqueOrThrow({ where: { email: "sales@hirewise.example" } });
+  const adminUser = await prisma.user.findUniqueOrThrow({ where: { email: "admin@hirewise.example" } });
+  const approvedAgents = [
+    { email: "jose@talent.example", displayName: "Jose R.", fullLegalName: "Jose Ramos", headline: "Customer service and technical support lead, 6 years with US SaaS and telecom accounts", primaryRole: "Customer Service Representative", years: 6, level: "SENIOR" as const, availability: "AVAILABLE" as const, tz: "Asia/Manila", skills: [["Customer Service", "EXPERT"], ["Technical Support", "ADVANCED"], ["Live Chat Support", "ADVANCED"], ["Email Support", "EXPERT"]] as Array<[string, "BASIC" | "INTERMEDIATE" | "ADVANCED" | "EXPERT"]>, software: ["Zendesk", "Intercom", "Slack"], industries: [["SaaS / Technology", 4], ["Logistics", 2]] as Array<[string, number]>, summary: "Six years handling tier-1 and tier-2 support for US SaaS and telecom clients. Led a team of eight on a 24/7 queue, wrote the macro library, and kept CSAT above 92% for three years. Comfortable with Zendesk, Intercom, and escalation runbooks.", verification: "HIREWISE_CERTIFIED" as const },
+    { email: "ana@talent.example", displayName: "Ana L.", fullLegalName: "Ana Lim", headline: "Executive assistant and inbox manager for founders, 3 years, Australian and US clients", primaryRole: "Executive Assistant", years: 3, level: "MID" as const, availability: "AVAILABLE_SOON" as const, tz: "Asia/Manila", skills: [["Executive Assistance", "ADVANCED"], ["Calendar Management", "EXPERT"], ["Inbox Management", "EXPERT"], ["Research", "INTERMEDIATE"]] as Array<[string, "BASIC" | "INTERMEDIATE" | "ADVANCED" | "EXPERT"]>, software: ["Google Workspace", "Notion", "Asana"], industries: [["Marketing Agency", 2], ["E-commerce", 1]] as Array<[string, number]>, summary: "Three years supporting two founders across Sydney and Los Angeles: calendar, travel, inbox triage, board-meeting prep, and light bookkeeping in Xero. I keep a daily brief and a running decisions log so nothing falls through.", verification: "PROFILE_VERIFIED" as const },
+    { email: "carlo@talent.example", displayName: "Carlo D.", fullLegalName: "Carlo Dizon", headline: "Cold caller and SDR for US real estate and roofing campaigns, 5 years", primaryRole: "Cold Caller", years: 5, level: "SENIOR" as const, availability: "PLACED" as const, tz: "Asia/Manila", skills: [["Cold Calling", "EXPERT"], ["Appointment Setting", "ADVANCED"], ["Lead Generation", "ADVANCED"]] as Array<[string, "BASIC" | "INTERMEDIATE" | "ADVANCED" | "EXPERT"]>, software: ["Mojo Dialer", "GoHighLevel"], industries: [["Real Estate", 3], ["Construction", 2]] as Array<[string, number]>, summary: "Five years of outbound for US real estate investors and roofing companies. 150+ dials a day, live transfers and appointment setting, with clean CRM notes. Currently placed with a Hirewise client.", verification: "DEPLOYMENT_READY" as const },
+  ];
+  for (const a of approvedAgents) {
+    const u = await prisma.user.upsert({ where: { email: a.email }, create: { email: a.email, roleId: roleIds.get("AGENT")!, passwordHash, emailVerifiedAt: new Date() }, update: { passwordHash, emailVerifiedAt: new Date() } });
+    for (const t of ["AGENT_PLATFORM_TERMS", "AGENT_PRIVACY", "AGENT_REPRESENTATION", "AGENT_NON_CIRCUMVENTION", "AGENT_CLIENT_COMMUNICATION", "AGENT_CONFIDENTIALITY"]) {
+      const exists = await prisma.agreementAcceptance.findFirst({ where: { agreementId: agreementIds[t], userId: u.id, placementId: null } });
+      if (!exists) await prisma.agreementAcceptance.create({ data: { agreementId: agreementIds[t], userId: u.id, bodyChecksum: checksum("seed"), ipAddress: "127.0.0.1", userAgent: "seed" } });
+    }
+    const existing = await prisma.agentProfile.findUnique({ where: { userId: u.id } });
+    if (existing) continue;
+    await prisma.agentProfile.create({
+      data: {
+        userId: u.id, displayName: a.displayName, headline: a.headline, primaryRole: a.primaryRole, summary: a.summary, yearsExperience: a.years, experienceLevel: a.level,
+        locationCity: "Manila", locationCountry: "Philippines", timezone: a.tz, languages: ["English", "Filipino"], workSetup: "REMOTE", preferredShift: "US Day (PH Night)",
+        status: "APPROVED", verificationLevel: a.verification, availabilityStatus: a.availability, availableFrom: a.availability === "AVAILABLE_SOON" ? new Date(Date.now() + 14 * 86_400_000) : undefined,
+        profileCompletion: 85, submittedAt: new Date(Date.now() - 5 * 86_400_000), approvedAt: new Date(Date.now() - 2 * 86_400_000), approvedById: adminUser.id,
+        privateContact: { create: { fullLegalName: a.fullLegalName, personalEmail: a.email, phone: "+63 917 111 1111", resumeKey: `agents/seed/resume/${a.displayName}.pdf` } },
+        skills: { create: a.skills.map(([name, level]) => ({ skillId: skillIds.get(name)!, level, yearsUsed: 2 })) },
+        softwareExperiences: { create: a.software.map((name) => ({ softwareId: softwareIds.get(name)!, level: "ADVANCED" })) },
+        industryExperiences: { create: a.industries.map(([industry, years]) => ({ industry, years })) },
+        experiences: { create: [{ title: a.primaryRole, company: "Confidential campaign", industry: a.industries[0][0], startDate: new Date("2022-01-01"), description: a.headline, isCampaign: a.primaryRole !== "Executive Assistant", campaignType: a.primaryRole !== "Executive Assistant" ? a.primaryRole : undefined }] },
+        availabilityHistory: { create: { status: a.availability, setById: adminUser.id, reason: "Seed" } },
+      },
+    });
+  }
+
+  // Acme is managed by the Sales demo user; a second active client (Beta Corp) exists for isolation tests.
+  const acmeContact = await prisma.clientContact.findUnique({ where: { userId: clientUser.id } });
+  if (acmeContact) await prisma.client.update({ where: { id: acmeContact.clientId }, data: { accountManagerUserId: salesUser.id } });
+  const betaUser = await prisma.user.upsert({ where: { email: "ops@beta-corp.example" }, create: { email: "ops@beta-corp.example", roleId: roleIds.get("CLIENT")!, passwordHash, emailVerifiedAt: new Date() }, update: { passwordHash, emailVerifiedAt: new Date() } });
+  const betaContact = await prisma.clientContact.findUnique({ where: { userId: betaUser.id } });
+  const beta = betaContact
+    ? await prisma.client.findUniqueOrThrow({ where: { id: betaContact.clientId } })
+    : await prisma.client.create({ data: { companyName: "Beta Corp", industry: "SaaS / Technology", country: "Australia", timezone: "Australia/Sydney", status: "ACTIVE", source: "seed", contacts: { create: { userId: betaUser.id, name: "Sam Ng", position: "COO", businessEmail: "ops@beta-corp.example", isPrimary: true } }, onboarding: { create: { servicesNeeded: ["Customer Service"], agentsRequired: 2 } } } });
+  for (const t of ["CLIENT_TOS", "CLIENT_PRIVACY", "CLIENT_HIRING_TERMS", "CLIENT_NON_CIRCUMVENTION", "CLIENT_COMMUNICATION"]) {
+    const exists = await prisma.agreementAcceptance.findFirst({ where: { agreementId: agreementIds[t], userId: betaUser.id, placementId: null } });
+    if (!exists) await prisma.agreementAcceptance.create({ data: { agreementId: agreementIds[t], userId: betaUser.id, bodyChecksum: checksum("seed"), ipAddress: "127.0.0.1", userAgent: "seed" } });
+  }
+  const jose = await prisma.agentProfile.findFirstOrThrow({ where: { displayName: "Jose R." } });
+  let betaList = await prisma.shortlist.findFirst({ where: { clientId: beta.id, isDefault: true } });
+  if (!betaList) betaList = await prisma.shortlist.create({ data: { clientId: beta.id, createdById: betaUser.id, isDefault: true } });
+  if (!(await prisma.shortlistCandidate.findFirst({ where: { shortlistId: betaList.id, agentProfileId: jose.id, removedAt: null } }))) {
+    await prisma.shortlistCandidate.create({ data: { shortlistId: betaList.id, agentProfileId: jose.id, addedById: betaUser.id, note: "Strong Zendesk background" } });
+  }
+
   console.log("Seed complete.");
   console.log("Roles:", roleIds.size, "| Permissions:", permIds.size, "| Agreements:", AGREEMENTS.length, "| Skills:", SKILLS.length, "| Software:", SOFTWARE.length);
   console.log(`\nDemo accounts (password: ${DEMO_PASSWORD}):`);
   for (const u of STAFF_USERS) console.log(`  ${u.role.padEnd(12)} ${u.email}${u.role === "SUPER_ADMIN" || u.role === "ADMIN" ? "  (MFA setup on first login)" : ""}`);
-  console.log(`  ${"CLIENT".padEnd(12)} hiring@acme-solar.example  (active)`);
+  console.log(`  ${"CLIENT".padEnd(12)} hiring@acme-solar.example  (active, managed by sales@)`);
+  console.log(`  ${"CLIENT".padEnd(12)} ops@beta-corp.example  (active, has a shortlist)`);
   console.log(`  ${"AGENT".padEnd(12)} maria@talent.example  (draft profile: add résumé + video, then submit)`);
+  console.log(`  ${"AGENT".padEnd(12)} jose@ / ana@ / carlo@talent.example  (approved, searchable)`);
 }
 
 main()

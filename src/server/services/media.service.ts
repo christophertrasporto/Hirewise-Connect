@@ -1,12 +1,13 @@
 import { z } from "zod";
 import type { PrismaClient } from "@/server/db/types";
 import type { Actor } from "@/server/auth/actor";
-import { ForbiddenError, NotFoundError } from "@/server/policies/authorize";
+import { authorize, ForbiddenError, NotFoundError } from "@/server/policies/authorize";
 import { getStorage, newStorageKey } from "@/server/adapters/storage";
 import { mediaRepository } from "@/server/repositories/media.repository";
 import { agentRepository } from "@/server/repositories/agent.repository";
 import { rateLimit } from "@/server/auth/rate-limit";
 import { audit } from "@/server/audit/audit";
+import { publishEvent } from "@/server/events/outbox";
 import { setResume } from "./agent.service";
 
 /** Upload categories with MIME allowlist and size caps (Section 12, security baseline). */
@@ -112,4 +113,43 @@ export async function mediaDownloadUrl(db: PrismaClient, actor: Actor, target: {
   const clientOk = actor.role === "CLIENT" && m.status === "APPROVED";
   if (!own && !staff && !clientOk) throw new NotFoundError();
   return getStorage().createDownloadUrl(m.storageKey);
+}
+
+// ---------------------------------------------------------------------------
+// Review (Section 5.3): SUBMITTED | UNDER_REVIEW → APPROVED | REJECTED | REVISION_REQUIRED
+// ---------------------------------------------------------------------------
+
+export const mediaDecisionSchema = z.object({
+  type: z.enum(["VIDEO", "RECORDING"]),
+  id: z.string().min(1),
+  decision: z.enum(["UNDER_REVIEW", "APPROVED", "REJECTED", "REVISION_REQUIRED"]),
+  feedback: z.string().trim().max(2000).optional(),
+});
+
+export async function listMediaReviewQueue(db: PrismaClient, actor: Actor) {
+  authorize(actor, "media.review");
+  const [videos, recordings] = await mediaRepository.reviewQueue(db);
+  return {
+    videos: videos.map((v) => ({ id: v.id, status: v.status, durationSec: v.durationSec, submittedAt: v.submittedAt, agent: v.agentProfile })),
+    recordings: recordings.map((r) => ({ id: r.id, status: r.status, kind: r.kind, title: r.title, durationSec: r.durationSec, submittedAt: r.submittedAt, agent: r.agentProfile })),
+  };
+}
+
+export async function reviewMedia(db: PrismaClient, actor: Actor, input: z.infer<typeof mediaDecisionSchema>) {
+  authorize(actor, "media.review");
+  const feedback = input.feedback?.trim() || null;
+  if ((input.decision === "REJECTED" || input.decision === "REVISION_REQUIRED") && !feedback) throw new Error("Feedback is required when rejecting or requesting a revision.");
+  const m = input.type === "VIDEO" ? await mediaRepository.findVideo(db, input.id) : await mediaRepository.findRecording(db, input.id);
+  if (!m) throw new NotFoundError();
+  const allowedFrom = ["SUBMITTED", "UNDER_REVIEW"];
+  if (!allowedFrom.includes(m.status)) throw new Error(`Cannot review media in status ${m.status}`);
+  await db.$transaction(async (tx) => {
+    if (input.type === "VIDEO") await mediaRepository.setVideoStatus(tx, m.id, input.decision, { reviewedById: actor.userId, reviewFeedback: feedback });
+    else await mediaRepository.setRecordingStatus(tx, m.id, input.decision, { reviewedById: actor.userId, reviewFeedback: feedback });
+    const action = input.type === "VIDEO" ? (input.decision === "APPROVED" ? "VIDEO_APPROVED" : "VIDEO_REVIEWED") : input.decision === "APPROVED" ? "RECORDING_APPROVED" : "RECORDING_REVIEWED";
+    await audit(tx, { actor, action, entityType: input.type === "VIDEO" ? "Video" : "Recording", entityId: m.id, previousValue: { status: m.status }, newValue: { status: input.decision }, reason: feedback ?? undefined });
+    if (input.decision !== "UNDER_REVIEW") {
+      await publishEvent(tx, "MEDIA_REVIEWED", { type: input.type, mediaId: m.id, agentProfileId: m.agentProfileId, userId: m.agentProfile.userId, email: m.agentProfile.user.email, outcome: input.decision, feedback, title: input.type === "RECORDING" && "title" in m ? String(m.title) : "Video introduction" });
+    }
+  });
 }

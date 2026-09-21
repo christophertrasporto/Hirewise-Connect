@@ -9,6 +9,9 @@ import { personalSchema, professionalSchema, skillsSchema, experienceSchema, upd
 import { createUploadUrl, uploadRequestSchema, confirmResumeUpload, confirmVideoUpload, confirmRecordingUpload, confirmPhotoUpload, recordingKindSchema, mediaDownloadUrl } from "@/server/services/media.service";
 import { activateClient } from "@/server/services/client.service";
 import { markNotificationRead } from "@/server/services/dashboard.service";
+import { addToShortlist, removeFromShortlist, setShortlistNote } from "@/server/services/shortlist.service";
+import { reviewMedia, mediaDecisionSchema } from "@/server/services/media.service";
+import { addNote, noteInputSchema } from "@/server/services/note.service";
 
 function refreshProfile() {
   revalidatePath("/profile", "layout");
@@ -205,4 +208,61 @@ export async function reviewAgentAction(_prev: ActionResult, fd: FormData): Prom
   revalidatePath("/staff/talent", "layout");
   revalidatePath("/dashboard");
   redirect(`/staff/talent/${id}`);
+}
+
+// ---------------------------------------------------------------------------
+// Marketplace (Phase 1B)
+// ---------------------------------------------------------------------------
+
+export async function toggleShortlistAction(_prev: ActionResult<{ shortlisted: boolean }>, fd: FormData): Promise<ActionResult<{ shortlisted: boolean }>> {
+  try {
+    const actor = await requireActor();
+    const id = formString(fd, "agentProfileId");
+    const shortlisted = fd.get("shortlisted") === "true";
+    if (shortlisted) await removeFromShortlist(prisma, actor, id);
+    else await addToShortlist(prisma, actor, id);
+    revalidatePath("/talent", "layout");
+    revalidatePath("/shortlist", "layout");
+    revalidatePath("/dashboard");
+    return { ok: true, data: { shortlisted: !shortlisted } };
+  } catch (e) {
+    return toActionError(e);
+  }
+}
+
+export async function shortlistNoteAction(_prev: ActionResult, fd: FormData): Promise<ActionResult> {
+  try {
+    const actor = await requireActor();
+    await setShortlistNote(prisma, actor, formString(fd, "agentProfileId"), formString(fd, "note"));
+    revalidatePath("/shortlist", "layout");
+    return { ok: true };
+  } catch (e) {
+    return toActionError(e);
+  }
+}
+
+export async function reviewMediaAction(_prev: ActionResult, fd: FormData): Promise<ActionResult> {
+  try {
+    const actor = await requireActor();
+    await reviewMedia(prisma, actor, mediaDecisionSchema.parse({ type: formString(fd, "type"), id: formString(fd, "id"), decision: formString(fd, "decision"), feedback: formString(fd, "feedback") }));
+    revalidatePath("/staff/media");
+    revalidatePath("/staff/talent", "layout");
+    revalidatePath("/dashboard");
+    return { ok: true };
+  } catch (e) {
+    return toActionError(e);
+  }
+}
+
+export async function addNoteAction(_prev: ActionResult, fd: FormData): Promise<ActionResult> {
+  try {
+    const actor = await requireActor();
+    const subjectType = formString(fd, "subjectType") === "CLIENT" ? "CLIENT" : "AGENT";
+    await addNote(prisma, actor, subjectType, formString(fd, "subjectId"), noteInputSchema.parse({ body: formString(fd, "body"), visibility: formString(fd, "visibility") || "INTERNAL", pinned: fd.get("pinned") === "on" }));
+    revalidatePath("/staff/talent", "layout");
+    revalidatePath("/staff/clients");
+    return { ok: true };
+  } catch (e) {
+    return toActionError(e);
+  }
 }

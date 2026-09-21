@@ -6,6 +6,7 @@ import { clientRepository } from "@/server/repositories/client.repository";
 import { mediaRepository } from "@/server/repositories/media.repository";
 import { taskRepository } from "@/server/repositories/task.repository";
 import { notificationRepository } from "@/server/repositories/notification.repository";
+import { shortlistRepository } from "@/server/repositories/shortlist.repository";
 
 /** Admin / management counters (Section "Admin dashboard"), filtered to what the role may see. */
 export async function staffDashboard(db: PrismaClient, actor: Actor) {
@@ -36,6 +37,7 @@ export async function staffDashboard(db: PrismaClient, actor: Actor) {
     },
     clients: { total: Object.values(clients).reduce((a, b) => a + b, 0), pending: clients.PENDING_REVIEW ?? 0, active: clients.ACTIVE ?? 0 },
     media: { videosPending: media[0], recordingsPending: media[1] },
+    shortlists: actor.permissions.has("shortlist.read_all") ? await shortlistRepository.countActive(db) : 0,
     tasks: { queue: queueTasks.map(taskView), mine: myTasks.map(taskView) },
     visibility: { agents: canAgents, clients: canClients, media: actor.permissions.has("media.review") },
   };

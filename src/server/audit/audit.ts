@@ -39,6 +39,9 @@ export const AUDIT_ACTIONS = [
   "PROFILE_REVISION_REQUIRED",
   "VIDEO_SUBMITTED",
   "RECORDING_SUBMITTED",
+  "VIDEO_REVIEWED",
+  "RECORDING_REVIEWED",
+  "NOTE_ADDED",
 ] as const;
 
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];

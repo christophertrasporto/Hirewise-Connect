@@ -17,7 +17,8 @@
     "db:studio": "prisma studio",
     "db:generate": "prisma generate",
     "worker": "tsx scripts/worker.ts",
-    "postinstall": "prisma generate"
+    "postinstall": "prisma generate",
+    "test:e2e": "playwright test"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1136.0",
@@ -36,6 +37,7 @@
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.3.7",
+    "@playwright/test": "^1.63.0",
     "@tailwindcss/postcss": "^4.1.0",
     "@types/node": "^22",
     "@types/nodemailer": "^8.0.2",
