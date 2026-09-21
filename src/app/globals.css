@@ -1,0 +1,189 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-display: var(--font-jakarta), var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-serif: var(--font-instrument), "Times New Roman", Georgia, serif;
+
+  --color-ink-950: #060d1a;
+  --color-ink-900: #0a1628;
+  --color-ink-800: #12213a;
+  --color-ink-700: #1c2e4a;
+  --color-ink-600: #2e4262;
+  --color-ink-500: #4b5e7e;
+  --color-ink-400: #7a8aa5;
+  --color-ink-300: #a9b4c7;
+  --color-ink-200: #d3dae6;
+  --color-ink-100: #e9edf3;
+  --color-ink-50: #f5f7fa;
+
+  --color-brand-50: #e8faf3;
+  --color-brand-100: #c6f2e0;
+  --color-brand-200: #8fe3c3;
+  --color-brand-300: #4fd1a4;
+  --color-brand-400: #21bc8a;
+  --color-brand-500: #0ea47a;
+  --color-brand-600: #0b8663;
+  --color-brand-700: #096b50;
+  --color-brand-800: #07513d;
+
+  --color-gold-50: #fdf8ea;
+  --color-gold-100: #fbf0d2;
+  --color-gold-200: #f6e2a6;
+  --color-gold-300: #f2d48a;
+  --color-gold-500: #e8b44c;
+  --color-gold-600: #c9942f;
+  --color-gold-700: #9c6f1d;
+
+  --shadow-soft: 0 1px 2px rgb(10 22 40 / 0.04), 0 8px 24px -8px rgb(10 22 40 / 0.12);
+  --shadow-lift: 0 2px 4px rgb(10 22 40 / 0.05), 0 24px 48px -16px rgb(10 22 40 / 0.22);
+  --shadow-glow: 0 0 0 1px rgb(14 164 122 / 0.25), 0 12px 40px -8px rgb(14 164 122 / 0.35);
+
+  --animate-fade-up: fade-up 0.7s cubic-bezier(0.22, 1, 0.36, 1) both;
+  --animate-float: float 6s ease-in-out infinite;
+  --animate-pulse-soft: pulse-soft 2.4s ease-in-out infinite;
+  --animate-marquee: marquee 36s linear infinite;
+  --animate-wave: wave 1.2s ease-in-out infinite;
+
+  @keyframes fade-up {
+    from {
+      opacity: 0;
+      transform: translateY(18px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+  @keyframes float {
+    0%,
+    100% {
+      transform: translateY(0);
+    }
+    50% {
+      transform: translateY(-10px);
+    }
+  }
+  @keyframes pulse-soft {
+    0%,
+    100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.45;
+    }
+  }
+  @keyframes marquee {
+    from {
+      transform: translateX(0);
+    }
+    to {
+      transform: translateX(-50%);
+    }
+  }
+  @keyframes wave {
+    0%,
+    100% {
+      transform: scaleY(0.4);
+    }
+    50% {
+      transform: scaleY(1);
+    }
+  }
+}
+
+@layer base {
+  :root {
+    color-scheme: light;
+  }
+  html {
+    scroll-behavior: smooth;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+  body {
+    @apply bg-white text-ink-800 font-sans;
+    font-feature-settings: "cv11", "ss01", "ss03";
+  }
+  ::selection {
+    background: var(--color-brand-100);
+    color: var(--color-ink-900);
+  }
+  h1,
+  h2,
+  h3,
+  h4 {
+    @apply font-display text-ink-900;
+    letter-spacing: -0.02em;
+    text-wrap: balance;
+  }
+  p {
+    text-wrap: pretty;
+  }
+  :focus-visible {
+    outline: 2px solid var(--color-brand-500);
+    outline-offset: 3px;
+    border-radius: 4px;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+    html {
+      scroll-behavior: auto;
+    }
+  }
+}
+
+@utility container-x {
+  @apply mx-auto w-full max-w-7xl px-5 sm:px-8 lg:px-10;
+}
+
+@utility grid-bg {
+  background-image:
+    linear-gradient(to right, rgb(10 22 40 / 0.045) 1px, transparent 1px),
+    linear-gradient(to bottom, rgb(10 22 40 / 0.045) 1px, transparent 1px);
+  background-size: 48px 48px;
+}
+
+@utility grid-bg-dark {
+  background-image:
+    linear-gradient(to right, rgb(255 255 255 / 0.05) 1px, transparent 1px),
+    linear-gradient(to bottom, rgb(255 255 255 / 0.05) 1px, transparent 1px);
+  background-size: 48px 48px;
+}
+
+@utility glass {
+  background: rgb(255 255 255 / 0.72);
+  backdrop-filter: saturate(180%) blur(14px);
+  -webkit-backdrop-filter: saturate(180%) blur(14px);
+}
+
+@utility text-gradient-brand {
+  background: linear-gradient(120deg, var(--color-brand-300), var(--color-brand-500) 45%, var(--color-gold-500));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.reveal {
+  opacity: 0;
+  transform: translateY(20px);
+  transition:
+    opacity 0.8s cubic-bezier(0.22, 1, 0.36, 1),
+    transform 0.8s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.reveal.is-visible {
+  opacity: 1;
+  transform: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .reveal {
+    opacity: 1;
+    transform: none;
+  }
+}

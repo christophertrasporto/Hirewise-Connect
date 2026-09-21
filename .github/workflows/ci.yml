@@ -1,0 +1,46 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: hirewise
+          POSTGRES_PASSWORD: hirewise
+          POSTGRES_DB: hirewise_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U hirewise"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://hirewise:hirewise@localhost:5432/hirewise_test
+      TEST_DATABASE_URL: postgresql://hirewise:hirewise@localhost:5432/hirewise_test
+      SHADOW_DATABASE_URL: postgresql://hirewise:hirewise@localhost:5432/hirewise_shadow
+      APP_URL: http://localhost:3000
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npx prisma validate
+      - name: Migration drift check
+        run: |
+          psql "$DATABASE_URL" -c 'CREATE DATABASE hirewise_shadow' || true
+          npx prisma migrate diff --from-migrations prisma/migrations --to-schema-datamodel prisma/schema.prisma --shadow-database-url "$SHADOW_DATABASE_URL" --exit-code
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+      - run: npm audit --audit-level=high
+        continue-on-error: true

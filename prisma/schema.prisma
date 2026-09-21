@@ -1,0 +1,718 @@
+// Hirewise Connect — Prisma schema (Phase 0 scope)
+// Covers MASTER_PROMPT.md Sections 4.1 (identity), 4.2 (clients), 4.3 (agents),
+// plus Agreement, AgreementAcceptance, AuditLog, OutboxEvent, Job, Setting, Notification.
+// Later phases add the remaining aggregates from Section 4 without changing these tables' meaning.
+
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
+}
+
+datasource db {
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  extensions = [citext]
+}
+
+// ---------------------------------------------------------------------------
+// Enums
+// ---------------------------------------------------------------------------
+
+enum RoleKey {
+  SUPER_ADMIN
+  ADMIN
+  SALES
+  RECRUITER
+  COACH
+  OPERATIONS
+  AGENT
+  CLIENT
+}
+
+enum UserStatus {
+  ACTIVE
+  SUSPENDED
+  DEACTIVATED
+}
+
+enum ClientStatus {
+  PENDING_REVIEW
+  ACTIVE
+  SUSPENDED
+}
+
+enum RequirementStatus {
+  OPEN
+  IN_PROGRESS
+  FILLED
+  CLOSED
+}
+
+enum AgentProfileStatus {
+  DRAFT
+  SUBMITTED
+  UNDER_REVIEW
+  APPROVED
+  REVISION_REQUIRED
+  REJECTED
+  HIDDEN
+  SUSPENDED
+}
+
+enum AvailabilityStatus {
+  AVAILABLE
+  AVAILABLE_SOON
+  INTERVIEWING
+  RESERVED
+  PLACED
+  UNAVAILABLE
+  PAUSED
+}
+
+enum VerificationLevel {
+  PROFILE_SUBMITTED
+  PROFILE_VERIFIED
+  SKILLS_ASSESSED
+  HIREWISE_CERTIFIED
+  INTERVIEW_READY
+  DEPLOYMENT_READY
+}
+
+enum ExperienceLevel {
+  ENTRY
+  JUNIOR
+  MID
+  SENIOR
+  LEAD
+}
+
+enum WorkSetup {
+  REMOTE
+  OFFICE
+  HYBRID
+}
+
+enum SkillLevel {
+  BASIC
+  INTERMEDIATE
+  ADVANCED
+  EXPERT
+}
+
+enum MediaStatus {
+  DRAFT
+  UPLOADED
+  SUBMITTED
+  UNDER_REVIEW
+  APPROVED
+  REJECTED
+  REVISION_REQUIRED
+  RETIRED
+}
+
+enum VideoKind {
+  INTRODUCTION
+}
+
+enum RecordingKind {
+  INTRODUCTION
+  COLD_CALL
+  CUSTOMER_SERVICE
+  SALES
+  CUSTOM_CAMPAIGN
+}
+
+enum ReservationStatus {
+  ACTIVE
+  EXTENDED
+  RELEASED
+  EXPIRED
+  CONVERTED
+}
+
+enum DocumentOwnerType {
+  AGENT
+  CLIENT
+  PLACEMENT
+  AGREEMENT
+}
+
+enum DocumentVisibility {
+  INTERNAL
+  OWNER
+  CLIENT
+  AGENT
+}
+
+enum AgreementType {
+  CLIENT_TOS
+  CLIENT_PRIVACY
+  CLIENT_HIRING_TERMS
+  CLIENT_NON_CIRCUMVENTION
+  CLIENT_COMMUNICATION
+  AGENT_PLATFORM_TERMS
+  AGENT_PRIVACY
+  AGENT_REPRESENTATION
+  AGENT_NON_CIRCUMVENTION
+  AGENT_CLIENT_COMMUNICATION
+  AGENT_CONFIDENTIALITY
+  PLACEMENT_SERVICE_AGREEMENT
+}
+
+enum JobStatus {
+  PENDING
+  RUNNING
+  COMPLETED
+  FAILED
+}
+
+// ---------------------------------------------------------------------------
+// 4.1 Identity and access
+// ---------------------------------------------------------------------------
+
+model User {
+  id           String     @id @default(cuid())
+  email        String     @unique @db.Citext
+  passwordHash String?
+  status       UserStatus @default(ACTIVE)
+  roleId       String
+  role         Role       @relation(fields: [roleId], references: [id])
+  mfaEnabled   Boolean    @default(false)
+  lastLoginAt  DateTime?
+  deletedAt    DateTime?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  permissionOverrides UserPermissionOverride[] @relation("OverrideSubject")
+  grantedOverrides    UserPermissionOverride[] @relation("OverrideGrantor")
+  clientContact       ClientContact?
+  agentProfile        AgentProfile?
+  agreementAcceptances AgreementAcceptance[]
+  notifications       Notification[]
+  notificationPrefs   NotificationPreference[]
+  managedClients      Client[]                 @relation("AccountManager")
+  assignedRequirements ClientRequirement[]     @relation("RequirementSales")
+  reservationsMade    Reservation[]            @relation("ReservedBy")
+  availabilityChanges AgentAvailability[]      @relation("AvailabilitySetBy")
+  documentsUploaded   Document[]               @relation("DocumentUploader")
+  profilesApproved    AgentProfile[]           @relation("ProfileApprover")
+  videosReviewed      Video[]                  @relation("VideoReviewer")
+  recordingsReviewed  Recording[]              @relation("RecordingReviewer")
+  portfoliosReviewed  Portfolio[]              @relation("PortfolioReviewer")
+  settingsUpdated     Setting[]                @relation("SettingUpdater")
+
+  @@index([roleId])
+  @@index([status])
+}
+
+model Role {
+  id          String           @id @default(cuid())
+  key         RoleKey          @unique
+  name        String
+  description String?
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+  users       User[]
+  permissions RolePermission[]
+}
+
+model Permission {
+  id          String                   @id @default(cuid())
+  key         String                   @unique
+  group       String
+  description String
+  createdAt   DateTime                 @default(now())
+  roles       RolePermission[]
+  overrides   UserPermissionOverride[]
+}
+
+model RolePermission {
+  roleId       String
+  permissionId String
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+}
+
+model UserPermissionOverride {
+  id           String     @id @default(cuid())
+  userId       String
+  user         User       @relation("OverrideSubject", fields: [userId], references: [id], onDelete: Cascade)
+  permissionId String
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+  grantedById  String
+  grantedBy    User       @relation("OverrideGrantor", fields: [grantedById], references: [id])
+  reason       String
+  expiresAt    DateTime?
+  createdAt    DateTime   @default(now())
+
+  @@unique([userId, permissionId])
+}
+
+// ---------------------------------------------------------------------------
+// 4.2 Clients
+// ---------------------------------------------------------------------------
+
+model Client {
+  id                   String       @id @default(cuid())
+  companyName          String
+  industry             String?
+  website              String?
+  country              String?
+  timezone             String?
+  status               ClientStatus @default(PENDING_REVIEW)
+  accountManagerUserId String?
+  accountManager       User?        @relation("AccountManager", fields: [accountManagerUserId], references: [id])
+  source               String?
+  deletedAt            DateTime?
+  createdAt            DateTime     @default(now())
+  updatedAt            DateTime     @updatedAt
+
+  contacts     ClientContact[]
+  onboarding   ClientOnboarding?
+  requirements ClientRequirement[]
+  reservations Reservation[]
+
+  @@index([status])
+  @@index([accountManagerUserId])
+}
+
+model ClientContact {
+  id            String   @id @default(cuid())
+  clientId      String
+  client        Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  userId        String?  @unique
+  user          User?    @relation(fields: [userId], references: [id])
+  name          String
+  position      String?
+  businessEmail String
+  /// Restricted: never included in agent-facing projections (INV-P2).
+  phone         String?
+  isPrimary     Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([clientId])
+}
+
+model ClientOnboarding {
+  id                String    @id @default(cuid())
+  clientId          String    @unique
+  client            Client    @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  servicesNeeded    String[]
+  agentsRequired    Int?
+  preferredSchedule String?
+  expectedStartDate DateTime?
+  notes             String?
+  completedAt       DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+}
+
+model ClientRequirement {
+  id                  String            @id @default(cuid())
+  clientId            String
+  client              Client            @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  title               String
+  role                String
+  jobDescription      String?
+  skills              String[]
+  industry            String?
+  experienceLevel     ExperienceLevel?
+  agentsRequired      Int               @default(1)
+  schedule            String?
+  timezone            String?
+  software            String[]
+  startDate           DateTime?
+  /// Money in minor units; never floats (INV-I4).
+  budgetMin           Int?
+  budgetMax           Int?
+  currency            String?           @db.Char(3)
+  otherRequirements   String?
+  status              RequirementStatus @default(OPEN)
+  assignedSalesUserId String?
+  assignedSales       User?             @relation("RequirementSales", fields: [assignedSalesUserId], references: [id])
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
+
+  @@index([clientId])
+  @@index([status])
+}
+
+// ---------------------------------------------------------------------------
+// 4.3 Agents
+// ---------------------------------------------------------------------------
+
+model AgentProfile {
+  id                 String             @id @default(cuid())
+  userId             String             @unique
+  user               User               @relation(fields: [userId], references: [id])
+  displayName        String
+  headline           String?
+  primaryRole        String?
+  summary            String?
+  photoKey           String?
+  yearsExperience    Int?
+  experienceLevel    ExperienceLevel?
+  /// City and country only. Exact address lives in AgentPrivateContact (INV-P1).
+  locationCity       String?
+  locationCountry    String?
+  timezone           String?
+  languages          String[]
+  workSetup          WorkSetup?
+  preferredShift     String?
+  equipmentSummary   String?
+  internetSummary    String?
+  status             AgentProfileStatus @default(DRAFT)
+  verificationLevel  VerificationLevel  @default(PROFILE_SUBMITTED)
+  availabilityStatus AvailabilityStatus @default(UNAVAILABLE)
+  availableFrom      DateTime?
+  profileCompletion  Int                @default(0)
+  submittedAt        DateTime?
+  approvedAt         DateTime?
+  approvedById       String?
+  approvedBy         User?              @relation("ProfileApprover", fields: [approvedById], references: [id])
+  hiddenAt           DateTime?
+  suspendedAt        DateTime?
+  deletedAt          DateTime?
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+
+  privateContact      AgentPrivateContact?
+  skills              AgentSkill[]
+  experiences         Experience[]
+  industryExperiences IndustryExperience[]
+  softwareExperiences SoftwareExperience[]
+  availabilityHistory AgentAvailability[]
+  reservations        Reservation[]
+  videos              Video[]
+  recordings          Recording[]
+  portfolioItems      Portfolio[]
+
+  @@index([status])
+  @@index([availabilityStatus])
+  @@index([verificationLevel])
+  @@index([primaryRole])
+  @@index([timezone])
+}
+
+/// Read requires `agent.read_private_contact`. Never joined into client-facing views (INV-P1).
+model AgentPrivateContact {
+  id               String       @id @default(cuid())
+  agentProfileId   String       @unique
+  agentProfile     AgentProfile @relation(fields: [agentProfileId], references: [id], onDelete: Cascade)
+  fullLegalName    String
+  personalEmail    String?
+  phone            String?
+  addressLine      String?
+  resumeKey        String?
+  /// Encrypted-at-rest references only; never raw ID numbers.
+  governmentIdRefs Json?
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+}
+
+model Skill {
+  id        String       @id @default(cuid())
+  name      String       @unique
+  category  String
+  isActive  Boolean      @default(true)
+  createdAt DateTime     @default(now())
+  agents    AgentSkill[]
+}
+
+model AgentSkill {
+  agentProfileId String
+  agentProfile   AgentProfile @relation(fields: [agentProfileId], references: [id], onDelete: Cascade)
+  skillId        String
+  skill          Skill        @relation(fields: [skillId], references: [id])
+  level          SkillLevel   @default(BASIC)
+  yearsUsed      Int?
+  /// Set only by assessment or admin; agents cannot self-verify.
+  verifiedById   String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@id([agentProfileId, skillId])
+  @@index([skillId])
+}
+
+model Experience {
+  id             String       @id @default(cuid())
+  agentProfileId String
+  agentProfile   AgentProfile @relation(fields: [agentProfileId], references: [id], onDelete: Cascade)
+  company        String?
+  title          String
+  industry       String?
+  startDate      DateTime
+  endDate        DateTime?
+  description    String?
+  isCampaign     Boolean      @default(false)
+  campaignType   String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@index([agentProfileId])
+}
+
+model IndustryExperience {
+  id             String       @id @default(cuid())
+  agentProfileId String
+  agentProfile   AgentProfile @relation(fields: [agentProfileId], references: [id], onDelete: Cascade)
+  industry       String
+  years          Int          @default(0)
+
+  @@unique([agentProfileId, industry])
+}
+
+model Software {
+  id        String               @id @default(cuid())
+  name      String               @unique
+  category  String
+  isActive  Boolean              @default(true)
+  createdAt DateTime             @default(now())
+  agents    SoftwareExperience[]
+}
+
+model SoftwareExperience {
+  agentProfileId String
+  agentProfile   AgentProfile @relation(fields: [agentProfileId], references: [id], onDelete: Cascade)
+  softwareId     String
+  software       Software     @relation(fields: [softwareId], references: [id])
+  level          SkillLevel   @default(BASIC)
+
+  @@id([agentProfileId, softwareId])
+}
+
+/// Availability history. Current value is denormalized on AgentProfile.availabilityStatus.
+model AgentAvailability {
+  id             String             @id @default(cuid())
+  agentProfileId String
+  agentProfile   AgentProfile       @relation(fields: [agentProfileId], references: [id], onDelete: Cascade)
+  status         AvailabilityStatus
+  availableFrom  DateTime?
+  reason         String?
+  setById        String?
+  setBy          User?              @relation("AvailabilitySetBy", fields: [setById], references: [id])
+  setAt          DateTime           @default(now())
+
+  @@index([agentProfileId, setAt])
+}
+
+/// Only one ACTIVE reservation per agent: enforced by a partial unique index in migration SQL.
+model Reservation {
+  id             String            @id @default(cuid())
+  agentProfileId String
+  agentProfile   AgentProfile      @relation(fields: [agentProfileId], references: [id], onDelete: Cascade)
+  clientId       String
+  client         Client            @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  placementId    String?
+  reservedById   String
+  reservedBy     User              @relation("ReservedBy", fields: [reservedById], references: [id])
+  reason         String?
+  startsAt       DateTime          @default(now())
+  expiresAt      DateTime
+  status         ReservationStatus @default(ACTIVE)
+  extensions     Int               @default(0)
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+
+  @@index([agentProfileId, status])
+  @@index([expiresAt, status])
+}
+
+model Video {
+  id             String       @id @default(cuid())
+  agentProfileId String
+  agentProfile   AgentProfile @relation(fields: [agentProfileId], references: [id], onDelete: Cascade)
+  kind           VideoKind    @default(INTRODUCTION)
+  storageKey     String
+  durationSec    Int?
+  status         MediaStatus  @default(DRAFT)
+  isCurrent      Boolean      @default(false)
+  submittedAt    DateTime?
+  reviewedById   String?
+  reviewedBy     User?        @relation("VideoReviewer", fields: [reviewedById], references: [id])
+  reviewedAt     DateTime?
+  /// Internal review feedback: visible to the agent and Hirewise staff, never to clients.
+  reviewFeedback String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@index([agentProfileId, status])
+}
+
+model Recording {
+  id             String        @id @default(cuid())
+  agentProfileId String
+  agentProfile   AgentProfile  @relation(fields: [agentProfileId], references: [id], onDelete: Cascade)
+  kind           RecordingKind
+  title          String
+  storageKey     String
+  durationSec    Int?
+  status         MediaStatus   @default(DRAFT)
+  submittedAt    DateTime?
+  reviewedById   String?
+  reviewedBy     User?         @relation("RecordingReviewer", fields: [reviewedById], references: [id])
+  reviewedAt     DateTime?
+  reviewFeedback String?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  @@index([agentProfileId, status])
+}
+
+model Portfolio {
+  id             String       @id @default(cuid())
+  agentProfileId String
+  agentProfile   AgentProfile @relation(fields: [agentProfileId], references: [id], onDelete: Cascade)
+  title          String
+  description    String?
+  storageKey     String?
+  url            String?
+  status         MediaStatus  @default(DRAFT)
+  reviewedById   String?
+  reviewedBy     User?        @relation("PortfolioReviewer", fields: [reviewedById], references: [id])
+  reviewFeedback String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@index([agentProfileId, status])
+}
+
+model Document {
+  id           String             @id @default(cuid())
+  ownerType    DocumentOwnerType
+  ownerId      String
+  kind         String
+  storageKey   String
+  uploadedById String
+  uploadedBy   User               @relation("DocumentUploader", fields: [uploadedById], references: [id])
+  visibility   DocumentVisibility @default(INTERNAL)
+  createdAt    DateTime           @default(now())
+
+  @@index([ownerType, ownerId])
+}
+
+// ---------------------------------------------------------------------------
+// Agreements (INV-I2)
+// ---------------------------------------------------------------------------
+
+model Agreement {
+  id              String        @id @default(cuid())
+  type            AgreementType
+  version         Int
+  title           String
+  bodyMarkdown    String
+  bodyChecksum    String
+  effectiveFrom   DateTime
+  isActive        Boolean       @default(true)
+  requiredForRole RoleKey?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  acceptances     AgreementAcceptance[]
+
+  @@unique([type, version])
+  @@index([isActive, requiredForRole])
+}
+
+model AgreementAcceptance {
+  id           String    @id @default(cuid())
+  agreementId  String
+  agreement    Agreement @relation(fields: [agreementId], references: [id])
+  userId       String
+  user         User      @relation(fields: [userId], references: [id])
+  acceptedAt   DateTime  @default(now())
+  ipAddress    String?
+  userAgent    String?
+  bodyChecksum String
+  placementId  String?
+
+  @@unique([agreementId, userId, placementId])
+  @@index([userId])
+}
+
+// ---------------------------------------------------------------------------
+// Operations: audit, outbox, jobs, settings, notifications
+// ---------------------------------------------------------------------------
+
+/// Append-only (INV-I3). A database trigger rejects UPDATE and DELETE (see migration).
+model AuditLog {
+  id            String   @id @default(cuid())
+  actorUserId   String?
+  actorRole     RoleKey?
+  action        String
+  entityType    String
+  entityId      String
+  previousValue Json?
+  newValue      Json?
+  reason        String?
+  ipAddress     String?
+  createdAt     DateTime @default(now())
+
+  @@index([entityType, entityId])
+  @@index([actorUserId])
+  @@index([action])
+  @@index([createdAt])
+}
+
+model OutboxEvent {
+  id          String    @id @default(cuid())
+  type        String
+  payload     Json
+  createdAt   DateTime  @default(now())
+  processedAt DateTime?
+  attempts    Int       @default(0)
+  lastError   String?
+
+  @@index([processedAt, createdAt])
+}
+
+model Job {
+  id        String    @id @default(cuid())
+  type      String
+  payload   Json
+  runAt     DateTime  @default(now())
+  status    JobStatus @default(PENDING)
+  attempts  Int       @default(0)
+  lockedAt  DateTime?
+  lastError String?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@index([status, runAt])
+}
+
+model Setting {
+  key         String   @id
+  value       Json
+  updatedById String?
+  updatedBy   User?    @relation("SettingUpdater", fields: [updatedById], references: [id])
+  updatedAt   DateTime @updatedAt
+}
+
+model Notification {
+  id            String    @id @default(cuid())
+  userId        String
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type          String
+  title         String
+  body          String
+  data          Json?
+  readAt        DateTime?
+  channelStatus Json?
+  createdAt     DateTime  @default(now())
+
+  @@index([userId, readAt])
+}
+
+model NotificationPreference {
+  userId    String
+  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      String
+  inApp     Boolean @default(true)
+  email     Boolean @default(true)
+
+  @@id([userId, type])
+}
