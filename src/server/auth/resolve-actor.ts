@@ -31,7 +31,7 @@ export async function resolveActor(db: Db, userId: string): Promise<Actor> {
   if (role === "CLIENT" && u.clientContact) actor.clientId = u.clientContact.clientId;
   if (role === "AGENT" && u.agentProfile) actor.agentProfileId = u.agentProfile.id;
   if (role === "SALES") actor.salesAssignedClientIds = u.managedClients.map((c) => c.id);
-  // coachCourseIds is populated in Phase 3 when courses exist.
+  if (role === "COACH") actor.coachCourseIds = [...new Set([...u.coursesOwned.map((c) => c.id), ...u.courseCoachings.map((c) => c.courseId)])];
 
   return actor;
 }

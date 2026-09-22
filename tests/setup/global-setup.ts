@@ -37,7 +37,7 @@ export default async function globalSetup(project: TestProject) {
   if (!url) {
     const port = await freePort();
     dir = mkdtempSync(path.join(tmpdir(), "hirewise-pg-"));
-    pg = new EmbeddedPostgres({ databaseDir: dir, user: "test", password: "test", port, persistent: false, onLog: () => {}, onError: () => {} });
+    pg = new EmbeddedPostgres({ databaseDir: dir, user: "test", password: "test", port, persistent: false, initdbFlags: ["--encoding=UTF8", "--locale=C"], onLog: () => {}, onError: () => {} });
     await pg.initialise();
     await pg.start();
     await pg.createDatabase("hirewise_test");

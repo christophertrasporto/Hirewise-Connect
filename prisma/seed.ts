@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { PrismaClient, type RoleKey as DbRoleKey, type AgreementType } from "@prisma/client";
 import { hash } from "@node-rs/argon2";
 import { PERMISSIONS, ROLE_PERMISSIONS, ROLE_NAMES, type RoleKey } from "../src/server/policies/permissions";
+import { DEFAULT_REQUIREMENTS } from "../src/server/services/verification.service";
 
 /**
  * Deterministic foundation seed (Section 12). Safe to re-run: every write is an upsert.
@@ -254,6 +255,86 @@ async function main() {
     await prisma.shortlistCandidate.create({ data: { shortlistId: betaList.id, agentProfileId: jose.id, addedById: betaUser.id, note: "Strong Zendesk background" } });
   }
 
+
+  // Phase 3 — Academy: result labels, certification templates, verification ladder, demo courses with exams.
+  const LABELS: Array<[string, string, number]> = [["NEEDS_IMPROVEMENT", "Needs improvement", 0], ["PASSED", "Passed", 1], ["GOOD", "Good", 2], ["EXCELLENT", "Excellent", 3], ["OUTSTANDING", "Outstanding", 4]];
+  const labelIds = new Map<string, string>();
+  for (const [key, label, rank] of LABELS) {
+    const l = await prisma.assessmentResultLabel.upsert({ where: { key }, create: { key, label, rank }, update: { label, rank } });
+    labelIds.set(key, l.id);
+  }
+  const TEMPLATES = [
+    { name: "Hirewise Certified Appointment Setter", description: "Outbound calling, objection handling, and CRM discipline verified by exam and a coach role-play.", validityMonths: 24, badgeKey: "setter", requiresCompletion: true, minExamScore: 70, requiresCoachReview: true, minResultLabelRank: 2 },
+    { name: "Hirewise Certified Customer Service Representative", description: "Tier-1 support fundamentals, tone, and escalation verified by exam.", validityMonths: 24, badgeKey: "csr", requiresCompletion: true, minExamScore: 75, requiresCoachReview: false, minResultLabelRank: null },
+    { name: "Hirewise Certified Executive Assistant", description: "Calendar, inbox, and founder support verified by exam and coach practical.", validityMonths: null, badgeKey: "ea", requiresCompletion: true, minExamScore: 70, requiresCoachReview: true, minResultLabelRank: 2 },
+  ];
+  const templateIds = new Map<string, string>();
+  for (const t of TEMPLATES) {
+    const row = await prisma.certificationTemplate.upsert({ where: { name: t.name }, create: t, update: { description: t.description, validityMonths: t.validityMonths, badgeKey: t.badgeKey, minExamScore: t.minExamScore, requiresCoachReview: t.requiresCoachReview, minResultLabelRank: t.minResultLabelRank } });
+    templateIds.set(t.badgeKey, row.id);
+  }
+  for (const [level, rules] of Object.entries(DEFAULT_REQUIREMENTS)) {
+    await prisma.verificationRequirement.upsert({ where: { level: level as never }, create: { level: level as never, rules }, update: {} });
+  }
+
+  const coachUser = await prisma.user.findUniqueOrThrow({ where: { email: "coach@hirewise.example" } });
+  const COURSES = [
+    {
+      code: "appointment-setting-fundamentals", title: "Appointment Setting Fundamentals", category: "Sales and Appointment Setting", priceCents: 0, passingScore: 70, requiresCoachReview: true, template: "setter", status: "PUBLISHED" as const,
+      description: "The Hirewise method for outbound appointment setting: openers, qualification, objection handling, and clean CRM notes. Free for all approved talent.",
+      syllabus: "Module 1 — The first 10 seconds: openers that earn attention\nModule 2 — Qualifying without interrogating\nModule 3 — Objection handling: price, timing, trust\nModule 4 — Booking the appointment and confirming\nModule 5 — CRM hygiene and hand-off notes\n\nComplete the exam (70% to pass). Your coach then runs a short role-play before certification.",
+      exam: { title: "Appointment Setting Fundamentals — final exam", instructions: "Single answer per question. 20 minutes. Two attempts.", timeLimitMin: 20, maxAttempts: 2, questions: [
+        { prompt: "What is the primary goal of the first ten seconds of an outbound call?", options: ["Explain every feature of the offer", "Earn permission to continue the conversation", "Ask for the appointment immediately", "Confirm the prospect's address"], correctIndex: 1, points: 1, explanation: "The opener buys attention; the pitch comes later." },
+        { prompt: "A prospect says 'I'm busy right now.' The best response is:", options: ["Hang up politely", "Keep talking faster", "Acknowledge, ask for a specific better time, and confirm it", "Say the offer expires today"], correctIndex: 2, points: 1 },
+        { prompt: "Which qualification approach keeps the prospect engaged?", options: ["A rapid checklist of yes/no questions", "Open questions tied to their situation", "Reading the script word for word", "Skipping qualification to save time"], correctIndex: 1, points: 1 },
+        { prompt: "After booking, the setter should:", options: ["Log the appointment, time zone, and context in the CRM immediately", "Wait until end of shift to update the CRM", "Send the prospect the client's personal number", "Discuss pricing in detail"], correctIndex: 0, points: 2, explanation: "Hand-off quality decides whether the closer shows up prepared." },
+        { prompt: "Which is a Hirewise communication rule during the hiring process?", options: ["Share your own contact details with clients", "Discuss your compensation with the client", "Keep coordination inside Hirewise Connect", "Negotiate rates directly"], correctIndex: 2, points: 1 },
+      ] },
+    },
+    {
+      code: "customer-service-excellence", title: "Customer Service Excellence", category: "Customer Service", priceCents: 4900, passingScore: 75, requiresCoachReview: false, template: "csr", status: "PUBLISHED" as const,
+      description: "Tier-1 support fundamentals for US and Australian accounts: tone, macros, escalation, and CSAT recovery. USD 49.00, certification on passing the exam.",
+      syllabus: "Module 1 — Tone and empathy statements\nModule 2 — Ticket triage and macros\nModule 3 — Escalation criteria and hand-offs\nModule 4 — CSAT recovery and follow-up\n\nExam: 75% to pass. Certification is issued automatically on passing.",
+      exam: { title: "Customer Service Excellence — final exam", instructions: "Single answer per question. Untimed. Two attempts.", timeLimitMin: null, maxAttempts: 2, questions: [
+        { prompt: "A customer writes an angry email about a delayed order. Your first sentence should:", options: ["Explain the carrier's policy", "Acknowledge the frustration and take ownership", "Ask for their order number only", "Offer a discount immediately"], correctIndex: 1, points: 1 },
+        { prompt: "When should a ticket be escalated?", options: ["Whenever the customer uses capital letters", "When resolution needs access or authority you do not have", "Never; tier-1 resolves everything", "Only on Fridays"], correctIndex: 1, points: 1 },
+        { prompt: "A macro should be:", options: ["Sent unchanged every time", "Personalised with the customer's details before sending", "Used only by supervisors", "Avoided entirely"], correctIndex: 1, points: 1 },
+        { prompt: "The best way to recover a low CSAT score is:", options: ["Ignore it", "Follow up personally, confirm the fix, and invite feedback", "Close the ticket quickly", "Blame another department"], correctIndex: 1, points: 1 },
+      ] },
+    },
+    {
+      code: "executive-assistant-playbook", title: "Executive Assistant Playbook", category: "Executive Assistance", priceCents: 9900, passingScore: 70, requiresCoachReview: true, template: "ea", status: "DRAFT" as const,
+      description: "Calendar architecture, inbox zero for founders, meeting prep, and the daily brief. USD 99.00. In draft: the coach is still building the exam.",
+      syllabus: "Module 1 — Calendar architecture\nModule 2 — Inbox triage rules\nModule 3 — Meeting prep and the daily brief",
+      exam: null,
+    },
+  ];
+  for (const c of COURSES) {
+    let course = await prisma.academyCourse.findUnique({ where: { code: c.code } });
+    if (!course) {
+      course = await prisma.academyCourse.create({ data: { code: c.code, title: c.title, category: c.category, description: c.description, syllabus: c.syllabus, ownerCoachUserId: coachUser.id, priceCents: c.priceCents, currency: "USD", passingScore: c.passingScore, requiresCoachReview: c.requiresCoachReview, certificationTemplateId: templateIds.get(c.template), status: c.status, publishedAt: c.status === "PUBLISHED" ? new Date(Date.now() - 10 * 86_400_000) : undefined, publishedById: c.status === "PUBLISHED" ? adminUser.id : undefined, coaches: { create: { coachUserId: coachUser.id } } } });
+      if (c.exam) {
+        await prisma.exam.create({ data: { courseId: course.id, title: c.exam.title, instructions: c.exam.instructions, timeLimitMin: c.exam.timeLimitMin ?? undefined, maxAttempts: c.exam.maxAttempts, status: c.status === "PUBLISHED" ? "PUBLISHED" : "DRAFT", questions: { create: c.exam.questions.map((q, i) => ({ order: i + 1, prompt: q.prompt, options: q.options, correctIndex: q.correctIndex, points: q.points, explanation: "explanation" in q ? q.explanation : undefined })) } } });
+      }
+    }
+  }
+
+  // Jose completed the free course, was assessed "Excellent", and holds the Appointment Setter certification.
+  const setterCourse = await prisma.academyCourse.findUniqueOrThrow({ where: { code: "appointment-setting-fundamentals" } });
+  let joseEnrollment = await prisma.courseEnrollment.findUnique({ where: { courseId_agentProfileId: { courseId: setterCourse.id, agentProfileId: jose.id } } });
+  if (!joseEnrollment) {
+    joseEnrollment = await prisma.courseEnrollment.create({ data: { courseId: setterCourse.id, agentProfileId: jose.id, status: "COMPLETED", paymentStatus: "NOT_REQUIRED", priceCents: 0, enrolledAt: new Date(Date.now() - 8 * 86_400_000), completion: { create: { examScore: 90, completedAt: new Date(Date.now() - 6 * 86_400_000) } } } });
+    const assessment = await prisma.assessment.create({ data: { courseId: setterCourse.id, agentProfileId: jose.id, coachUserId: coachUser.id, type: "ROLEPLAY", examScore: 90, roleplayScore: 88, communicationScore: 92, strengths: "Warm opener, natural pacing, confident close.", areasForImprovement: "Tighten the qualification questions when the prospect rambles.", comments: "Ready for solar and roofing campaigns.", resultLabelId: labelIds.get("EXCELLENT"), certificationRecommended: true, status: "FINAL", assessedAt: new Date(Date.now() - 5 * 86_400_000) } });
+    await prisma.certification.create({ data: { agentProfileId: jose.id, templateId: templateIds.get("setter")!, origin: "ACADEMY", assessmentId: assessment.id, courseId: setterCourse.id, status: "APPROVED", approvedById: adminUser.id, approvedAt: new Date(Date.now() - 5 * 86_400_000), issuedAt: new Date(Date.now() - 5 * 86_400_000), expiresAt: new Date(Date.now() + 730 * 86_400_000) } });
+    await prisma.coachEvaluation.create({ data: { agentProfileId: jose.id, coachUserId: coachUser.id, summary: "Reliable, coachable, and consistent on the phones. Handles rejection well and keeps clean notes.", communication: 5, reliability: 5, coachability: 4, overallLabelId: labelIds.get("EXCELLENT"), visibleToClients: true } });
+  }
+  // Ana is enrolled in the paid CSR course and waiting for payment to be recorded.
+  const ana = await prisma.agentProfile.findFirstOrThrow({ where: { displayName: "Ana L." } });
+  const csrCourse = await prisma.academyCourse.findUniqueOrThrow({ where: { code: "customer-service-excellence" } });
+  if (!(await prisma.courseEnrollment.findUnique({ where: { courseId_agentProfileId: { courseId: csrCourse.id, agentProfileId: ana.id } } }))) {
+    await prisma.courseEnrollment.create({ data: { courseId: csrCourse.id, agentProfileId: ana.id, status: "ENROLLED", paymentStatus: "PENDING", priceCents: csrCourse.priceCents } });
+  }
+
   console.log("Seed complete.");
   console.log("Roles:", roleIds.size, "| Permissions:", permIds.size, "| Agreements:", AGREEMENTS.length, "| Skills:", SKILLS.length, "| Software:", SOFTWARE.length);
   console.log(`\nDemo accounts (password: ${DEMO_PASSWORD}):`);
@@ -261,7 +342,8 @@ async function main() {
   console.log(`  ${"CLIENT".padEnd(12)} hiring@acme-solar.example  (active, managed by sales@)`);
   console.log(`  ${"CLIENT".padEnd(12)} ops@beta-corp.example  (active, has a shortlist)`);
   console.log(`  ${"AGENT".padEnd(12)} maria@talent.example  (draft profile: add résumé + video, then submit)`);
-  console.log(`  ${"AGENT".padEnd(12)} jose@ / ana@ / carlo@talent.example  (approved, searchable)`);
+  console.log(`  ${"AGENT".padEnd(12)} jose@ / ana@ / carlo@talent.example  (approved, searchable; jose@ certified, ana@ has a pending course payment)`);
+  console.log(`  ${"COACH".padEnd(12)} coach@hirewise.example  (owns 3 courses: 2 published, 1 draft)`);
 }
 
 main()

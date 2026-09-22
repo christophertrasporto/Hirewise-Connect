@@ -20,6 +20,16 @@ export const FORBIDDEN_FOR_CLIENT = [
   "compensation",
   "userId",
   "user",
+  // Academy internals (Section 6, footnote 3; INV-I1)
+  "correctIndex",
+  "comments",
+  "areasForImprovement",
+  "certificationRecommended",
+  "coachUserId",
+  "revokedReason",
+  "priceCents",
+  "paidCents",
+  "paymentReference",
 ] as const;
 
 export const FORBIDDEN_FOR_AGENT = [

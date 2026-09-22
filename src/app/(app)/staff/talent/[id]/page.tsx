@@ -16,6 +16,10 @@ import { listNotesForStaff } from "@/server/services/note.service";
 import { ReserveForm } from "@/components/staff/ReservationForm";
 import { clientRepository } from "@/server/repositories/client.repository";
 import { labelFor } from "@/lib/options";
+import { certificationRepository } from "@/server/repositories/certification.repository";
+import { LEVELS } from "@/server/services/verification.service";
+import { IssueCertificationForm, VerificationForm, CertificationReviewActions } from "@/components/academy/CourseActions";
+import { Award } from "lucide-react";
 
 export const metadata: Metadata = { title: "Agent profile" };
 
@@ -32,6 +36,7 @@ export default async function StaffAgentPage({ params }: { params: Promise<{ id:
 
   const notes = actor.permissions.has("note.internal.read") ? await listNotesForStaff(prisma, actor, "AGENT", a.id) : [];
   const reservableClients = actor.permissions.has("reservation.manage") && a.status === "APPROVED" ? (await clientRepository.listByStatus(prisma, "ACTIVE")).map((c) => ({ id: c.id, companyName: c.companyName })) : [];
+  const templates = actor.permissions.has("certification.issue") ? await certificationRepository.templates(prisma) : [];
   const allowed = AGENT_PROFILE_TRANSITIONS.filter((t) => t.from === a.status && t.permission !== "OWNER" && actor.permissions.has(t.permission)).map((t) => ({ to: t.to, requiresReason: !!t.requiresReason }));
 
   return (
@@ -126,6 +131,27 @@ export default async function StaffAgentPage({ params }: { params: Promise<{ id:
           {actor.permissions.has("note.internal.read") && (
             <Card title="Internal notes" description="Never shown to the agent or clients unless you mark a note visible.">
               <NotesPanel subjectType="AGENT" subjectId={a.id} notes={notes} canWrite={actor.permissions.has("note.internal.write")} />
+            </Card>
+          )}
+          <Card title="Certifications and Academy">
+            {a.certifications.length === 0 ? <p className="text-[13.5px] text-ink-400">No certifications.</p> : (
+              <ul className="space-y-2">
+                {a.certifications.map((c) => (
+                  <li key={c.id} className="rounded-xl border border-ink-100 p-3">
+                    <div className="flex items-center justify-between gap-2"><span className="inline-flex items-center gap-1.5 text-[13.5px] font-semibold text-ink-900"><Award className="h-4 w-4 text-gold-600" /> {c.name}</span><StatusBadge status={c.status} /></div>
+                    <p className="mt-0.5 text-[12px] text-ink-400">Issued {fmtDate(c.issuedAt)}{c.expiresAt ? ` · until ${fmtDate(c.expiresAt)}` : ""}</p>
+                    {(c.status === "PENDING_REVIEW" && actor.permissions.has("certification.review")) || (c.status === "APPROVED" && actor.permissions.has("certification.revoke")) ? <div className="mt-2"><CertificationReviewActions certificationId={c.id} mode={c.status === "PENDING_REVIEW" ? "PENDING" : "APPROVED"} /></div> : null}
+                  </li>
+                ))}
+              </ul>
+            )}
+            {a.courses.length > 0 && <p className="mt-3 text-[12.5px] text-ink-500">Courses: {a.courses.map((c) => `${c.title} (${labelFor(c.status).toLowerCase()})`).join(", ")}</p>}
+            {a.assessments.length > 0 && <p className="mt-1 text-[12.5px] text-ink-500">Assessments: {a.assessments.map((s) => `${s.result ?? "—"}${s.courseTitle ? ` · ${s.courseTitle}` : ""}`).join("; ")}</p>}
+            {templates.length > 0 && <div className="mt-4 border-t border-ink-100 pt-4"><IssueCertificationForm agentProfileId={a.id} templates={templates.map((t) => ({ id: t.id, name: t.name }))} /></div>}
+          </Card>
+          {actor.permissions.has("agent.set_verification") && (
+            <Card title="Verification level" description="Normally computed from the ladder rules. Set manually only with a reason.">
+              <VerificationForm agentProfileId={a.id} current={a.verificationLevel} levels={LEVELS} />
             </Card>
           )}
           <Card title="Timeline">

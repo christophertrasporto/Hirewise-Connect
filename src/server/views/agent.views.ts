@@ -3,6 +3,33 @@ import type { agentSelfInclude } from "@/server/repositories/agent.repository";
 
 type AgentSelfRecord = Prisma.AgentProfileGetPayload<{ include: ReturnType<typeof agentSelfInclude> }>;
 
+/** Client-safe certification: template name, validity, and only the scores the template allows (Section 6, footnote 3). */
+function certificationsForClient(a: AgentSelfRecord) {
+  return a.certifications
+    .filter((c) => c.status === "APPROVED")
+    .map((c) => {
+      const scores: Record<string, number> = {};
+      if (c.assessment) {
+        for (const key of c.template.clientVisibleScores) {
+          const v = (c.assessment as Record<string, unknown>)[key];
+          if (typeof v === "number") scores[key] = v;
+        }
+      }
+      return { id: c.id, name: c.template.name, badgeKey: c.template.badgeKey, issuedAt: c.issuedAt, expiresAt: c.expiresAt, resultLabel: c.assessment?.resultLabel?.label ?? null, scores };
+    });
+}
+
+function assessmentSummaryForClient(a: AgentSelfRecord) {
+  const best = [...a.assessments].sort((x, y) => (y.resultLabel?.rank ?? 0) - (x.resultLabel?.rank ?? 0))[0];
+  return best?.resultLabel ? { label: best.resultLabel.label, rank: best.resultLabel.rank, courseTitle: best.course?.title ?? null } : null;
+}
+
+function coachEvaluationForClient(a: AgentSelfRecord) {
+  const ev = a.coachEvaluations[0];
+  if (!ev || !ev.visibleToClients) return null;
+  return { summary: ev.summary, communication: ev.communication, reliability: ev.reliability, coachability: ev.coachability, overall: ev.overallLabel?.label ?? null };
+}
+
 /**
  * Allowlist projections (INV-A3). Never spread a record. Each function names
  * every field it returns so a new column in the schema is private by default.
@@ -47,6 +74,10 @@ export function toAgentSelfView(a: AgentSelfRecord) {
     videos: a.videos.map((v) => ({ id: v.id, status: v.status, isCurrent: v.isCurrent, durationSec: v.durationSec, reviewFeedback: v.reviewFeedback, createdAt: v.createdAt })),
     recordings: a.recordings.map((r) => ({ id: r.id, kind: r.kind, title: r.title, status: r.status, durationSec: r.durationSec, reviewFeedback: r.reviewFeedback, createdAt: r.createdAt })),
     portfolio: a.portfolioItems.map((p) => ({ id: p.id, title: p.title, status: p.status, url: p.url, reviewFeedback: p.reviewFeedback })),
+    // Academy: the agent sees their certifications and their coach's feedback (not internal-only areasForImprovement wording is theirs to see too).
+    certifications: a.certifications.map((c) => ({ id: c.id, name: c.template.name, badgeKey: c.template.badgeKey, status: c.status, issuedAt: c.issuedAt, expiresAt: c.expiresAt })),
+    assessments: a.assessments.map((s) => ({ id: s.id, courseTitle: s.course?.title ?? null, type: s.type, examScore: s.examScore, practicalScore: s.practicalScore, roleplayScore: s.roleplayScore, communicationScore: s.communicationScore, result: s.resultLabel?.label ?? null, strengths: s.strengths, areasForImprovement: s.areasForImprovement, assessedAt: s.assessedAt })),
+    courses: a.enrollments.map((e) => ({ courseId: e.course.id, title: e.course.title, category: e.course.category, status: e.status, paymentStatus: e.paymentStatus, completedAt: e.completion?.completedAt ?? null, examScore: e.completion?.examScore ?? null })),
   };
 }
 
@@ -81,6 +112,11 @@ export function toCandidateClientView(a: AgentSelfRecord) {
     videos: a.videos.filter((v) => v.status === "APPROVED").map((v) => ({ id: v.id, durationSec: v.durationSec })),
     recordings: a.recordings.filter((r) => r.status === "APPROVED").map((r) => ({ id: r.id, kind: r.kind, title: r.title, durationSec: r.durationSec })),
     portfolio: a.portfolioItems.filter((p) => p.status === "APPROVED").map((p) => ({ id: p.id, title: p.title, description: p.description, url: p.url })),
+    // Academy (Section 6): approved certifications, the best assessment label, and a client-visible coach evaluation.
+    certifications: certificationsForClient(a),
+    assessment: assessmentSummaryForClient(a),
+    coachEvaluation: coachEvaluationForClient(a),
+    completedCourses: a.enrollments.filter((e) => e.status === "COMPLETED").map((e) => ({ title: e.course.title, category: e.course.category })),
   };
 }
 
@@ -109,6 +145,8 @@ export function toCandidateCardView(a: AgentSelfRecord) {
     hasVideo: a.videos.some((v) => v.status === "APPROVED"),
     approvedRecordings: a.recordings.filter((r) => r.status === "APPROVED").length,
     campaignExperience: a.experiences.some((e) => e.isCampaign),
+    certifications: a.certifications.filter((c) => c.status === "APPROVED").map((c) => ({ name: c.template.name, badgeKey: c.template.badgeKey })),
+    assessmentLabel: assessmentSummaryForClient(a)?.label ?? null,
   };
 }
 

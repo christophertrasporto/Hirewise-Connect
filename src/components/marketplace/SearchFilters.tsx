@@ -6,7 +6,7 @@ import type { SearchFilters as Filters } from "@/server/services/search.service"
 type Tax = { id: string; name: string; category: string };
 
 /** Plain GET form so searches are shareable URLs and work without JavaScript. */
-export function SearchFilters({ filters, skills, software, hasClientTimezone }: { filters: Filters; skills: Tax[]; software: Tax[]; hasClientTimezone: boolean }) {
+export function SearchFilters({ filters, skills, software, hasClientTimezone, certifications = [], courses = [], labels = [] }: { filters: Filters; skills: Tax[]; software: Tax[]; hasClientTimezone: boolean; certifications?: Array<{ id: string; name: string }>; courses?: Array<{ id: string; title: string }>; labels?: Array<{ rank: number; label: string }> }) {
   return (
     <form method="get" action="/talent" className="rounded-3xl border border-ink-100 bg-white p-5 shadow-soft">
       <div className="flex flex-col gap-3 sm:flex-row">
@@ -64,6 +64,19 @@ export function SearchFilters({ filters, skills, software, hasClientTimezone }: 
               <option value="DEPLOYMENT_READY">Deployment ready</option>
             </Select>
             <div className="mt-2 space-y-1">{LANGUAGES.slice(0, 5).map((l) => <Checkbox key={l} name="languages" value={l} defaultChecked={filters.languages?.includes(l)} label={l} />)}</div>
+            {(certifications.length > 0 || labels.length > 0) && (
+              <div className="mt-3 border-t border-ink-100 pt-3">
+                <p className="mb-1.5 text-[12px] font-semibold uppercase tracking-[0.12em] text-ink-400">Academy</p>
+                <div className="space-y-1">{certifications.map((t) => <Checkbox key={t.id} name="certifications" value={t.id} defaultChecked={filters.certifications?.includes(t.id)} label={t.name} />)}</div>
+                {courses.length > 0 && <div className="mt-1 space-y-1">{courses.slice(0, 6).map((c) => <Checkbox key={c.id} name="courses" value={c.id} defaultChecked={filters.courses?.includes(c.id)} label={`Completed: ${c.title}`} />)}</div>}
+                {labels.length > 0 && (
+                  <Select name="minAssessment" defaultValue={String(filters.minAssessment ?? 0)} className="mt-2 h-10 text-[13.5px]" aria-label="Minimum coach assessment">
+                    <option value="0">Any coach assessment</option>
+                    {labels.filter((l) => l.rank > 0).map((l) => <option key={l.rank} value={l.rank}>{l.label} or better</option>)}
+                  </Select>
+                )}
+              </div>
+            )}
             {hasClientTimezone && (
               <Select name="tzWithin" defaultValue={String(filters.tzWithin ?? 0)} className="mt-2 h-10 text-[13.5px]" aria-label="Timezone overlap">
                 <option value="0">Any timezone</option>
@@ -80,7 +93,7 @@ export function SearchFilters({ filters, skills, software, hasClientTimezone }: 
 }
 
 function hasAdvanced(f: Filters) {
-  return !!(f.skills?.length || f.software?.length || f.industry || f.level?.length || f.availability?.length || f.setup || f.verification || f.languages?.length || f.campaign || f.tzWithin);
+  return !!(f.certifications?.length || f.courses?.length || f.minAssessment) || !!(f.skills?.length || f.software?.length || f.industry || f.level?.length || f.availability?.length || f.setup || f.verification || f.languages?.length || f.campaign || f.tzWithin);
 }
 
 function Group({ title, children }: { title: string; children: React.ReactNode }) {

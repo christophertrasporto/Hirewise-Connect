@@ -49,7 +49,10 @@ export const PERMISSIONS = {
   "agreement.manage": { group: "agreement", description: "Create and version agreements" },
   "agreement.read_acceptances": { group: "agreement", description: "Read agreement acceptance records" },
   // Academy
-  "course.manage": { group: "academy", description: "Create and edit courses and coach assignments" },
+  "course.manage": { group: "academy", description: "Create, edit, publish, and archive any course; assign coaches; link certification templates" },
+  "course.create_own": { group: "academy", description: "Create and edit courses and exams the actor coaches; set the course price; submit for publishing" },
+  "course.payment.record": { group: "academy", description: "Record or waive an agent's payment for a paid course" },
+  "verification.manage": { group: "academy", description: "Edit verification-level requirements and certification templates" },
   "course.read_assigned": { group: "academy", description: "Read courses and students assigned to the actor" },
   "assessment.write": { group: "academy", description: "Write assessments and coach evaluations" },
   "assessment.read_all": { group: "academy", description: "Read all assessments" },
@@ -110,6 +113,7 @@ export const ROLE_PERMISSIONS: Record<RoleKey, readonly PermissionKey[]> = {
     "deposit.manage",
     "invoice.manage",
     "payment.record",
+    "course.payment.record",
     "agreement.read_acceptances",
     "note.internal.read",
     "note.internal.write",
@@ -128,7 +132,7 @@ export const ROLE_PERMISSIONS: Record<RoleKey, readonly PermissionKey[]> = {
     "note.internal.write",
     "report.talent",
   ],
-  COACH: ["agent.read_public", "course.read_assigned", "assessment.write", "report.academy"],
+  COACH: ["agent.read_public", "course.read_assigned", "course.create_own", "assessment.write", "report.academy"],
   OPERATIONS: [
     "agent.read_public",
     "agent.read_private_contact",

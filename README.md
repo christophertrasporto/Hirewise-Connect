@@ -15,8 +15,9 @@ Claude Code are in [CLAUDE.md](./CLAUDE.md).
 | Phase 1A — Auth, agreements, registration, profile wizard, uploads, review pipeline | Done |
 | Phase 1B — Media review, talent search, candidate profiles, shortlists, e2e isolation tests | Done |
 | Phase 2 — Requirements, interview requests, mediated messaging, scheduling, decisions, placements, reservations | Done |
-| Phase 3 — Academy: courses, assessments, coach evaluations, certifications, verification levels | Next |
-| Phases 4–5 | Planned |
+| Phase 3 — Academy: coach-built courses with USD pricing, exams, assessments, certifications, verification ladder | Done |
+| Phase 4 — Commercial: billing rates, compensation, agreements, deposits, placement activation | Next |
+| Phase 5 | Planned |
 
 ## Run locally
 
@@ -57,7 +58,7 @@ npm run test:e2e      # Playwright against the running dev server and seeded dat
 
 ## Demo accounts
 
-After `npm run db:seed`, every account uses the password `Hirewise!2026`: `owner@`, `admin@`, `sales@`, `recruiter@`, `coach@`, `ops@` at `hirewise.example`, plus `hiring@acme-solar.example` and `ops@beta-corp.example` (active clients), `maria@talent.example` (draft agent), and `jose@`, `ana@`, `carlo@talent.example` (approved agents). Admin roles are asked to enrol TOTP on first login. Set `DEV_EXPOSE_LINKS=true` in `.env` to see emailed links in the UI locally.
+After `npm run db:seed`, every account uses the password `Hirewise!2026`: `owner@`, `admin@`, `sales@`, `recruiter@`, `coach@`, `ops@` at `hirewise.example`, plus `hiring@acme-solar.example` and `ops@beta-corp.example` (active clients), `maria@talent.example` (draft agent), and `jose@`, `ana@`, `carlo@talent.example` (approved agents; `jose@` holds a certification, `ana@` has a pending course payment). `coach@` owns three Academy courses (two published, one draft). Admin roles are asked to enrol TOTP on first login. Set `DEV_EXPOSE_LINKS=true` in `.env` to see emailed links in the UI locally.
 
 ## Stack
 

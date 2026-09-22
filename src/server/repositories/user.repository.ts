@@ -14,6 +14,8 @@ export const userRepository = {
         clientContact: { select: { clientId: true } },
         agentProfile: { select: { id: true } },
         managedClients: { select: { id: true } },
+        coursesOwned: { select: { id: true } },
+        courseCoachings: { select: { courseId: true } },
       },
     });
   },

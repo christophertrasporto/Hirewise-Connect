@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, BadgeCheck, CalendarPlus, Clock3, Globe2, Languages, Laptop } from "lucide-react";
+import { ArrowLeft, Award, BadgeCheck, CalendarPlus, Clock3, Globe2, Languages, Laptop } from "lucide-react";
 import { prisma } from "@/server/db/client";
 import { requireActor } from "@/server/auth/require-actor";
 import { getCandidateForClient } from "@/server/services/search.service";
@@ -96,8 +96,32 @@ export default async function CandidatePage({ params }: { params: Promise<{ id: 
               </div>
             ))}
           </Card>
-          <Card title="Certifications and assessments" description="From the Hirewise VA Academy (Phase 3).">
-            <EmptyState title="Coming with the Academy integration" />
+          <Card title="Certifications" description="Issued by the Hirewise VA Academy after coach review.">
+            {c.certifications.length === 0 ? <EmptyState title="No certifications yet" /> : (
+              <ul className="space-y-3">
+                {c.certifications.map((t) => (
+                  <li key={t.id} className="rounded-2xl border border-gold-200 bg-gold-50/60 p-3.5">
+                    <p className="inline-flex items-center gap-1.5 text-[14px] font-bold text-gold-800"><Award className="h-4 w-4" /> {t.name}</p>
+                    <p className="mt-0.5 text-[12.5px] text-ink-500">Issued {fmtDate(t.issuedAt)}{t.expiresAt ? ` · valid until ${fmtDate(t.expiresAt)}` : ""}{t.resultLabel ? ` · ${t.resultLabel}` : ""}</p>
+                    {Object.keys(t.scores).length > 0 && <p className="mt-1.5 text-[12.5px] text-ink-600">{Object.entries(t.scores).map(([k, v]) => `${labelFor(k)} ${v}%`).join(" · ")}</p>}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Card>
+          <Card title="Coach assessment">
+            {!c.assessment && !c.coachEvaluation ? <EmptyState title="Not yet assessed" /> : (
+              <div className="space-y-3 text-[13.5px]">
+                {c.assessment && <p><span className="rounded-full bg-ink-900 px-2.5 py-1 text-[12px] font-semibold text-white">{c.assessment.label}</span>{c.assessment.courseTitle && <span className="ml-2 text-ink-500">{c.assessment.courseTitle}</span>}</p>}
+                {c.coachEvaluation && (
+                  <div>
+                    <p className="leading-relaxed text-ink-700">{c.coachEvaluation.summary}</p>
+                    <p className="mt-2 text-[12.5px] text-ink-500">Communication {c.coachEvaluation.communication}/5 · Reliability {c.coachEvaluation.reliability}/5 · Coachability {c.coachEvaluation.coachability}/5</p>
+                  </div>
+                )}
+                {c.completedCourses.length > 0 && <p className="text-[12.5px] text-ink-500">Completed: {c.completedCourses.map((x) => x.title).join(", ")}</p>}
+              </div>
+            )}
           </Card>
         </div>
       </div>

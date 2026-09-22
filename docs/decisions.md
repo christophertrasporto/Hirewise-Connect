@@ -41,3 +41,12 @@ Answers to MASTER_PROMPT.md Section 14. On 2026-09-21 Hirewise chose **"use the 
 - **Client and agent never message each other directly.** Their messages carry CLIENT_AND_HIREWISE or AGENT_AND_HIREWISE visibility; Hirewise relays. Contact details are held for review; rate talk is flagged.
 - **Selection reserves the candidate** for the client for `reservationTtlDays`. The hold belongs to the account manager, who receives the expiry warnings.
 - **Restart the dev server after every migration.** The running Next.js process keeps the previously generated Prisma client; new models are undefined until restart.
+
+## Phase 3 notes
+
+- **Coaches author courses and exams (owner request, 2026-09-23).** New permission `course.create_own` on COACH scopes creation and editing to courses the coach owns or is assigned to (INV-P5). Publishing stays with Admin (`course.manage`), which is also where a certification template is linked.
+- **Every course has a USD price (owner request).** `AcademyCourse.priceCents` + `currency = USD`, 0 = free. Enrolment snapshots the price. Paid courses stay locked until Hirewise records the payment offline; `course.payment.record` was added for SALES, OPERATIONS, and ADMIN. Card processing remains Phase 5 (Q8).
+- **`verification.manage`** (ADMIN, SUPER_ADMIN) covers editing the verification ladder, certification templates, and assessment result labels.
+- **Coach-reviewed certifications are approved on the coach recommendation**; exam-only templates approve automatically when the score clears `minExamScore`. Admin can still issue directly or revoke, always with a reason.
+- **Local Postgres clusters are now initialised as UTF8.** The embedded server on Windows defaulted to WIN1252, which rejects characters outside Latin-1 (found when a notification body contained an arrow). New clusters (`npm run db:local` on a fresh `.pgdata/`, and every test run) pass `--encoding=UTF8 --locale=C`. An existing `.pgdata/` keeps WIN1252 until it is deleted and re-seeded.
+- **Agent-facing Academy lives at `/courses`** because `/academy` is the public marketing page.

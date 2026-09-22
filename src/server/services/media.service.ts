@@ -7,6 +7,7 @@ import { mediaRepository } from "@/server/repositories/media.repository";
 import { agentRepository } from "@/server/repositories/agent.repository";
 import { rateLimit } from "@/server/auth/rate-limit";
 import { audit } from "@/server/audit/audit";
+import { recomputeVerification } from "./verification.service";
 import { publishEvent } from "@/server/events/outbox";
 import { setResume } from "./agent.service";
 
@@ -148,6 +149,7 @@ export async function reviewMedia(db: PrismaClient, actor: Actor, input: z.infer
     else await mediaRepository.setRecordingStatus(tx, m.id, input.decision, { reviewedById: actor.userId, reviewFeedback: feedback });
     const action = input.type === "VIDEO" ? (input.decision === "APPROVED" ? "VIDEO_APPROVED" : "VIDEO_REVIEWED") : input.decision === "APPROVED" ? "RECORDING_APPROVED" : "RECORDING_REVIEWED";
     await audit(tx, { actor, action, entityType: input.type === "VIDEO" ? "Video" : "Recording", entityId: m.id, previousValue: { status: m.status }, newValue: { status: input.decision }, reason: feedback ?? undefined });
+    if (input.decision === "APPROVED") await recomputeVerification(tx, m.agentProfileId, actor);
     if (input.decision !== "UNDER_REVIEW") {
       await publishEvent(tx, "MEDIA_REVIEWED", { type: input.type, mediaId: m.id, agentProfileId: m.agentProfileId, userId: m.agentProfile.userId, email: m.agentProfile.user.email, outcome: input.decision, feedback, title: input.type === "RECORDING" && "title" in m ? String(m.title) : "Video introduction" });
     }

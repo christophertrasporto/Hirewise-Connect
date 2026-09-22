@@ -3,6 +3,9 @@ import { prisma } from "@/server/db/client";
 import { requireActor } from "@/server/auth/require-actor";
 import { searchCandidates, searchFiltersSchema } from "@/server/services/search.service";
 import { taxonomyRepository } from "@/server/repositories/taxonomy.repository";
+import { certificationRepository } from "@/server/repositories/certification.repository";
+import { academyRepository } from "@/server/repositories/academy.repository";
+import { assessmentRepository } from "@/server/repositories/assessment.repository";
 import { ForbiddenError } from "@/server/policies/authorize";
 import { PageHeader, Banner, EmptyState } from "@/components/app/ui";
 import { SearchFilters } from "@/components/marketplace/SearchFilters";
@@ -21,6 +24,7 @@ export default async function TalentSearchPage({ searchParams }: { searchParams:
     q: str(sp.q), role: str(sp.role), skills: arr(sp.skills), software: arr(sp.software), industry: str(sp.industry), level: arr(sp.level),
     availability: arr(sp.availability), setup: str(sp.setup), languages: arr(sp.languages), verification: str(sp.verification),
     campaign: str(sp.campaign), tzWithin: str(sp.tzWithin), sort: str(sp.sort),
+    certifications: arr(sp.certifications), courses: arr(sp.courses), minAssessment: str(sp.minAssessment),
   });
   const filters = parsed.success ? parsed.data : {};
 
@@ -32,7 +36,7 @@ export default async function TalentSearchPage({ searchParams }: { searchParams:
     if (e instanceof ForbiddenError) blocked = e.message;
     else throw e;
   }
-  const [skills, software] = await Promise.all([taxonomyRepository.activeSkills(prisma), taxonomyRepository.activeSoftware(prisma)]);
+  const [skills, software, templates, courses, labels] = await Promise.all([taxonomyRepository.activeSkills(prisma), taxonomyRepository.activeSoftware(prisma), certificationRepository.templates(prisma), academyRepository.listCourses(prisma, { status: ["PUBLISHED"] }), assessmentRepository.labels(prisma)]);
 
   return (
     <>
@@ -41,7 +45,7 @@ export default async function TalentSearchPage({ searchParams }: { searchParams:
         <Banner tone="warn" title="Marketplace not open yet">{blocked}</Banner>
       ) : (
         <>
-          <SearchFilters filters={filters} skills={skills.map((s) => ({ id: s.id, name: s.name, category: s.category }))} software={software.map((s) => ({ id: s.id, name: s.name, category: s.category }))} hasClientTimezone={!!result?.clientTimezone} />
+          <SearchFilters filters={filters} skills={skills.map((s) => ({ id: s.id, name: s.name, category: s.category }))} software={software.map((s) => ({ id: s.id, name: s.name, category: s.category }))} hasClientTimezone={!!result?.clientTimezone} certifications={templates.map((t) => ({ id: t.id, name: t.name }))} courses={courses.map((c) => ({ id: c.id, title: c.title }))} labels={labels.map((l) => ({ rank: l.rank, label: l.label }))} />
           <p className="mt-6 mb-3 text-[13.5px] text-ink-500">{result!.total} candidate{result!.total === 1 ? "" : "s"}{result?.clientTimezone ? ` · timezone overlap measured from ${result.clientTimezone}` : ""}</p>
           {result!.cards.length === 0 ? (
             <EmptyState title="No candidates match these filters" description="Try widening availability or removing a skill." />

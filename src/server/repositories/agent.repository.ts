@@ -14,6 +14,9 @@ export type SearchWhere = {
   /** Levels at or above the requested minimum. */
   minVerification?: VerificationLevel[];
   campaignOnly?: boolean;
+  certificationTemplateIds?: string[];
+  courseIds?: string[];
+  minAssessmentRank?: number;
 };
 
 /** Everything the agent's own dashboard and wizard need. Private contact included; strip in views. */
@@ -27,6 +30,10 @@ export function agentSelfInclude() {
     videos: { orderBy: { createdAt: "desc" as const } },
     recordings: { orderBy: { createdAt: "desc" as const } },
     portfolioItems: { orderBy: { createdAt: "desc" as const } },
+    certifications: { include: { template: { select: { id: true, name: true, badgeKey: true, clientVisibleScores: true } }, assessment: { select: { examScore: true, practicalScore: true, roleplayScore: true, communicationScore: true, resultLabel: { select: { label: true, rank: true } } } } }, orderBy: { issuedAt: "desc" as const } },
+    assessments: { where: { status: "FINAL" as const }, include: { resultLabel: true, course: { select: { title: true } } }, orderBy: { assessedAt: "desc" as const } },
+    coachEvaluations: { include: { overallLabel: true }, orderBy: { createdAt: "desc" as const }, take: 1 },
+    enrollments: { include: { course: { select: { id: true, title: true, category: true } }, completion: true }, orderBy: { enrolledAt: "desc" as const } },
   } as const;
 }
 
@@ -119,6 +126,10 @@ export const agentRepository = {
     return db.agentProfile.update({ where: { id }, data: { profileCompletion } });
   },
 
+  setVerification(db: Db, id: string, level: VerificationLevel, isManual: boolean) {
+    return db.agentProfile.update({ where: { id }, data: { verificationLevel: level, verificationIsManual: isManual } });
+  },
+
   setStatus(db: Db, id: string, status: AgentProfileStatus, extra: { submittedAt?: Date; approvedAt?: Date; approvedById?: string; hiddenAt?: Date | null; suspendedAt?: Date | null } = {}) {
     return db.agentProfile.update({ where: { id }, data: { status, ...extra } });
   },
@@ -148,6 +159,9 @@ export const agentRepository = {
         ...(f.softwareIds?.length ? { softwareExperiences: { some: { softwareId: { in: f.softwareIds } } } } : {}),
         ...(f.industry ? { industryExperiences: { some: { industry: { equals: f.industry, mode: "insensitive" } } } } : {}),
         ...(f.campaignOnly ? { experiences: { some: { isCampaign: true } } } : {}),
+        ...(f.certificationTemplateIds?.length ? { AND: f.certificationTemplateIds.map((templateId) => ({ certifications: { some: { templateId, status: "APPROVED" } } })) } : {}),
+        ...(f.courseIds?.length ? { enrollments: { some: { courseId: { in: f.courseIds }, status: "COMPLETED" } } } : {}),
+        ...(f.minAssessmentRank ? { assessments: { some: { status: "FINAL", resultLabel: { rank: { gte: f.minAssessmentRank } } } } } : {}),
         ...(f.text ? { OR: [{ headline: { contains: f.text, mode: "insensitive" } }, { summary: { contains: f.text, mode: "insensitive" } }, { displayName: { contains: f.text, mode: "insensitive" } }] } : {}),
       },
       include: agentSelfInclude(),

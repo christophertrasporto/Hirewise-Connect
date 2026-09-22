@@ -26,6 +26,10 @@ export const searchFiltersSchema = z.object({
   /** Maximum hour difference from the client's timezone; 0 disables. */
   tzWithin: z.coerce.number().int().min(0).max(12).optional(),
   sort: z.enum(["recommended", "newest", "experience"]).optional(),
+  /** Phase 3: certification template ids, completed course ids, minimum assessment label rank. */
+  certifications: z.array(z.string()).max(10).optional(),
+  courses: z.array(z.string()).max(10).optional(),
+  minAssessment: z.coerce.number().int().min(0).max(10).optional(),
 });
 export type SearchFilters = z.infer<typeof searchFiltersSchema>;
 
@@ -65,6 +69,9 @@ export async function searchCandidates(db: PrismaClient, actor: Actor, filters: 
     languages: filters.languages?.length ? filters.languages : undefined,
     minVerification: minVerification ? [...minVerification] : undefined,
     campaignOnly: filters.campaign || undefined,
+    certificationTemplateIds: filters.certifications?.length ? filters.certifications : undefined,
+    courseIds: filters.courses?.length ? filters.courses : undefined,
+    minAssessmentRank: filters.minAssessment || undefined,
   };
   const rows = await agentRepository.searchApproved(db, where);
   const shortlisted = access.clientId ? new Set((await shortlistRepository.activeAgentIds(db, access.clientId)).map((s) => s.agentProfileId)) : new Set<string>();

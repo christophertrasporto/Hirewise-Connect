@@ -356,6 +356,10 @@ model User {
   tasksAssigned             Task[]             @relation("TaskAssignee")
   interviewRequestsAssigned InterviewRequest[] @relation("RequestSales")
   placementsManaged         Placement[]        @relation("PlacementManager")
+  coursesOwned              AcademyCourse[]    @relation("CourseOwner")
+  courseCoachings           CourseCoach[]      @relation("CourseCoach")
+  assessmentsGiven          Assessment[]       @relation("AssessmentCoach")
+  evaluationsGiven          CoachEvaluation[]  @relation("EvaluationCoach")
 
   permissionOverrides  UserPermissionOverride[] @relation("OverrideSubject")
   grantedOverrides     UserPermissionOverride[] @relation("OverrideGrantor")
@@ -525,39 +529,41 @@ model ClientRequirement {
 // ---------------------------------------------------------------------------
 
 model AgentProfile {
-  id                 String             @id @default(cuid())
-  userId             String             @unique
-  user               User               @relation(fields: [userId], references: [id])
-  displayName        String
-  headline           String?
-  primaryRole        String?
-  summary            String?
-  photoKey           String?
-  yearsExperience    Int?
-  experienceLevel    ExperienceLevel?
+  id                   String             @id @default(cuid())
+  userId               String             @unique
+  user                 User               @relation(fields: [userId], references: [id])
+  displayName          String
+  headline             String?
+  primaryRole          String?
+  summary              String?
+  photoKey             String?
+  yearsExperience      Int?
+  experienceLevel      ExperienceLevel?
   /// City and country only. Exact address lives in AgentPrivateContact (INV-P1).
-  locationCity       String?
-  locationCountry    String?
-  timezone           String?
-  languages          String[]
-  workSetup          WorkSetup?
-  preferredShift     String?
-  equipmentSummary   String?
-  internetSummary    String?
-  status             AgentProfileStatus @default(DRAFT)
-  verificationLevel  VerificationLevel  @default(PROFILE_SUBMITTED)
-  availabilityStatus AvailabilityStatus @default(UNAVAILABLE)
-  availableFrom      DateTime?
-  profileCompletion  Int                @default(0)
-  submittedAt        DateTime?
-  approvedAt         DateTime?
-  approvedById       String?
-  approvedBy         User?              @relation("ProfileApprover", fields: [approvedById], references: [id])
-  hiddenAt           DateTime?
-  suspendedAt        DateTime?
-  deletedAt          DateTime?
-  createdAt          DateTime           @default(now())
-  updatedAt          DateTime           @updatedAt
+  locationCity         String?
+  locationCountry      String?
+  timezone             String?
+  languages            String[]
+  workSetup            WorkSetup?
+  preferredShift       String?
+  equipmentSummary     String?
+  internetSummary      String?
+  status               AgentProfileStatus @default(DRAFT)
+  verificationLevel    VerificationLevel  @default(PROFILE_SUBMITTED)
+  /// True when an admin set the level by hand; cleared when a recompute confirms it (Section 5.6).
+  verificationIsManual Boolean            @default(false)
+  availabilityStatus   AvailabilityStatus @default(UNAVAILABLE)
+  availableFrom        DateTime?
+  profileCompletion    Int                @default(0)
+  submittedAt          DateTime?
+  approvedAt           DateTime?
+  approvedById         String?
+  approvedBy           User?              @relation("ProfileApprover", fields: [approvedById], references: [id])
+  hiddenAt             DateTime?
+  suspendedAt          DateTime?
+  deletedAt            DateTime?
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
 
   privateContact       AgentPrivateContact?
   skills               AgentSkill[]
@@ -575,6 +581,10 @@ model AgentProfile {
   interviewCandidacies InterviewRequestCandidate[]
   interviews           Interview[]
   placements           Placement[]
+  enrollments          CourseEnrollment[]
+  assessments          Assessment[]
+  coachEvaluations     CoachEvaluation[]
+  certifications       Certification[]
 
   @@index([status])
   @@index([availabilityStatus])
@@ -1108,4 +1118,323 @@ model ActivityFlag {
 
   @@index([userId, createdAt])
   @@index([rule, reviewedAt])
+}
+
+// ---------------------------------------------------------------------------
+// 4.4 Academy (Phase 3) — courses, exams, enrollments, assessments, certifications
+// ---------------------------------------------------------------------------
+
+enum CourseStatus {
+  DRAFT
+  PENDING_APPROVAL
+  PUBLISHED
+  ARCHIVED
+}
+
+enum EnrollmentStatus {
+  ENROLLED
+  IN_PROGRESS
+  COMPLETED
+  DROPPED
+}
+
+enum EnrollmentSource {
+  INTERNAL
+  ACADEMY_SYNC
+}
+
+enum CoursePaymentStatus {
+  NOT_REQUIRED
+  PENDING
+  PAID
+  WAIVED
+}
+
+enum ExamStatus {
+  DRAFT
+  PUBLISHED
+}
+
+enum AttemptStatus {
+  IN_PROGRESS
+  SUBMITTED
+  EXPIRED
+}
+
+enum AssessmentType {
+  EXAM
+  PRACTICAL
+  ROLEPLAY
+  MOCK_CALL
+  SKILL
+}
+
+enum AssessmentStatus {
+  DRAFT
+  SUBMITTED
+  FINAL
+}
+
+enum CertificationOrigin {
+  ACADEMY
+  ADMIN_ISSUED
+}
+
+enum CertificationStatus {
+  PENDING_REVIEW
+  APPROVED
+  REVOKED
+  EXPIRED
+}
+
+model AcademyCourse {
+  id                      String                 @id @default(cuid())
+  code                    String                 @unique
+  title                   String
+  category                String
+  description             String
+  /// Markdown syllabus / lesson content shown to enrolled agents.
+  syllabus                String?
+  /// Optional link to externally hosted lessons.
+  contentUrl              String?
+  ownerCoachUserId        String
+  ownerCoach              User                   @relation("CourseOwner", fields: [ownerCoachUserId], references: [id])
+  /// Price in USD cents; 0 = free (INV-I4).
+  priceCents              Int                    @default(0)
+  currency                String                 @default("USD") @db.Char(3)
+  passingScore            Int                    @default(70)
+  requiresCoachReview     Boolean                @default(false)
+  certificationTemplateId String?
+  certificationTemplate   CertificationTemplate? @relation(fields: [certificationTemplateId], references: [id])
+  status                  CourseStatus           @default(DRAFT)
+  publishedAt             DateTime?
+  publishedById           String?
+  externalId              String?                @unique
+  createdAt               DateTime               @default(now())
+  updatedAt               DateTime               @updatedAt
+
+  coaches     CourseCoach[]
+  enrollments CourseEnrollment[]
+  exam        Exam?
+  assessments Assessment[]
+
+  @@index([status, category])
+  @@index([ownerCoachUserId])
+}
+
+model CourseCoach {
+  courseId    String
+  course      AcademyCourse @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  coachUserId String
+  coach       User          @relation("CourseCoach", fields: [coachUserId], references: [id], onDelete: Cascade)
+  addedAt     DateTime      @default(now())
+
+  @@id([courseId, coachUserId])
+  @@index([coachUserId])
+}
+
+model CourseEnrollment {
+  id                  String              @id @default(cuid())
+  courseId            String
+  course              AcademyCourse       @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  agentProfileId      String
+  agentProfile        AgentProfile        @relation(fields: [agentProfileId], references: [id], onDelete: Cascade)
+  status              EnrollmentStatus    @default(ENROLLED)
+  source              EnrollmentSource    @default(INTERNAL)
+  paymentStatus       CoursePaymentStatus @default(NOT_REQUIRED)
+  /// Snapshot of the course price at enrollment, USD cents.
+  priceCents          Int                 @default(0)
+  paidCents           Int?
+  paymentReference    String?
+  paidAt              DateTime?
+  paymentRecordedById String?
+  enrolledAt          DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
+
+  completion CourseCompletion?
+  attempts   ExamAttempt[]
+
+  @@unique([courseId, agentProfileId])
+  @@index([agentProfileId, status])
+}
+
+model CourseCompletion {
+  id           String           @id @default(cuid())
+  enrollmentId String           @unique
+  enrollment   CourseEnrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  completedAt  DateTime         @default(now())
+  examScore    Int?
+  source       EnrollmentSource @default(INTERNAL)
+  externalRef  String?
+}
+
+/// One exam per course, built by the course coach. Questions are single-answer multiple choice.
+model Exam {
+  id           String        @id @default(cuid())
+  courseId     String        @unique
+  course       AcademyCourse @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  title        String
+  instructions String?
+  timeLimitMin Int?
+  maxAttempts  Int           @default(2)
+  status       ExamStatus    @default(DRAFT)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  questions ExamQuestion[]
+  attempts  ExamAttempt[]
+}
+
+model ExamQuestion {
+  id           String   @id @default(cuid())
+  examId       String
+  exam         Exam     @relation(fields: [examId], references: [id], onDelete: Cascade)
+  order        Int
+  prompt       String
+  /// Answer choices in display order.
+  options      String[]
+  /// Index into options. Never included in agent-facing projections.
+  correctIndex Int
+  points       Int      @default(1)
+  explanation  String?
+
+  @@index([examId, order])
+}
+
+model ExamAttempt {
+  id           String           @id @default(cuid())
+  examId       String
+  exam         Exam             @relation(fields: [examId], references: [id], onDelete: Cascade)
+  enrollmentId String
+  enrollment   CourseEnrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  /// questionId -> chosen option index
+  answers      Json?
+  scorePercent Int?
+  passed       Boolean?
+  status       AttemptStatus    @default(IN_PROGRESS)
+  startedAt    DateTime         @default(now())
+  submittedAt  DateTime?
+  expiresAt    DateTime?
+
+  @@index([enrollmentId, status])
+}
+
+/// Configurable result labels (Section "Coach assessment").
+model AssessmentResultLabel {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  label     String
+  rank      Int
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  assessments Assessment[]
+  evaluations CoachEvaluation[]
+}
+
+model Assessment {
+  id                       String                 @id @default(cuid())
+  courseId                 String?
+  course                   AcademyCourse?         @relation(fields: [courseId], references: [id])
+  agentProfileId           String
+  agentProfile             AgentProfile           @relation(fields: [agentProfileId], references: [id], onDelete: Cascade)
+  coachUserId              String
+  coach                    User                   @relation("AssessmentCoach", fields: [coachUserId], references: [id])
+  type                     AssessmentType
+  examScore                Int?
+  practicalScore           Int?
+  roleplayScore            Int?
+  communicationScore       Int?
+  /// skillId -> score 0..100
+  skillScores              Json?
+  comments                 String?
+  strengths                String?
+  areasForImprovement      String?
+  resultLabelId            String?
+  resultLabel              AssessmentResultLabel? @relation(fields: [resultLabelId], references: [id])
+  certificationRecommended Boolean                @default(false)
+  status                   AssessmentStatus       @default(DRAFT)
+  assessedAt               DateTime               @default(now())
+  createdAt                DateTime               @default(now())
+  updatedAt                DateTime               @updatedAt
+
+  certifications Certification[]
+
+  @@index([agentProfileId, status])
+  @@index([courseId])
+  @@index([coachUserId])
+}
+
+model CoachEvaluation {
+  id               String                 @id @default(cuid())
+  agentProfileId   String
+  agentProfile     AgentProfile           @relation(fields: [agentProfileId], references: [id], onDelete: Cascade)
+  coachUserId      String
+  coach            User                   @relation("EvaluationCoach", fields: [coachUserId], references: [id])
+  summary          String
+  communication    Int
+  reliability      Int
+  coachability     Int
+  overallLabelId   String?
+  overallLabel     AssessmentResultLabel? @relation(fields: [overallLabelId], references: [id])
+  visibleToClients Boolean                @default(true)
+  createdAt        DateTime               @default(now())
+  updatedAt        DateTime               @updatedAt
+
+  @@index([agentProfileId])
+}
+
+model CertificationTemplate {
+  id                  String   @id @default(cuid())
+  name                String   @unique
+  description         String?
+  validityMonths      Int?
+  badgeKey            String?
+  /// Rule (Section 4.4 CertificationRequirement), evaluated on completion and assessment.
+  requiresCompletion  Boolean  @default(true)
+  minExamScore        Int?
+  requiresCoachReview Boolean  @default(false)
+  minResultLabelRank  Int?
+  /// Which per-type scores clients may see (Section 6, footnote 3).
+  clientVisibleScores String[] @default(["examScore", "roleplayScore", "communicationScore"])
+  isActive            Boolean  @default(true)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  courses        AcademyCourse[]
+  certifications Certification[]
+}
+
+/// Never agent-writable (INV-I1).
+model Certification {
+  id             String                @id @default(cuid())
+  agentProfileId String
+  agentProfile   AgentProfile          @relation(fields: [agentProfileId], references: [id], onDelete: Cascade)
+  templateId     String
+  template       CertificationTemplate @relation(fields: [templateId], references: [id])
+  origin         CertificationOrigin
+  issuedById     String?
+  issuedAt       DateTime              @default(now())
+  expiresAt      DateTime?
+  assessmentId   String?
+  assessment     Assessment?           @relation(fields: [assessmentId], references: [id])
+  courseId       String?
+  status         CertificationStatus   @default(PENDING_REVIEW)
+  approvedById   String?
+  approvedAt     DateTime?
+  revokedReason  String?
+  createdAt      DateTime              @default(now())
+  updatedAt      DateTime              @updatedAt
+
+  @@unique([agentProfileId, templateId, courseId])
+  @@index([agentProfileId, status])
+  @@index([status, expiresAt])
+}
+
+/// Configurable ladder (Section 5.6). Rules JSON keys: profileApproved, videoApproved,
+/// minApprovedRecordings, minApprovedCertifications, minAssessmentLabelRank, publishedBillingRate.
+model VerificationRequirement {
+  level     VerificationLevel @id
+  rules     Json
+  updatedAt DateTime          @updatedAt
 }

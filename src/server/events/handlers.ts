@@ -196,4 +196,58 @@ export const EVENT_HANDLERS: { [T in DomainEventType]: EventHandler<T> } = {
     await notifyUser(db, { userId: p.userId, type: `PROFILE_${p.outcome}`, title: copy.title, body: copy.body, email: { to: p.email }, dedupeKey: `PROFILE_${p.outcome}:${p.agentProfileId}:${Date.now() >> 20}` });
     if (p.outcome !== "REVISION_REQUIRED") await taskRepository.completeByRelated(db, "REVIEW_PROFILE", "AgentProfile", p.agentProfileId);
   },
+
+  // Phase 3 — Academy
+  COURSE_SUBMITTED_FOR_APPROVAL: async (db, p) => {
+    const price = p.priceCents === 0 ? "free" : `USD ${(p.priceCents / 100).toFixed(2)}`;
+    await notifyStaff(db, ["ADMIN"], { type: "COURSE_SUBMITTED", title: `Course ready for publishing: ${p.title}`, body: `A coach submitted "${p.title}" (${price}). Review the syllabus and exam, link a certification template, and publish.`, dedupeKey: `COURSE_SUBMITTED:${p.courseId}:${Date.now() >> 16}`, email: true });
+    const existing = await taskRepository.findOpenByRelated(db, "PUBLISH_COURSE", "AcademyCourse", p.courseId);
+    if (!existing) await taskRepository.create(db, { type: "PUBLISH_COURSE", title: `Review and publish course: ${p.title}`, queueRole: "ADMIN", dueAt: new Date(Date.now() + 3 * 24 * 60 * 60_000), relatedType: "AcademyCourse", relatedId: p.courseId });
+  },
+
+  COURSE_PUBLISHED: async (db, p) => {
+    await notifyUser(db, { userId: p.coachUserId, type: "COURSE_PUBLISHED", title: `"${p.title}" is live`, body: "Talent can now enrol. You will be notified as students complete the exam.", dedupeKey: `COURSE_PUBLISHED:${p.courseId}` });
+    await taskRepository.completeByRelated(db, "PUBLISH_COURSE", "AcademyCourse", p.courseId);
+  },
+
+  COURSE_ENROLLED: async (db, p) => {
+    for (const id of new Set(p.coachUserIds)) await notifyUser(db, { userId: id, type: "COURSE_ENROLLED", title: `New student in ${p.title}`, body: p.paymentRequired ? "Enrolment is pending payment; the course unlocks once Hirewise records it." : "The student can start the course now.", dedupeKey: `ENROL:${p.courseId}:${p.agentProfileId}:${id}` });
+    if (p.paymentRequired) {
+      await notifyStaff(db, ["SALES", "ADMIN"], { type: "COURSE_PAYMENT_PENDING", title: `Course payment pending: ${p.title}`, body: `A student enrolled in a paid course (USD ${(p.priceCents / 100).toFixed(2)}). Record the payment under Staff > Academy once received.`, dedupeKey: `CPAY:${p.courseId}:${p.agentProfileId}` });
+    }
+  },
+
+  COURSE_PAYMENT_RECORDED: async (db, p) => {
+    await notifyUser(db, { userId: p.agentUserId, type: "COURSE_PAYMENT_RECORDED", title: `${p.courseTitle} is unlocked`, body: p.waived ? "Hirewise waived the course fee. You can start the course now." : "Your payment was recorded. You can start the course and take the exam.", email: { to: p.agentEmail }, dedupeKey: `CPAID:${p.enrollmentId}` });
+  },
+
+  COURSE_COMPLETED: async (db, p) => {
+    await notifyUser(db, { userId: p.agentUserId, type: "COURSE_COMPLETED", title: `You completed ${p.title}`, body: p.examScore !== null ? `Exam score: ${p.examScore}%. ${p.coachReviewRequired ? "Your coach will review your work before any certification is issued." : "Any linked certification is being processed."}` : "Your completion was recorded.", email: { to: p.agentEmail }, dedupeKey: `CCOMP:${p.courseId}:${p.agentProfileId}` });
+    for (const id of new Set(p.coachUserIds)) await notifyUser(db, { userId: id, type: "STUDENT_COMPLETED", title: `${p.displayName} completed ${p.title}`, body: p.coachReviewRequired ? "Record an assessment to decide on certification." : `Exam score: ${p.examScore ?? "n/a"}%.`, dedupeKey: `SCOMP:${p.courseId}:${p.agentProfileId}:${id}` });
+    if (p.coachReviewRequired) {
+      const existing = await taskRepository.findOpenByRelated(db, "ASSESS_STUDENT", "CourseEnrollment", `${p.agentProfileId}:${p.courseId}`);
+      if (!existing) await taskRepository.create(db, { type: "ASSESS_STUDENT", title: `Assess ${p.displayName} — ${p.title}`, assigneeUserId: p.coachUserIds[0], dueAt: new Date(Date.now() + 5 * 24 * 60 * 60_000), relatedType: "CourseEnrollment", relatedId: `${p.agentProfileId}:${p.courseId}` });
+    }
+  },
+
+  CERTIFICATION_PENDING_REVIEW: async (db, p) => {
+    await notifyStaff(db, ["ADMIN"], { type: "CERTIFICATION_PENDING_REVIEW", title: `Certification pending review: ${p.displayName}`, body: `${p.templateName} is waiting for approval under Staff > Academy.`, dedupeKey: `CPR:${p.certificationId}` });
+  },
+
+  CERTIFICATION_APPROVED: async (db, p) => {
+    await notifyUser(db, { userId: p.agentUserId, type: "CERTIFICATION_APPROVED", title: `You earned ${p.templateName}`, body: `The certification now shows on your profile${p.expiresAt ? ` and is valid until ${new Date(p.expiresAt).toLocaleDateString()}` : ""}.`, email: { to: p.agentEmail }, dedupeKey: `CAPP:${p.certificationId}` });
+  },
+
+  CERTIFICATION_REVOKED: async (db, p) => {
+    await notifyUser(db, { userId: p.agentUserId, type: "CERTIFICATION_REVOKED", title: `${p.templateName} was revoked`, body: `Reason: ${p.reason}`, email: { to: p.agentEmail }, dedupeKey: `CREV:${p.certificationId}` });
+  },
+
+  CERTIFICATION_EXPIRING: async (db, p) => {
+    await notifyUser(db, { userId: p.agentUserId, type: "CERTIFICATION_EXPIRING", title: `${p.templateName} expires soon`, body: `Valid until ${new Date(p.expiresAt).toLocaleDateString()}. Complete the refresher course to renew.`, email: { to: p.agentEmail }, dedupeKey: `CEXP:${p.certificationId}:${p.expiresAt.slice(0, 10)}` });
+  },
+
+  ASSESSMENT_FINALISED: async (db, p) => {
+    await notifyUser(db, { userId: p.agentUserId, type: "ASSESSMENT_FINALISED", title: "Your coach recorded an assessment", body: `${p.courseTitle ? `${p.courseTitle}: ` : ""}${p.label ?? "Result recorded"}. Open Academy to see the feedback.`, email: { to: p.agentEmail }, dedupeKey: `ASMT:${p.assessmentId}` });
+    if (p.courseId) await taskRepository.completeByRelated(db, "ASSESS_STUDENT", "CourseEnrollment", `${p.agentProfileId}:${p.courseId}`);
+  },
 };

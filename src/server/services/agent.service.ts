@@ -11,6 +11,7 @@ import { hashPassword, passwordSchema } from "@/server/auth/password";
 import { emailSchema, requestEmailVerification } from "./auth.service";
 import { createSession } from "@/server/auth/session";
 import { audit } from "@/server/audit/audit";
+import { recomputeVerification } from "./verification.service";
 import { publishEvent } from "@/server/events/outbox";
 import { rateLimit } from "@/server/auth/rate-limit";
 import { toAgentSelfView, toAgentStaffListView, type AgentSelfView } from "@/server/views/agent.views";
@@ -274,5 +275,6 @@ export async function reviewTransition(db: PrismaClient, actor: Actor, agentProf
     if (to === "APPROVED" || to === "REVISION_REQUIRED" || to === "REJECTED") {
       await publishEvent(tx, "PROFILE_REVIEWED", { agentProfileId: p.id, userId: p.userId, displayName: p.displayName, email: p.user.email, outcome: to, feedback: reason ?? null });
     }
+    if (to === "APPROVED") await recomputeVerification(tx, p.id, actor);
   });
 }

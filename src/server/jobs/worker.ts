@@ -60,11 +60,13 @@ let lastMaintenance = 0;
 const MAINTENANCE_INTERVAL_MS = 10 * 60_000;
 
 /** Periodic housekeeping: reservation expiry and expiry warnings (Section 5.8). */
-export async function runMaintenance(prisma: PrismaClient, now = new Date()): Promise<{ expired: number; expiring: number }> {
+export async function runMaintenance(prisma: PrismaClient, now = new Date()): Promise<{ expired: number; expiring: number; certificationsExpired: number; certificationsExpiring: number }> {
   const { expireReservations, notifyExpiringReservations } = await import("@/server/services/reservation.service");
+  const { expireCertifications } = await import("@/server/services/certification.service");
   const expired = await expireReservations(prisma, now);
   const expiring = await notifyExpiringReservations(prisma, now);
-  return { expired, expiring };
+  const certs = await expireCertifications(prisma, now);
+  return { expired, expiring, certificationsExpired: certs.expired, certificationsExpiring: certs.expiring };
 }
 
 /** Long-running loop used by `npm run worker`. */
@@ -77,7 +79,7 @@ export async function runWorkerLoop(prisma: PrismaClient, pollMs: number, signal
       if (Date.now() - lastMaintenance > MAINTENANCE_INTERVAL_MS) {
         lastMaintenance = Date.now();
         const m = await runMaintenance(prisma);
-        if (m.expired || m.expiring) logger.info(m, "maintenance");
+        if (m.expired || m.expiring || m.certificationsExpired || m.certificationsExpiring) logger.info(m, "maintenance");
       }
     } catch (err) {
       logger.error({ err }, "worker pass crashed");

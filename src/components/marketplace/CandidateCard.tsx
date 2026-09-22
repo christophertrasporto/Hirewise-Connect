@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { BadgeCheck, Clock3, Film, Mic2, PhoneCall } from "lucide-react";
+import { Award, BadgeCheck, Clock3, Film, Mic2, PhoneCall } from "lucide-react";
 import { StatusBadge } from "@/components/app/ui";
 import { ShortlistButton } from "./ShortlistButton";
 import type { CandidateCardView } from "@/server/views/agent.views";
@@ -28,6 +28,12 @@ export function CandidateCard({ c, canShortlist = true }: { c: CandidateCardView
       <div className="mt-3 flex flex-wrap gap-1">
         {c.skills.slice(0, 5).map((s) => <span key={s.name} className="rounded-full bg-ink-100 px-2 py-0.5 text-[11.5px] font-medium text-ink-700">{s.name}</span>)}
       </div>
+      {(c.certifications.length > 0 || c.assessmentLabel) && (
+        <div className="mt-2 flex flex-wrap gap-1">
+          {c.certifications.map((t) => <span key={t.name} className="inline-flex items-center gap-1 rounded-full bg-gold-50 px-2 py-0.5 text-[11px] font-semibold text-gold-700 ring-1 ring-inset ring-gold-200"><Award className="h-3 w-3" /> {t.name}</span>)}
+          {c.assessmentLabel && <span className="rounded-full bg-ink-900 px-2 py-0.5 text-[11px] font-semibold text-white">Coach: {c.assessmentLabel}</span>}
+        </div>
+      )}
       <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px] text-ink-500">
         {c.hasVideo && <span className="inline-flex items-center gap-1"><Film className="h-3.5 w-3.5" /> Video</span>}
         {c.approvedRecordings > 0 && <span className="inline-flex items-center gap-1"><Mic2 className="h-3.5 w-3.5" /> {c.approvedRecordings} sample{c.approvedRecordings > 1 ? "s" : ""}</span>}

@@ -21,6 +21,8 @@ async function main() {
     password: "hirewise",
     port: PORT,
     persistent: true,
+    // UTF8 regardless of the Windows locale; WIN1252 clusters reject characters outside Latin-1.
+    initdbFlags: ["--encoding=UTF8", "--locale=C"],
     onLog: () => {},
     onError: (msg) => console.error(String(msg)),
   });
