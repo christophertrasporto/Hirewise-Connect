@@ -12,6 +12,10 @@ import { markNotificationRead } from "@/server/services/dashboard.service";
 import { addToShortlist, removeFromShortlist, setShortlistNote } from "@/server/services/shortlist.service";
 import { reviewMedia, mediaDecisionSchema } from "@/server/services/media.service";
 import { addNote, noteInputSchema } from "@/server/services/note.service";
+import { createRequirement, requirementSchema } from "@/server/services/requirement.service";
+import { createInterviewRequest, interviewRequestSchema, startSalesReview, proposeSlots, clientConfirmSlots, candidateRespond, cancelRequest, setSalesNotes, scheduleInterviews, scheduleSchema, completeInterview, recordClientDecision, decisionSchema } from "@/server/services/interview.service";
+import { postMessage, reviewHeldMessage, markFlagReviewed } from "@/server/services/message.service";
+import { reserveForClient, extendReservation, releaseReservation } from "@/server/services/reservation.service";
 
 function refreshProfile() {
   revalidatePath("/profile", "layout");
@@ -261,6 +265,151 @@ export async function addNoteAction(_prev: ActionResult, fd: FormData): Promise<
     await addNote(prisma, actor, subjectType, formString(fd, "subjectId"), noteInputSchema.parse({ body: formString(fd, "body"), visibility: formString(fd, "visibility") || "INTERNAL", pinned: fd.get("pinned") === "on" }));
     revalidatePath("/staff/talent", "layout");
     revalidatePath("/staff/clients");
+    return { ok: true };
+  } catch (e) {
+    return toActionError(e);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Phase 2: requirements, interview requests, messages, reservations
+// ---------------------------------------------------------------------------
+
+export async function createRequirementAction(_prev: ActionResult, fd: FormData): Promise<ActionResult> {
+  try {
+    const actor = await requireActor();
+    await createRequirement(prisma, actor, requirementSchema.parse({
+      title: formString(fd, "title"), role: formString(fd, "role"), jobDescription: formString(fd, "jobDescription"), skills: formList(fd, "skills"), industry: formString(fd, "industry"),
+      experienceLevel: formString(fd, "experienceLevel"), agentsRequired: formString(fd, "agentsRequired") || "1", schedule: formString(fd, "schedule"), timezone: formString(fd, "timezone"),
+      software: formList(fd, "software"), startDate: formString(fd, "startDate"), budgetMin: formString(fd, "budgetMin"), budgetMax: formString(fd, "budgetMax"), otherRequirements: formString(fd, "otherRequirements"),
+    }));
+  } catch (e) {
+    return toActionError(e);
+  }
+  revalidatePath("/requirements");
+  redirect("/requirements");
+}
+
+export async function createInterviewRequestAction(_prev: ActionResult, fd: FormData): Promise<ActionResult> {
+  let id = "";
+  try {
+    const actor = await requireActor();
+    id = await createInterviewRequest(prisma, actor, interviewRequestSchema.parse({
+      candidateIds: formList(fd, "candidateIds"), requirementId: formString(fd, "requirementId"), preferredDate: formString(fd, "preferredDate"), preferredTime: formString(fd, "preferredTime"),
+      timezone: formString(fd, "timezone"), notes: formString(fd, "notes"), role: formString(fd, "role"), schedule: formString(fd, "schedule"), targetStartDate: formString(fd, "targetStartDate"),
+    }));
+  } catch (e) {
+    return toActionError(e);
+  }
+  revalidatePath("/interviews");
+  revalidatePath("/dashboard");
+  redirect(`/interviews/${id}`);
+}
+
+function refreshRequest(id: string) {
+  revalidatePath(`/interviews/${id}`);
+  revalidatePath(`/staff/interviews/${id}`);
+  revalidatePath("/interviews");
+  revalidatePath("/staff/interviews");
+  revalidatePath("/dashboard");
+}
+
+export async function requestWorkflowAction(_prev: ActionResult, fd: FormData): Promise<ActionResult> {
+  const id = formString(fd, "requestId");
+  const op = formString(fd, "op");
+  try {
+    const actor = await requireActor();
+    switch (op) {
+      case "START_REVIEW": await startSalesReview(prisma, actor, id); break;
+      case "PROPOSE": await proposeSlots(prisma, actor, id, formString(fd, "message")); break;
+      case "CLIENT_CONFIRM": await clientConfirmSlots(prisma, actor, id, formString(fd, "message")); break;
+      case "CANDIDATE_CONFIRM": await candidateRespond(prisma, actor, id, "CONFIRMED"); break;
+      case "CANDIDATE_DECLINE": await candidateRespond(prisma, actor, id, "DECLINED"); break;
+      case "CANCEL": await cancelRequest(prisma, actor, id, formString(fd, "reason")); break;
+      case "SALES_NOTES": await setSalesNotes(prisma, actor, id, formString(fd, "salesNotes")); break;
+      default: return { ok: false, error: "Unknown operation." };
+    }
+    refreshRequest(id);
+    return { ok: true };
+  } catch (e) {
+    return toActionError(e);
+  }
+}
+
+export async function scheduleInterviewsAction(_prev: ActionResult, fd: FormData): Promise<ActionResult> {
+  const id = formString(fd, "requestId");
+  try {
+    const actor = await requireActor();
+    const agentIds = formList(fd, "agentProfileId");
+    const items = agentIds.map((agentProfileId) => ({ agentProfileId, scheduledAt: formString(fd, `scheduledAt:${agentProfileId}`), durationMin: formString(fd, `durationMin:${agentProfileId}`) || "30", meetingLink: formString(fd, `meetingLink:${agentProfileId}`) })).filter((i) => i.scheduledAt);
+    await scheduleInterviews(prisma, actor, id, scheduleSchema.parse({ items, timezone: formString(fd, "timezone") }));
+    refreshRequest(id);
+    return { ok: true };
+  } catch (e) {
+    return toActionError(e);
+  }
+}
+
+export async function completeInterviewAction(_prev: ActionResult, fd: FormData): Promise<ActionResult> {
+  try {
+    const actor = await requireActor();
+    await completeInterview(prisma, actor, formString(fd, "interviewId"), formString(fd, "status") as "COMPLETED" | "NO_SHOW_CLIENT" | "NO_SHOW_AGENT" | "CANCELLED", formString(fd, "internalFeedback") || undefined);
+    refreshRequest(formString(fd, "requestId"));
+    return { ok: true };
+  } catch (e) {
+    return toActionError(e);
+  }
+}
+
+export async function clientDecisionAction(_prev: ActionResult, fd: FormData): Promise<ActionResult> {
+  try {
+    const actor = await requireActor();
+    await recordClientDecision(prisma, actor, formString(fd, "interviewId"), decisionSchema.parse({ decision: formString(fd, "decision"), feedback: formString(fd, "feedback") }));
+    refreshRequest(formString(fd, "requestId"));
+    revalidatePath("/placements");
+    return { ok: true };
+  } catch (e) {
+    return toActionError(e);
+  }
+}
+
+export async function postMessageAction(_prev: ActionResult<{ held: boolean; reasons: string[] }>, fd: FormData): Promise<ActionResult<{ held: boolean; reasons: string[] }>> {
+  const id = formString(fd, "requestId");
+  try {
+    const actor = await requireActor();
+    const visibleTo = formString(fd, "visibleTo") as "ALL" | "HIREWISE_ONLY" | "CLIENT_AND_HIREWISE" | "AGENT_AND_HIREWISE" | "";
+    const r = await postMessage(prisma, actor, id, formString(fd, "body"), visibleTo || undefined);
+    refreshRequest(id);
+    return { ok: true, data: { held: r.held, reasons: r.reasons } };
+  } catch (e) {
+    return toActionError(e);
+  }
+}
+
+export async function reviewHeldMessageAction(fd: FormData): Promise<void> {
+  const actor = await requireActor();
+  await reviewHeldMessage(prisma, actor, formString(fd, "messageId"), formString(fd, "decision") === "BLOCK" ? "BLOCK" : "RELEASE");
+  revalidatePath("/staff/compliance");
+  revalidatePath("/staff/interviews", "layout");
+}
+
+export async function markFlagReviewedAction(fd: FormData): Promise<void> {
+  const actor = await requireActor();
+  await markFlagReviewed(prisma, actor, formString(fd, "flagId"));
+  revalidatePath("/staff/compliance");
+}
+
+export async function reservationAction(_prev: ActionResult, fd: FormData): Promise<ActionResult> {
+  try {
+    const actor = await requireActor();
+    const op = formString(fd, "op");
+    if (op === "RESERVE") await reserveForClient(prisma, actor, { agentProfileId: formString(fd, "agentProfileId"), clientId: formString(fd, "clientId"), reason: formString(fd, "reason") || null });
+    else if (op === "EXTEND") await extendReservation(prisma, actor, formString(fd, "reservationId"));
+    else if (op === "RELEASE") await releaseReservation(prisma, actor, formString(fd, "reservationId"), formString(fd, "reason") || undefined);
+    else return { ok: false, error: "Unknown operation." };
+    revalidatePath("/staff/reservations");
+    revalidatePath("/staff/talent", "layout");
+    revalidatePath("/dashboard");
     return { ok: true };
   } catch (e) {
     return toActionError(e);

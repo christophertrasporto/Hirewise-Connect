@@ -1,4 +1,4 @@
-import { LayoutDashboard, UserCircle, Building2, FileSignature, Users, Briefcase, Bell, Film, Search, Bookmark, ClipboardCheck, ListChecks } from "lucide-react";
+import { LayoutDashboard, UserCircle, Building2, FileSignature, Users, Briefcase, Bell, Film, Search, Bookmark, ClipboardCheck, ListChecks, CalendarClock, ClipboardList, Handshake, Lock, ShieldAlert } from "lucide-react";
 import { prisma } from "@/server/db/client";
 import { requireAuth } from "@/server/auth/require-actor";
 import { can } from "@/server/policies/authorize";
@@ -15,16 +15,25 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   if (actor.role === "AGENT") {
     nav.push({ href: "/profile", label: "My profile", icon: <UserCircle /> });
     nav.push({ href: "/profile/media", label: "Video & voice", icon: <Film /> });
+    nav.push({ href: "/interviews", label: "Interviews", icon: <CalendarClock /> });
+    nav.push({ href: "/placements", label: "Placements", icon: <Handshake /> });
   }
   if (actor.role === "CLIENT") {
     nav.push({ href: "/talent", label: "Find talent", icon: <Search /> });
     nav.push({ href: "/shortlist", label: "Shortlist", icon: <Bookmark /> });
+    nav.push({ href: "/interviews", label: "Interviews", icon: <CalendarClock /> });
+    nav.push({ href: "/requirements", label: "Requirements", icon: <ClipboardList /> });
+    nav.push({ href: "/placements", label: "Placements", icon: <Handshake /> });
     nav.push({ href: "/company", label: "Company", icon: <Building2 /> });
   }
   if (can(actor, "client.read")) nav.push({ href: "/staff/clients", label: "Clients", icon: <Building2 /> });
   if (can(actor, "agent.read_public") && actor.role !== "COACH") nav.push({ href: "/staff/talent", label: "Talent", icon: <Users /> });
   if (can(actor, "media.review")) nav.push({ href: "/staff/media", label: "Media review", icon: <ClipboardCheck /> });
   if (can(actor, "shortlist.read_all")) nav.push({ href: "/staff/shortlists", label: "Shortlist activity", icon: <ListChecks /> });
+  if (can(actor, "interview.read_all")) nav.push({ href: "/staff/interviews", label: "Interview requests", icon: <CalendarClock /> });
+  if (can(actor, "placement.read_all")) nav.push({ href: "/staff/placements", label: "Placements", icon: <Handshake /> });
+  if (can(actor, "reservation.manage")) nav.push({ href: "/staff/reservations", label: "Reservations", icon: <Lock /> });
+  if (can(actor, "interview.coordinate") || can(actor, "flag.review")) nav.push({ href: "/staff/compliance", label: "Compliance", icon: <ShieldAlert /> });
   if (actor.role === "AGENT" || actor.role === "CLIENT") nav.push({ href: "/account/agreements", label: "Agreements", icon: <FileSignature /> });
   nav.push({ href: "/notifications", label: "Notifications", icon: <Bell /> });
   if (actor.role === "COACH") nav.push({ href: "/dashboard#courses", label: "My courses", icon: <Briefcase /> });

@@ -6,9 +6,15 @@ import type { AgentSelfView } from "@/server/views/agent.views";
 import type { computeCompletion } from "@/server/services/agent.service";
 import { labelFor } from "@/lib/options";
 
-type Props = { profile: AgentSelfView; completion: ReturnType<typeof computeCompletion>; notifications: Array<{ id: string; title: string; body: string; readAt: Date | null; createdAt: Date }> };
+type Props = {
+  profile: AgentSelfView;
+  completion: ReturnType<typeof computeCompletion>;
+  notifications: Array<{ id: string; title: string; body: string; readAt: Date | null; createdAt: Date }>;
+  requests: Array<{ id: string; role: string; status: string; companyName: string | null; myStatus: string; next: { scheduledAt: Date; timezone: string } | null }>;
+  placements: Array<{ id: string; status: string; positionTitle: string; companyName: string }>;
+};
 
-export function AgentDashboard({ profile, completion, notifications }: Props) {
+export function AgentDashboard({ profile, completion, notifications, requests, placements }: Props) {
   const next = completion.parts.find((p) => !p.done);
   const latestFeedback = [...profile.videos, ...profile.recordings].filter((m) => m.reviewFeedback && (m.status === "REVISION_REQUIRED" || m.status === "REJECTED"));
 
@@ -73,6 +79,19 @@ export function AgentDashboard({ profile, completion, notifications }: Props) {
               <Row k="Video" v={profile.videos[0] ? labelFor(profile.videos[0].status) : "Not uploaded"} />
               <Row k="Voice samples" v={profile.recordings.length ? `${profile.recordings.filter((r) => r.status === "APPROVED").length}/${profile.recordings.length} approved` : "None"} />
             </dl>
+          </Card>
+          <Card title="Interviews and placements" actions={<Link href="/interviews" className="text-[13px] font-semibold text-brand-600">All</Link>}>
+            {requests.length === 0 && placements.length === 0 ? <EmptyState title="No interview requests yet" /> : (
+              <ul className="divide-y divide-ink-100 text-[13.5px]">
+                {placements.map((p) => <li key={p.id} className="py-2"><span className="font-semibold text-ink-800">{p.positionTitle} at {p.companyName}</span> <span className="text-ink-500">· placement {labelFor(p.status).toLowerCase()}</span></li>)}
+                {requests.filter((r) => !["CLOSED", "CANCELLED"].includes(r.status)).map((r) => (
+                  <li key={r.id} className="py-2">
+                    <Link href={`/interviews/${r.id}`} className="font-semibold text-ink-800 hover:text-brand-700">{r.role}{r.companyName ? ` at ${r.companyName}` : ""}</Link>
+                    <span className="text-ink-500"> · {labelFor(r.status).toLowerCase()}{r.status === "CANDIDATE_CONFIRMATION" && r.myStatus === "PENDING" ? " · please confirm" : ""}{r.next ? ` · ${new Date(r.next.scheduledAt).toLocaleString("en-US", { timeZone: r.next.timezone, dateStyle: "medium", timeStyle: "short" })}` : ""}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
           </Card>
           <Card title="Certifications" description="Issued by the Hirewise VA Academy (Phase 3).">
             <EmptyState title="No certifications yet" description="Academy courses and coach assessments arrive in Phase 3." />

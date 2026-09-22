@@ -13,6 +13,8 @@ import { MediaPlayer } from "@/components/profile/MediaPlayer";
 import { ResumeLink } from "@/components/staff/ResumeLink";
 import { NotesPanel } from "@/components/staff/NotesPanel";
 import { listNotesForStaff } from "@/server/services/note.service";
+import { ReserveForm } from "@/components/staff/ReservationForm";
+import { clientRepository } from "@/server/repositories/client.repository";
 import { labelFor } from "@/lib/options";
 
 export const metadata: Metadata = { title: "Agent profile" };
@@ -29,6 +31,7 @@ export default async function StaffAgentPage({ params }: { params: Promise<{ id:
   }
 
   const notes = actor.permissions.has("note.internal.read") ? await listNotesForStaff(prisma, actor, "AGENT", a.id) : [];
+  const reservableClients = actor.permissions.has("reservation.manage") && a.status === "APPROVED" ? (await clientRepository.listByStatus(prisma, "ACTIVE")).map((c) => ({ id: c.id, companyName: c.companyName })) : [];
   const allowed = AGENT_PROFILE_TRANSITIONS.filter((t) => t.from === a.status && t.permission !== "OWNER" && actor.permissions.has(t.permission)).map((t) => ({ to: t.to, requiresReason: !!t.requiresReason }));
 
   return (
@@ -115,6 +118,11 @@ export default async function StaffAgentPage({ params }: { params: Promise<{ id:
               <p className="text-[13.5px] text-ink-400">Hidden.</p>
             )}
           </Card>
+          {reservableClients.length > 0 && a.availabilityStatus !== "RESERVED" && a.availabilityStatus !== "PLACED" && (
+            <Card title="Reserve for a client" description="Holds the candidate for one client for the configured period.">
+              <ReserveForm agentProfileId={a.id} clients={reservableClients} />
+            </Card>
+          )}
           {actor.permissions.has("note.internal.read") && (
             <Card title="Internal notes" description="Never shown to the agent or clients unless you mark a note visible.">
               <NotesPanel subjectType="AGENT" subjectId={a.id} notes={notes} canWrite={actor.permissions.has("note.internal.write")} />

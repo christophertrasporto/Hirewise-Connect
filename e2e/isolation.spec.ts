@@ -52,7 +52,7 @@ test("client can search, open a candidate, shortlist, and compare", async ({ pag
   await expect(page).toHaveURL(/\/talent\//);
   await expect(page.getByText("Set by Hirewise")).toBeVisible();
   await expect(page.getByText("+63")).toHaveCount(0); // no phone anywhere
-  await page.getByRole("button", { name: "Shortlist" }).click();
+  if ((await page.getByRole("button", { name: "Shortlisted" }).count()) === 0) await page.getByRole("button", { name: "Shortlist", exact: true }).click();
   await expect(page.getByRole("button", { name: "Shortlisted" })).toBeVisible();
 
   await page.goto("/shortlist");

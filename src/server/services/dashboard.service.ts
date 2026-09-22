@@ -7,6 +7,10 @@ import { mediaRepository } from "@/server/repositories/media.repository";
 import { taskRepository } from "@/server/repositories/task.repository";
 import { notificationRepository } from "@/server/repositories/notification.repository";
 import { shortlistRepository } from "@/server/repositories/shortlist.repository";
+import { interviewRepository } from "@/server/repositories/interview.repository";
+import { placementRepository } from "@/server/repositories/placement.repository";
+import { requirementRepository } from "@/server/repositories/requirement.repository";
+import { flagRepository } from "@/server/repositories/flag.repository";
 
 /** Admin / management counters (Section "Admin dashboard"), filtered to what the role may see. */
 export async function staffDashboard(db: PrismaClient, actor: Actor) {
@@ -38,9 +42,36 @@ export async function staffDashboard(db: PrismaClient, actor: Actor) {
     clients: { total: Object.values(clients).reduce((a, b) => a + b, 0), pending: clients.PENDING_REVIEW ?? 0, active: clients.ACTIVE ?? 0 },
     media: { videosPending: media[0], recordingsPending: media[1] },
     shortlists: actor.permissions.has("shortlist.read_all") ? await shortlistRepository.countActive(db) : 0,
+    interviews: actor.permissions.has("interview.read_all") ? await interviewCounters(db) : null,
+    placements: actor.permissions.has("placement.read_all") ? await placementCounters(db) : null,
+    requirementsOpen: actor.permissions.has("requirement.read") ? await requirementRepository.countOpen(db) : 0,
+    heldMessages: actor.permissions.has("interview.coordinate") ? (await interviewRepository.heldMessages(db, 500)).length : 0,
+    openFlags: actor.permissions.has("flag.review") ? await flagRepository.countOpen(db) : 0,
     tasks: { queue: queueTasks.map(taskView), mine: myTasks.map(taskView) },
     visibility: { agents: canAgents, clients: canClients, media: actor.permissions.has("media.review") },
   };
+}
+
+async function interviewCounters(db: PrismaClient) {
+  const rows = await interviewRepository.countByStatus(db);
+  const by = Object.fromEntries(rows.map((r) => [r.status, r._count._all])) as Record<string, number>;
+  const now = new Date();
+  const upcoming = await interviewRepository.upcomingInterviews(db, now, new Date(now.getTime() + 7 * 86_400_000), 500);
+  return {
+    newRequests: by.REQUESTED ?? 0,
+    awaitingClient: by.CLIENT_CONFIRMATION ?? 0,
+    awaitingCandidates: by.CANDIDATE_CONFIRMATION ?? 0,
+    scheduled: by.SCHEDULED ?? 0,
+    awaitingDecision: by.CLIENT_DECISION_PENDING ?? 0,
+    upcoming7d: upcoming.length,
+    upcomingList: upcoming.slice(0, 6).map((i) => ({ id: i.id, requestId: i.interviewRequest.id, scheduledAt: i.scheduledAt, timezone: i.timezone, displayName: i.agentProfile.displayName, companyName: i.interviewRequest.client.companyName })),
+  };
+}
+
+async function placementCounters(db: PrismaClient) {
+  const rows = await placementRepository.countByStatus(db);
+  const by = Object.fromEntries(rows.map((r) => [r.status, r._count._all])) as Record<string, number>;
+  return { selected: by.SELECTED ?? 0, awaitingAgreement: by.AWAITING_AGREEMENT ?? 0, awaitingDeposit: by.AWAITING_DEPOSIT ?? 0, active: by.ACTIVE ?? 0 };
 }
 
 function taskView(t: { id: string; type: string; title: string; dueAt: Date | null; status: string; relatedType: string | null; relatedId: string | null }) {

@@ -168,6 +168,11 @@ export const agentRepository = {
     return db.agentProfile.groupBy({ by: ["status"], _count: { _all: true }, where: { deletedAt: null } });
   },
 
+  async availabilityOf(db: Db, id: string) {
+    const p = await db.agentProfile.findUnique({ where: { id }, select: { availabilityStatus: true } });
+    return p?.availabilityStatus ?? null;
+  },
+
   countAvailable(db: Db) {
     return db.agentProfile.count({ where: { status: "APPROVED", availabilityStatus: { in: ["AVAILABLE", "AVAILABLE_SOON"] }, deletedAt: null } });
   },

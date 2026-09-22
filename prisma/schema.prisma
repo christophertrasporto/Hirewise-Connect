@@ -336,42 +336,44 @@ model Task {
 // ---------------------------------------------------------------------------
 
 model User {
-  id           String     @id @default(cuid())
-  email        String     @unique @db.Citext
-  passwordHash String?
-  status       UserStatus @default(ACTIVE)
-  roleId       String
-  role         Role       @relation(fields: [roleId], references: [id])
+  id              String     @id @default(cuid())
+  email           String     @unique @db.Citext
+  passwordHash    String?
+  status          UserStatus @default(ACTIVE)
+  roleId          String
+  role            Role       @relation(fields: [roleId], references: [id])
   emailVerifiedAt DateTime?
-  mfaEnabled   Boolean    @default(false)
+  mfaEnabled      Boolean    @default(false)
   /// TOTP secret, AES-256-GCM encrypted with AUTH_SECRET. Never returned by any view.
-  mfaSecretEnc String?
-  lastLoginAt  DateTime?
-  deletedAt    DateTime?
-  createdAt    DateTime   @default(now())
-  updatedAt    DateTime   @updatedAt
+  mfaSecretEnc    String?
+  lastLoginAt     DateTime?
+  deletedAt       DateTime?
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
 
-  sessions            Session[]
-  authTokens          AuthToken[]
-  tasksAssigned       Task[]                   @relation("TaskAssignee")
+  sessions                  Session[]
+  authTokens                AuthToken[]
+  tasksAssigned             Task[]             @relation("TaskAssignee")
+  interviewRequestsAssigned InterviewRequest[] @relation("RequestSales")
+  placementsManaged         Placement[]        @relation("PlacementManager")
 
-  permissionOverrides UserPermissionOverride[] @relation("OverrideSubject")
-  grantedOverrides    UserPermissionOverride[] @relation("OverrideGrantor")
-  clientContact       ClientContact?
-  agentProfile        AgentProfile?
+  permissionOverrides  UserPermissionOverride[] @relation("OverrideSubject")
+  grantedOverrides     UserPermissionOverride[] @relation("OverrideGrantor")
+  clientContact        ClientContact?
+  agentProfile         AgentProfile?
   agreementAcceptances AgreementAcceptance[]
-  notifications       Notification[]
-  notificationPrefs   NotificationPreference[]
-  managedClients      Client[]                 @relation("AccountManager")
-  assignedRequirements ClientRequirement[]     @relation("RequirementSales")
-  reservationsMade    Reservation[]            @relation("ReservedBy")
-  availabilityChanges AgentAvailability[]      @relation("AvailabilitySetBy")
-  documentsUploaded   Document[]               @relation("DocumentUploader")
-  profilesApproved    AgentProfile[]           @relation("ProfileApprover")
-  videosReviewed      Video[]                  @relation("VideoReviewer")
-  recordingsReviewed  Recording[]              @relation("RecordingReviewer")
-  portfoliosReviewed  Portfolio[]              @relation("PortfolioReviewer")
-  settingsUpdated     Setting[]                @relation("SettingUpdater")
+  notifications        Notification[]
+  notificationPrefs    NotificationPreference[]
+  managedClients       Client[]                 @relation("AccountManager")
+  assignedRequirements ClientRequirement[]      @relation("RequirementSales")
+  reservationsMade     Reservation[]            @relation("ReservedBy")
+  availabilityChanges  AgentAvailability[]      @relation("AvailabilitySetBy")
+  documentsUploaded    Document[]               @relation("DocumentUploader")
+  profilesApproved     AgentProfile[]           @relation("ProfileApprover")
+  videosReviewed       Video[]                  @relation("VideoReviewer")
+  recordingsReviewed   Recording[]              @relation("RecordingReviewer")
+  portfoliosReviewed   Portfolio[]              @relation("PortfolioReviewer")
+  settingsUpdated      Setting[]                @relation("SettingUpdater")
 
   @@index([roleId])
   @@index([status])
@@ -441,13 +443,15 @@ model Client {
   createdAt            DateTime     @default(now())
   updatedAt            DateTime     @updatedAt
 
-  contacts     ClientContact[]
-  onboarding   ClientOnboarding?
-  requirements ClientRequirement[]
-  reservations Reservation[]
-  shortlists   Shortlist[]
-  candidateViews CandidateView[]
-  introductions  Introduction[]
+  contacts          ClientContact[]
+  onboarding        ClientOnboarding?
+  requirements      ClientRequirement[]
+  reservations      Reservation[]
+  shortlists        Shortlist[]
+  candidateViews    CandidateView[]
+  introductions     Introduction[]
+  interviewRequests InterviewRequest[]
+  placements        Placement[]
 
   @@index([status])
   @@index([accountManagerUserId])
@@ -486,16 +490,16 @@ model ClientOnboarding {
 }
 
 model ClientRequirement {
-  id                  String            @id @default(cuid())
+  id                  String             @id @default(cuid())
   clientId            String
-  client              Client            @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  client              Client             @relation(fields: [clientId], references: [id], onDelete: Cascade)
   title               String
   role                String
   jobDescription      String?
   skills              String[]
   industry            String?
   experienceLevel     ExperienceLevel?
-  agentsRequired      Int               @default(1)
+  agentsRequired      Int                @default(1)
   schedule            String?
   timezone            String?
   software            String[]
@@ -503,13 +507,14 @@ model ClientRequirement {
   /// Money in minor units; never floats (INV-I4).
   budgetMin           Int?
   budgetMax           Int?
-  currency            String?           @db.Char(3)
+  currency            String?            @db.Char(3)
   otherRequirements   String?
-  status              RequirementStatus @default(OPEN)
+  status              RequirementStatus  @default(OPEN)
   assignedSalesUserId String?
-  assignedSales       User?             @relation("RequirementSales", fields: [assignedSalesUserId], references: [id])
-  createdAt           DateTime          @default(now())
-  updatedAt           DateTime          @updatedAt
+  assignedSales       User?              @relation("RequirementSales", fields: [assignedSalesUserId], references: [id])
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
+  interviewRequests   InterviewRequest[]
 
   @@index([clientId])
   @@index([status])
@@ -554,19 +559,22 @@ model AgentProfile {
   createdAt          DateTime           @default(now())
   updatedAt          DateTime           @updatedAt
 
-  privateContact      AgentPrivateContact?
-  skills              AgentSkill[]
-  experiences         Experience[]
-  industryExperiences IndustryExperience[]
-  softwareExperiences SoftwareExperience[]
-  availabilityHistory AgentAvailability[]
-  reservations        Reservation[]
-  videos              Video[]
-  recordings          Recording[]
-  portfolioItems      Portfolio[]
-  shortlistEntries    ShortlistCandidate[]
-  candidateViews      CandidateView[]
-  introductions       Introduction[]
+  privateContact       AgentPrivateContact?
+  skills               AgentSkill[]
+  experiences          Experience[]
+  industryExperiences  IndustryExperience[]
+  softwareExperiences  SoftwareExperience[]
+  availabilityHistory  AgentAvailability[]
+  reservations         Reservation[]
+  videos               Video[]
+  recordings           Recording[]
+  portfolioItems       Portfolio[]
+  shortlistEntries     ShortlistCandidate[]
+  candidateViews       CandidateView[]
+  introductions        Introduction[]
+  interviewCandidacies InterviewRequestCandidate[]
+  interviews           Interview[]
+  placements           Placement[]
 
   @@index([status])
   @@index([availabilityStatus])
@@ -778,17 +786,17 @@ model Document {
 // ---------------------------------------------------------------------------
 
 model Agreement {
-  id              String        @id @default(cuid())
+  id              String                @id @default(cuid())
   type            AgreementType
   version         Int
   title           String
   bodyMarkdown    String
   bodyChecksum    String
   effectiveFrom   DateTime
-  isActive        Boolean       @default(true)
+  isActive        Boolean               @default(true)
   requiredForRole RoleKey?
-  createdAt       DateTime      @default(now())
-  updatedAt       DateTime      @updatedAt
+  createdAt       DateTime              @default(now())
+  updatedAt       DateTime              @updatedAt
   acceptances     AgreementAcceptance[]
 
   @@unique([type, version])
@@ -886,11 +894,218 @@ model Notification {
 }
 
 model NotificationPreference {
-  userId    String
-  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
-  type      String
-  inApp     Boolean @default(true)
-  email     Boolean @default(true)
+  userId String
+  user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type   String
+  inApp  Boolean @default(true)
+  email  Boolean @default(true)
 
   @@id([userId, type])
+}
+
+// ---------------------------------------------------------------------------
+// 4.6 Interviews and placements (Phase 2)
+// ---------------------------------------------------------------------------
+
+enum InterviewRequestStatus {
+  REQUESTED
+  SALES_REVIEW
+  CLIENT_CONFIRMATION
+  CANDIDATE_CONFIRMATION
+  SCHEDULED
+  COMPLETED
+  CLIENT_DECISION_PENDING
+  CLOSED
+  CANCELLED
+}
+
+enum InterviewCandidateStatus {
+  PENDING
+  CONFIRMED
+  DECLINED
+  WITHDRAWN
+}
+
+enum InterviewStatus {
+  SCHEDULED
+  COMPLETED
+  NO_SHOW_CLIENT
+  NO_SHOW_AGENT
+  CANCELLED
+}
+
+enum ClientDecision {
+  NONE
+  INTERESTED
+  SECOND_INTERVIEW
+  SELECTED
+  NOT_SELECTED
+}
+
+enum MessageVisibility {
+  ALL
+  HIREWISE_ONLY
+  CLIENT_AND_HIREWISE
+  AGENT_AND_HIREWISE
+}
+
+enum PlacementStatus {
+  PENDING
+  INTERVIEWING
+  SELECTED
+  AWAITING_AGREEMENT
+  AWAITING_DEPOSIT
+  DEPLOYMENT_PREP
+  ACTIVE
+  PAUSED
+  COMPLETED
+  CANCELLED
+}
+
+enum FlagRule {
+  CONTACT_INFO_IN_MESSAGE
+  RATE_DISCUSSION_IN_MESSAGE
+  PROFILE_VIEW_BURST
+  SHORTLIST_CHURN
+  CONTACT_INFO_IN_PROFILE
+}
+
+model InterviewRequest {
+  id                  String                 @id @default(cuid())
+  clientId            String
+  client              Client                 @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  requirementId       String?
+  requirement         ClientRequirement?     @relation(fields: [requirementId], references: [id])
+  requestedById       String
+  preferredDate       DateTime?
+  preferredTime       String?
+  timezone            String
+  notes               String?
+  role                String
+  schedule            String?
+  targetStartDate     DateTime?
+  status              InterviewRequestStatus @default(REQUESTED)
+  assignedSalesUserId String?
+  assignedSales       User?                  @relation("RequestSales", fields: [assignedSalesUserId], references: [id])
+  /// Internal only. Never in client or agent projections.
+  salesNotes          String?
+  cancelledReason     String?
+  createdAt           DateTime               @default(now())
+  updatedAt           DateTime               @updatedAt
+
+  candidates InterviewRequestCandidate[]
+  interviews Interview[]
+  messages   InterviewMessage[]
+  placements Placement[]
+
+  @@index([clientId, status])
+  @@index([status, createdAt])
+  @@index([assignedSalesUserId])
+}
+
+model InterviewRequestCandidate {
+  id                 String                   @id @default(cuid())
+  interviewRequestId String
+  interviewRequest   InterviewRequest         @relation(fields: [interviewRequestId], references: [id], onDelete: Cascade)
+  agentProfileId     String
+  agentProfile       AgentProfile             @relation(fields: [agentProfileId], references: [id], onDelete: Cascade)
+  status             InterviewCandidateStatus @default(PENDING)
+  respondedAt        DateTime?
+  createdAt          DateTime                 @default(now())
+
+  @@unique([interviewRequestId, agentProfileId])
+  @@index([agentProfileId])
+}
+
+model Interview {
+  id                 String           @id @default(cuid())
+  interviewRequestId String
+  interviewRequest   InterviewRequest @relation(fields: [interviewRequestId], references: [id], onDelete: Cascade)
+  agentProfileId     String
+  agentProfile       AgentProfile     @relation(fields: [agentProfileId], references: [id], onDelete: Cascade)
+  round              Int              @default(1)
+  scheduledAt        DateTime
+  timezone           String
+  durationMin        Int              @default(30)
+  meetingLink        String?
+  coordinatorUserId  String?
+  status             InterviewStatus  @default(SCHEDULED)
+  clientDecision     ClientDecision   @default(NONE)
+  clientFeedback     String?
+  /// Internal only.
+  internalFeedback   String?
+  decidedAt          DateTime?
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
+
+  placements Placement[]
+
+  @@index([interviewRequestId])
+  @@index([agentProfileId])
+  @@index([scheduledAt, status])
+}
+
+/// The only client-agent channel during hiring; always mediated by Hirewise (Sections 8.5 and 8.8).
+model InterviewMessage {
+  id                 String            @id @default(cuid())
+  interviewRequestId String
+  interviewRequest   InterviewRequest  @relation(fields: [interviewRequestId], references: [id], onDelete: Cascade)
+  authorUserId       String
+  authorRole         RoleKey
+  body               String
+  visibleTo          MessageVisibility @default(ALL)
+  heldForReview      Boolean           @default(false)
+  releasedById       String?
+  releasedAt         DateTime?
+  blockedAt          DateTime?
+  createdAt          DateTime          @default(now())
+
+  @@index([interviewRequestId, createdAt])
+}
+
+model Placement {
+  id                   String            @id @default(cuid())
+  clientId             String
+  client               Client            @relation(fields: [clientId], references: [id])
+  agentProfileId       String
+  agentProfile         AgentProfile      @relation(fields: [agentProfileId], references: [id])
+  requirementId        String?
+  interviewRequestId   String?
+  interviewRequest     InterviewRequest? @relation(fields: [interviewRequestId], references: [id])
+  interviewId          String?
+  interview            Interview?        @relation(fields: [interviewId], references: [id])
+  positionTitle        String
+  schedule             String?
+  timezone             String?
+  startDate            DateTime?
+  status               PlacementStatus   @default(SELECTED)
+  accountManagerUserId String?
+  accountManager       User?             @relation("PlacementManager", fields: [accountManagerUserId], references: [id])
+  approvedById         String?
+  activatedAt          DateTime?
+  endedAt              DateTime?
+  endReason            String?
+  cancelledReason      String?
+  createdAt            DateTime          @default(now())
+  updatedAt            DateTime          @updatedAt
+
+  @@index([clientId, status])
+  @@index([agentProfileId, status])
+  @@index([status])
+}
+
+/// Rule-generated signals for admin review (Section 8.8). Only on-platform activity is inspected.
+model ActivityFlag {
+  id           String    @id @default(cuid())
+  userId       String
+  rule         FlagRule
+  details      Json?
+  relatedType  String?
+  relatedId    String?
+  reviewedById String?
+  reviewedAt   DateTime?
+  createdAt    DateTime  @default(now())
+
+  @@index([userId, createdAt])
+  @@index([rule, reviewedAt])
 }

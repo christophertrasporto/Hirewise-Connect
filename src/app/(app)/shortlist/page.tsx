@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Columns3 } from "lucide-react";
+import { Columns3, CalendarPlus } from "lucide-react";
 import { prisma } from "@/server/db/client";
 import { requireActor } from "@/server/auth/require-actor";
 import { getOwnShortlist } from "@/server/services/shortlist.service";
@@ -23,7 +23,7 @@ export default async function ShortlistPage() {
   }
   return (
     <>
-      <PageHeader eyebrow="Shortlist" title={list.name} description="Compare up to four candidates side by side. When you are ready, request interviews and your Hirewise account manager coordinates everything (Phase 2)." actions={list.candidates.length > 1 && <CompareSelect ids={list.candidates.map((c) => ({ id: c.id, name: c.displayName }))} />} />
+      <PageHeader eyebrow="Shortlist" title={list.name} description="Compare up to four candidates side by side. When you are ready, request interviews and your Hirewise account manager coordinates everything (Phase 2)." actions={<>{list.candidates.length > 0 && <Link href="/interviews/new" className="inline-flex h-11 items-center gap-2 rounded-full bg-brand-500 px-5 text-[14.5px] font-semibold text-white hover:bg-brand-600"><CalendarPlus className="h-4 w-4" /> Request interviews</Link>}{list.candidates.length > 1 && <CompareSelect ids={list.candidates.map((c) => ({ id: c.id, name: c.displayName }))} />}</>} />
       {list.candidates.length === 0 ? (
         <EmptyState title="Your shortlist is empty" description="Browse the marketplace and shortlist candidates you want to compare." action={<Link href="/talent" className="inline-flex h-10 items-center rounded-full bg-ink-900 px-5 text-[14px] font-semibold text-white">Find talent</Link>} />
       ) : (

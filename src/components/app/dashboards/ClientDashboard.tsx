@@ -12,9 +12,13 @@ type Props = {
   recommended: CandidateCardView[];
   recentlyViewed: CandidateCardView[];
   shortlistCount: number;
+  openRequests: number;
+  decisionsPending: number;
+  upcoming: Array<{ id: string; requestId: string; displayName: string; scheduledAt: Date; timezone: string }>;
+  placements: Array<{ id: string; status: string; positionTitle: string; displayName: string }>;
 };
 
-export function ClientDashboard({ client, notifications, recommended, recentlyViewed, shortlistCount }: Props) {
+export function ClientDashboard({ client, notifications, recommended, recentlyViewed, shortlistCount, openRequests, decisionsPending, upcoming, placements }: Props) {
   const pending = client.status === "PENDING_REVIEW";
   return (
     <>
@@ -30,9 +34,9 @@ export function ClientDashboard({ client, notifications, recommended, recentlyVi
       {!pending && (
         <div className="mb-6 grid gap-3 sm:grid-cols-4">
           <StatTile label="Shortlisted" value={shortlistCount} href="/shortlist" />
-          <StatTile label="Interview requests" value={0} hint="Phase 2" />
-          <StatTile label="Selected" value={0} hint="Phase 2" />
-          <StatTile label="Active agents" value={0} hint="Phase 4" />
+          <StatTile label="Open interview requests" value={openRequests} href="/interviews" hint={decisionsPending ? `${decisionsPending} awaiting your decision` : undefined} />
+          <StatTile label="Selected candidates" value={placements.filter((p) => p.status !== "CANCELLED" && p.status !== "COMPLETED").length} href="/placements" />
+          <StatTile label="Active agents" value={placements.filter((p) => p.status === "ACTIVE").length} hint="Deployment arrives in Phase 4" />
         </div>
       )}
 
@@ -72,8 +76,17 @@ export function ClientDashboard({ client, notifications, recommended, recentlyVi
       </div>
 
       <div className="mt-6 grid gap-5 lg:grid-cols-2">
-        <Card title="Interviews, contracts, deposits">
-          <EmptyState title="Nothing yet" description="Interview requests (Phase 2), agreements, invoices and deposits (Phase 4) appear here." />
+        <Card title="Upcoming interviews" actions={<Link href="/interviews" className="text-[13px] font-semibold text-brand-600">All requests</Link>}>
+          {upcoming.length === 0 ? <EmptyState title="No interviews scheduled" description="Request interviews from your shortlist; Hirewise coordinates the rest." /> : (
+            <ul className="divide-y divide-ink-100 text-[13.5px]">
+              {upcoming.map((i) => (
+                <li key={i.id} className="flex items-center justify-between py-2.5">
+                  <Link href={`/interviews/${i.requestId}`} className="font-semibold text-ink-800 hover:text-brand-700">{i.displayName}</Link>
+                  <span className="text-ink-500">{new Date(i.scheduledAt).toLocaleString("en-US", { timeZone: i.timezone, dateStyle: "medium", timeStyle: "short" })}</span>
+                </li>
+              ))}
+            </ul>
+          )}
         </Card>
         <Card title="Notifications" actions={<Link href="/notifications" className="text-[13px] font-semibold text-brand-600">View all</Link>}>
           <NotificationList items={notifications.slice(0, 5)} compact />

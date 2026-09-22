@@ -34,3 +34,10 @@ Answers to MASTER_PROMPT.md Section 14. On 2026-09-21 Hirewise chose **"use the 
 - **Auth.js was not used.** Sessions, tokens, and TOTP are implemented directly so that per-session MFA state and the agreements gate live in the service layer. See ADR-005.
 - **Import boundary refined:** the entry layer may import the Prisma client handle to pass into services; queries stay in repositories (ADR-002).
 - **Sales never sees agent login email or phone** in lists or details, matching Section 6 footnote 1.
+
+## Phase 2 notes
+
+- **Sales request queue is shared.** Any Sales rep may pick up an unassigned interview request (`interview.read_all`); acting on a client's shortlist or requirement still needs assignment. A request is auto-assigned to the client's account manager when one exists.
+- **Client and agent never message each other directly.** Their messages carry CLIENT_AND_HIREWISE or AGENT_AND_HIREWISE visibility; Hirewise relays. Contact details are held for review; rate talk is flagged.
+- **Selection reserves the candidate** for the client for `reservationTtlDays`. The hold belongs to the account manager, who receives the expiry warnings.
+- **Restart the dev server after every migration.** The running Next.js process keeps the previously generated Prisma client; new models are undefined until restart.

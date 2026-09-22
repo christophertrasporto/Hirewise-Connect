@@ -14,8 +14,9 @@ Claude Code are in [CLAUDE.md](./CLAUDE.md).
 | Phase 0 — Scaffold and foundations | Done: schema, RBAC, audit, outbox/jobs, adapters, seed, CI |
 | Phase 1A — Auth, agreements, registration, profile wizard, uploads, review pipeline | Done |
 | Phase 1B — Media review, talent search, candidate profiles, shortlists, e2e isolation tests | Done |
-| Phase 2 — Client requirements, interview requests, Sales dashboard, scheduling, selection, placements | Next |
-| Phases 3–5 | Planned |
+| Phase 2 — Requirements, interview requests, mediated messaging, scheduling, decisions, placements, reservations | Done |
+| Phase 3 — Academy: courses, assessments, coach evaluations, certifications, verification levels | Next |
+| Phases 4–5 | Planned |
 
 ## Run locally
 
@@ -50,7 +51,8 @@ npm run test:e2e      # Playwright against the running dev server and seeded dat
 | `/verify-email`, `/agreements`, `/mfa/*` | Gates every user passes before the app |
 | `/dashboard`, `/profile/*`, `/company`, `/notifications`, `/account/agreements` | Authenticated app |
 | `/talent`, `/talent/[id]`, `/shortlist`, `/shortlist/compare` | Client marketplace (active clients only) |
-| `/staff/clients`, `/staff/talent/*`, `/staff/media`, `/staff/shortlists` | Hirewise staff console |
+| `/requirements`, `/interviews`, `/interviews/new`, `/interviews/[id]`, `/placements` | Client and talent interview workflow |
+| `/staff/clients`, `/staff/talent/*`, `/staff/media`, `/staff/shortlists`, `/staff/interviews/*`, `/staff/placements`, `/staff/reservations`, `/staff/compliance` | Hirewise staff console |
 | `/legal/*` | Agreement outlines marked `LEGAL_PLACEHOLDER` |
 
 ## Demo accounts

@@ -56,7 +56,7 @@ export default async function CandidatePage({ params }: { params: Promise<{ id: 
           {actor.role === "CLIENT" && (
             <div className="flex gap-2">
               <ShortlistButton agentProfileId={c.id} shortlisted={data.shortlisted} />
-              <button type="button" disabled title="Interview requests arrive in Phase 2" className="inline-flex h-11 items-center gap-2 rounded-full border border-ink-200 bg-white px-5 text-[14.5px] font-semibold text-ink-400"><CalendarPlus className="h-4 w-4" /> Request interview</button>
+              <Link href={`/interviews/new?ids=${c.id}`} className="inline-flex h-11 items-center gap-2 rounded-full border border-ink-200 bg-white px-5 text-[14.5px] font-semibold text-ink-800 hover:bg-ink-50"><CalendarPlus className="h-4 w-4" /> Request interview</Link>
             </div>
           )}
         </div>
