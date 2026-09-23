@@ -10,7 +10,10 @@ generator client {
 
 datasource db {
   provider   = "postgresql"
+  /// Runtime connection. On Supabase this is the Supavisor pooler (transaction mode) with ?pgbouncer=true.
   url        = env("DATABASE_URL")
+  /// Migrations and introspection. On Supabase this is the direct (session) connection. Locally both point at the same server.
+  directUrl  = env("DIRECT_URL")
   extensions = [citext]
 }
 

@@ -6,7 +6,7 @@
 |---|---|---|
 | Web | `npm run start` (after `npm run build`) | Vercel runs this for you. |
 | Worker | `npm run worker` | Drains the outbox every `WORKER_POLL_MS`, runs due jobs (email, SMS, interview reminders), and every 10 minutes expires reservations and certifications and warns before expiry. Safe to run more than one instance (SKIP LOCKED). |
-| Migrations | `npx prisma migrate deploy` | Before the web deploy. Never `migrate dev` in production. |
+| Migrations | `npm run db:deploy` (`prisma migrate deploy`) | Before the web deploy, with `DIRECT_URL` set to the Supabase direct connection. Never `migrate dev` in production, and never through the 6543 pooler. |
 | Health | `GET /api/health` | `status: ok` plus `worker: ok|lagging`. Alert on non-200 or `lagging`. |
 
 ## Daily checks (Admin)
@@ -33,6 +33,8 @@
 **Deletion request (Q18).** Staff → Users → search → Anonymise with the request reference. Refused while the person has an open placement; complete or cancel it first. Commercial and audit records stay; personal data and media are removed.
 
 **Legal text update.** Staff → Agreements → publish a new version. Everyone in that role accepts it on their next visit; old acceptances stay attached to their version.
+
+**Prisma says "prepared statement already exists" or connections pile up.** `DATABASE_URL` is pointing at the Supabase pooler without `?pgbouncer=true`, or a migration was run through the pooler. Fix the flag and use `DIRECT_URL` for migrations; the app refuses to boot with a pooler URL that lacks the flag.
 
 ## Backups
 
