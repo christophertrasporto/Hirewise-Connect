@@ -13,10 +13,45 @@ The live version of this list is **Staff → Launch readiness** (`/staff/launch`
 ## 2. Hosting (Section 14 Q15 default)
 
 - **Web:** Vercel project from this repo. Build command `npm run build` (runs `prisma generate`). Node 24.
-- **Database:** managed Postgres (Neon or Supabase), UTF8. Run `npx prisma migrate deploy` on each release before the web deploy finishes (Vercel "build command" or a release step).
+- **Database:** Supabase managed Postgres, one project per environment (ADR 006). Two connection strings per environment: the pooled one for the app and the direct one for migrations. Run `npm run db:deploy` on each release before the web deploy is promoted (see Section 2a).
 - **Object storage:** Cloudflare R2 (S3-compatible) with a private bucket. No public access; every download is a short-lived signed URL.
 - **Worker:** one always-on process running `npm run worker` (Railway, Fly, or a small VPS). Same `DATABASE_URL`, storage, email, SMS, and payment variables as the web app. The readiness page flags an outbox that is not being drained.
 - **Health:** `GET /api/health` returns database and worker status for uptime checks.
+
+## 2a. Supabase and Vercel setup
+
+Supabase is used as managed Postgres only. The app keeps its own authentication, sessions, and authorization (ADR 006); Supabase Auth and Row Level Security are not used.
+
+**Create the projects**
+
+1. Create two Supabase projects, `hirewise-connect-staging` and `hirewise-connect-prod`, in the region closest to your Vercel region. Save each database password in a password manager; it is shown once.
+2. In each project, Database → Extensions: enable `citext` (the first migration also runs `CREATE EXTENSION IF NOT EXISTS citext`, which needs it to be available).
+
+**Collect the two connection strings per project** (Project Settings → Database → Connection string):
+
+| Variable | Which string | Notes |
+|---|---|---|
+| `DATABASE_URL` | **Transaction** pooler, port 6543 | Append `?pgbouncer=true&connection_limit=1`. Used by the Vercel functions. Prepared statements are unsupported on this pooler, which is what the flag tells Prisma. |
+| `DIRECT_URL` | **Session** (direct) connection, port 5432 | Used only by `npm run db:deploy`. Never the 6543 pooler. |
+
+Both contain the database password, so they are secrets: put them only in Vercel environment variables and your local password manager, never in the repository.
+
+**Apply the schema** (from your machine or CI, once per environment):
+
+```bash
+DATABASE_URL="<pooled>" DIRECT_URL="<direct>" npm run db:deploy
+```
+
+Then seed the foundation data only (roles, permissions, agreements, settings, taxonomies) and remove the demo accounts; the readiness page warns while any `.example` login exists.
+
+**Connect Vercel**
+
+1. Import the GitHub repository into Vercel. Framework: Next.js; build command `npm run build`; Node 24.
+2. Environment variables: set the production pair on the Production environment and the staging pair on Preview. Add the rest of Section 3 alongside. Do not use the Vercel-Supabase marketplace integration's default variables (they target Supabase Auth); enter `DATABASE_URL` and `DIRECT_URL` by hand.
+3. Every pull request gets a Preview deployment against staging; `main` deploys to Production. Migrations are not run by the build: run `npm run db:deploy` for the target environment before promoting a release that contains new migrations. CI's drift check guarantees the migration folder matches the schema.
+4. Keep the worker (`npm run worker`) on Railway, Fly, or a VPS with the same variables. If it must run on Vercel, ask for the cron-triggered tick endpoint described in the runbook.
+
+**Verify:** `GET /api/health` returns `database: ok`, and Staff → Launch readiness shows the "Database connection" check passing with the pooler in use.
 
 ## 3. Environment variables (production)
 
@@ -24,7 +59,8 @@ The live version of this list is **Staff → Launch readiness** (`/staff/launch`
 |---|---|
 | `NODE_ENV` | `production` |
 | `APP_URL` | `https://<your-domain>` |
-| `DATABASE_URL` | managed Postgres connection string (pooled) |
+| `DATABASE_URL` | Supabase transaction pooler string (port 6543) with `?pgbouncer=true&connection_limit=1` |
+| `DIRECT_URL` | Supabase direct connection string (port 5432), migrations only |
 | `AUTH_SECRET` | `openssl rand -base64 32` (32+ characters; rotating it signs everyone out and invalidates MFA secrets) |
 | `STORAGE_DRIVER` | `s3` |
 | `S3_ENDPOINT`, `S3_BUCKET`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, `S3_REGION` | R2 or S3 credentials |
@@ -43,7 +79,7 @@ The live version of this list is **Staff → Launch readiness** (`/staff/launch`
 
 ## 4. Go-live sequence
 
-1. Provision the database; run `npx prisma migrate deploy`.
+1. Provision the Supabase projects (Section 2a); run `npm run db:deploy` with the environment's `DIRECT_URL`.
 2. Run the seed **only** for roles, permissions, agreements, settings, and taxonomies, then delete the demo accounts (every `*.example` login) from Staff → Users, or run the seed against an empty database and anonymise them. The readiness page warns while any `.example` account exists.
 3. Create the real Super Admin, sign in, enrol MFA, then create Admin, Sales, Recruiter, Coach, and Operations accounts.
 4. Publish counsel text for every agreement (Staff → Agreements) and confirm the readiness page shows no placeholder failures.

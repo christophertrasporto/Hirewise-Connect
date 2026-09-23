@@ -9,6 +9,8 @@ const schema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
   APP_URL: z.string().url().default("http://localhost:3000"),
   DATABASE_URL: z.string().min(1, "DATABASE_URL is required"),
+  /** Direct (non-pooled) connection used by prisma migrate. Falls back to DATABASE_URL locally. */
+  DIRECT_URL: z.string().min(1).optional(),
   LOG_LEVEL: z.enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"]).default("info"),
 
   STORAGE_DRIVER: z.enum(["local", "s3"]).default("local"),
@@ -55,6 +57,12 @@ export function getEnv(): Env {
   if (!parsed.success) {
     const issues = parsed.error.issues.map((i) => `  ${i.path.join(".")}: ${i.message}`).join("\n");
     throw new Error(`Invalid environment:\n${issues}`);
+  }
+  // Supabase pooler (Supavisor, transaction mode): prepared statements are unsupported, so Prisma needs
+  // pgbouncer=true, and migrations must go through the direct connection.
+  if (/pooler\.supabase\.com/.test(parsed.data.DATABASE_URL)) {
+    if (!/[?&]pgbouncer=true/.test(parsed.data.DATABASE_URL)) throw new Error("DATABASE_URL points at the Supabase pooler but lacks ?pgbouncer=true");
+    if (!parsed.data.DIRECT_URL || /pooler\.supabase\.com/.test(parsed.data.DIRECT_URL)) throw new Error("DIRECT_URL must be the direct (non-pooled) Supabase connection when DATABASE_URL uses the pooler");
   }
   if (parsed.data.STORAGE_DRIVER === "s3") {
     const missing = ["S3_ENDPOINT", "S3_BUCKET", "S3_ACCESS_KEY_ID", "S3_SECRET_ACCESS_KEY"].filter((k) => !parsed.data[k as keyof Env]);

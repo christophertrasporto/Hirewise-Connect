@@ -78,3 +78,9 @@ Answers to MASTER_PROMPT.md Section 14. On 2026-09-21 Hirewise chose **"use the 
 - **Security headers** are set in `next.config.ts`; a strict Content-Security-Policy is deferred until a nonce pipeline for Next.js inline scripts is added.
 - **Retention job stays admin-run** until periods are confirmed with counsel; `retentionDays` is editable under Staff → Settings and the readiness page warns while it is the default.
 - **Seed** now matches Section 12 volumes and is idempotent by email; e2e specs rely on Acme's shortlist being empty and on the names Jose R., Carlo D., and Maria S. being unique.
+
+## Supabase integration notes
+
+- **Supabase is managed Postgres only** (ADR 006). Authentication, sessions, and authorization stay in the app; Supabase Auth and RLS are not used.
+- **Two connection strings:** `DATABASE_URL` (transaction pooler, `?pgbouncer=true&connection_limit=1`) for the app and `DIRECT_URL` (direct) for `prisma migrate` via Prisma `directUrl`. Locally and in CI both equal the same server. Boot fails fast when a pooler URL lacks the flag or `DIRECT_URL` also points at the pooler.
+- **Migrations run from a release step or CI** (`npm run db:deploy`), not from the Vercel build.

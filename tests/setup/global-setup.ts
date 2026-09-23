@@ -44,8 +44,9 @@ export default async function globalSetup(project: TestProject) {
     url = `postgresql://test:test@127.0.0.1:${port}/hirewise_test`;
   }
 
-  execSync("npx prisma migrate deploy", { env: { ...process.env, DATABASE_URL: url }, stdio: "pipe" });
+  execSync("npx prisma migrate deploy", { env: { ...process.env, DATABASE_URL: url, DIRECT_URL: url }, stdio: "pipe" });
   process.env.DATABASE_URL = url;
+  process.env.DIRECT_URL = url;
   project.provide("databaseUrl", url);
 
   return async () => {

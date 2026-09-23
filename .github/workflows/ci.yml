@@ -23,6 +23,7 @@ jobs:
           --health-retries 10
     env:
       DATABASE_URL: postgresql://hirewise:hirewise@localhost:5432/hirewise_test
+      DIRECT_URL: postgresql://hirewise:hirewise@localhost:5432/hirewise_test
       TEST_DATABASE_URL: postgresql://hirewise:hirewise@localhost:5432/hirewise_test
       SHADOW_DATABASE_URL: postgresql://hirewise:hirewise@localhost:5432/hirewise_shadow
       APP_URL: http://localhost:3000
