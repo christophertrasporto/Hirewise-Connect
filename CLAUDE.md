@@ -45,7 +45,7 @@ Rules that tooling enforces:
 - Tests per service function: happy path, one `ForbiddenError` per role that must not call it, one ownership violation where applicable.
 - Projection tests assert forbidden keys are absent (`src/server/views/forbidden-keys.ts`, Phase 1).
 - Never invent legal text. Agreement bodies are `LEGAL_PLACEHOLDER` until counsel supplies them.
-- Do not commit unless asked. Conventional Commits when you do.
+- Do not commit unless asked. Conventional Commits when you do. Never commit on `main`: it is protected on GitHub. Branch as `<type>/<slug>`, push, and open a pull request; the `verify` CI check must pass before merging (`docs/git-workflow.md`). Run `npm run hooks:install` once per clone.
 - Before adding a status, permission, or table not in MASTER_PROMPT.md Sections 4 to 7, stop and propose it with a reason.
 
 ## Environment notes

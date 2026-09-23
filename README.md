@@ -21,6 +21,8 @@ Claude Code are in [CLAUDE.md](./CLAUDE.md).
 | Launch prep — agreement versioning, readiness checks, settings admin, security headers, health endpoint, clean audit, Section 12 seed | Done |
 | Go-live — needs counsel text (Q11), retention periods (Q18), and production credentials; see docs/launch-checklist.md | Next |
 
+Deployment and operations: [docs/launch-checklist.md](./docs/launch-checklist.md) and [docs/runbook.md](./docs/runbook.md). Contributing: [docs/git-workflow.md](./docs/git-workflow.md) (protected `main`, feature branches, pull requests; run `npm run hooks:install` once per clone).
+
 ## Run locally
 
 ```bash

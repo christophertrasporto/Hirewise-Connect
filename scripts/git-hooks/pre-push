@@ -1,0 +1,9 @@
+#!/bin/sh
+# Never push straight to origin/main; open a pull request instead. Installed by: npm run hooks:install
+while read local_ref local_sha remote_ref remote_sha; do
+  if [ "$remote_ref" = "refs/heads/main" ]; then
+    echo "Refusing to push directly to main. Push your branch and open a pull request." >&2
+    exit 1
+  fi
+done
+exit 0
