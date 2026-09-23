@@ -96,6 +96,7 @@ export const AUDIT_ACTIONS = [
   "CHECKOUT_CREATED",
   "FLAG_RAISED",
   "MEETING_CREATED",
+  "AGREEMENT_VERSION_PUBLISHED",
 ] as const;
 
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];

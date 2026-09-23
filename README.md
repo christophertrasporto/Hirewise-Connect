@@ -18,7 +18,8 @@ Claude Code are in [CLAUDE.md](./CLAUDE.md).
 | Phase 3 — Academy: coach-built courses with USD pricing, exams, assessments, certifications, verification ladder | Done |
 | Phase 4 — Commercial: billing rates with history, compensation, placement pipeline, deposits, invoices (PDF), manual payments, reports | Done |
 | Phase 5 — Advanced: rule-based matching, analytics, saved searches, in-browser recording, Stripe/Zoom/SMS adapters with fakes, incidents, bulk actions, data export, retention | Done |
-| Launch prep — counsel-approved agreement text (Q11), production integrations, retention periods (Q18) | Next |
+| Launch prep — agreement versioning, readiness checks, settings admin, security headers, health endpoint, clean audit, Section 12 seed | Done |
+| Go-live — needs counsel text (Q11), retention periods (Q18), and production credentials; see docs/launch-checklist.md | Next |
 
 ## Run locally
 

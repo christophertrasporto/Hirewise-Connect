@@ -69,3 +69,12 @@ Answers to MASTER_PROMPT.md Section 14. On 2026-09-21 Hirewise chose **"use the 
 - **Online payments reuse the manual settlement path** (`recordProviderPayment` → deposit → placement), keyed idempotently on the provider reference, and are recorded as method CARD under the system actor.
 - **Data protection (Q18):** anonymisation keeps commercial and audit rows and scrubs personal data; the retention job is admin-run from Compliance → Data protection until retention periods are confirmed with counsel. Default `retentionDays` is 730.
 - **Section 8.8 thresholds** are settings: `profileViewBurstPerHour` (60) and `shortlistChurnPerDay` (12).
+
+## Launch prep notes
+
+- **No legal text was written.** Agreement bodies stay `LEGAL_PLACEHOLDER` until counsel text is pasted under Staff → Agreements; the readiness page fails until then (Q11).
+- **Agreement versions are immutable.** Publishing creates version n+1 and deactivates the previous; acceptances keep their version and checksum. Republish an earlier body as a new version to roll back.
+- **Dependency audit is blocking at high severity in CI.** Transitive `postcss` (under `next`) and `deepmerge-ts` (under `@prisma/config`) are pinned via npm `overrides` to patched releases; Prisma CLI and the build were verified after the pin.
+- **Security headers** are set in `next.config.ts`; a strict Content-Security-Policy is deferred until a nonce pipeline for Next.js inline scripts is added.
+- **Retention job stays admin-run** until periods are confirmed with counsel; `retentionDays` is editable under Staff → Settings and the readiness page warns while it is the default.
+- **Seed** now matches Section 12 volumes and is idempotent by email; e2e specs rely on Acme's shortlist being empty and on the names Jose R., Carlo D., and Maria S. being unique.

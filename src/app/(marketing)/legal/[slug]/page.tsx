@@ -2,6 +2,19 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { AlertTriangle } from "lucide-react";
 import { Eyebrow } from "@/components/ui/Badge";
+import { prisma } from "@/server/db/client";
+import { renderMarkdown } from "@/lib/markdown";
+
+/** Public slug → the agreement type whose active version is shown. Versions are published under Staff → Agreements. */
+const AGREEMENT_BY_SLUG: Record<string, "CLIENT_TOS" | "CLIENT_PRIVACY" | "CLIENT_HIRING_TERMS" | "CLIENT_NON_CIRCUMVENTION" | "CLIENT_COMMUNICATION"> = {
+  terms: "CLIENT_TOS",
+  privacy: "CLIENT_PRIVACY",
+  "hiring-terms": "CLIENT_HIRING_TERMS",
+  "non-circumvention": "CLIENT_NON_CIRCUMVENTION",
+  "communication-policy": "CLIENT_COMMUNICATION",
+};
+
+export const dynamic = "force-dynamic";
 
 // LEGAL_PLACEHOLDER: these outlines describe what each agreement must cover.
 // Replace with counsel-approved text before launch. Versions are stored in the Agreement table (Phase 1).
@@ -43,6 +56,22 @@ export default async function LegalPage({ params }: { params: Promise<{ slug: st
   const { slug } = await params;
   const d = docs[slug];
   if (!d) notFound();
+  const type = AGREEMENT_BY_SLUG[slug];
+  const active = type ? await prisma.agreement.findFirst({ where: { type, isActive: true }, orderBy: { version: "desc" } }).catch(() => null) : null;
+  const placeholder = !active || active.bodyMarkdown.includes("LEGAL_PLACEHOLDER");
+
+  if (active && !placeholder) {
+    return (
+      <section className="container-x py-20 lg:py-28">
+        <div className="mx-auto max-w-3xl">
+          <Eyebrow>Policies · {d.audience}</Eyebrow>
+          <h1 className="mt-4 text-[2.4rem] font-extrabold leading-tight">{active.title}</h1>
+          <p className="mt-3 text-[14px] text-ink-400">Version {active.version} · Effective {active.effectiveFrom.toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })}</p>
+          <div className="mt-8 space-y-4">{renderMarkdown(active.bodyMarkdown)}</div>
+        </div>
+      </section>
+    );
+  }
 
   return (
     <section className="container-x py-20 lg:py-28">

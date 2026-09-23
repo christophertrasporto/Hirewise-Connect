@@ -65,6 +65,8 @@ const STAFF_USERS: Array<{ email: string; role: RoleKey }> = [
   { email: "sales@hirewise.example", role: "SALES" },
   { email: "recruiter@hirewise.example", role: "RECRUITER" },
   { email: "coach@hirewise.example", role: "COACH" },
+  { email: "coach2@hirewise.example", role: "COACH" },
+  { email: "coach3@hirewise.example", role: "COACH" },
   { email: "ops@hirewise.example", role: "OPERATIONS" },
 ];
 
@@ -392,6 +394,201 @@ async function main() {
     await prisma.agreementAcceptance.create({ data: { agreementId: psa.id, userId: clientUser.id, placementId: placement.id, bodyChecksum: checksum("seed-psa"), ipAddress: "127.0.0.1", userAgent: "seed" } });
   }
 
+
+  // Launch prep — Section 12 dataset: 3 coaches, 5 courses, 25 agents at varied stages, 6 clients, shortlists,
+  // 4 interview requests, 2 more placements at different stages. Deterministic (fixed PRNG seed), idempotent by email.
+  let rngState = 20260923;
+  const rng = () => { rngState = (rngState + 0x6d2b79f5) | 0; let t = Math.imul(rngState ^ (rngState >>> 15), 1 | rngState); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+  const pick = <T,>(arr: readonly T[]) => arr[Math.floor(rng() * arr.length)];
+  const DAY = 86_400_000;
+  const agentAgreements = ["AGENT_PLATFORM_TERMS", "AGENT_PRIVACY", "AGENT_REPRESENTATION", "AGENT_NON_CIRCUMVENTION", "AGENT_CLIENT_COMMUNICATION", "AGENT_CONFIDENTIALITY"];
+  const clientAgreements = ["CLIENT_TOS", "CLIENT_PRIVACY", "CLIENT_HIRING_TERMS", "CLIENT_NON_CIRCUMVENTION", "CLIENT_COMMUNICATION"];
+  const accept = async (userId: string, types: string[]) => {
+    for (const t of types) {
+      const exists = await prisma.agreementAcceptance.findFirst({ where: { agreementId: agreementIds[t], userId, placementId: null } });
+      if (!exists) await prisma.agreementAcceptance.create({ data: { agreementId: agreementIds[t], userId, bodyChecksum: checksum("seed"), ipAddress: "127.0.0.1", userAgent: "seed" } });
+    }
+  };
+
+  // Clients (4 more → 6 total)
+  const NEW_CLIENTS = [
+    { email: "talent@northwind-realty.example", company: "Northwind Realty", contact: "Priya Nair", position: "Operations Director", industry: "Real Estate", country: "United States", tz: "America/New_York", status: "ACTIVE" as const, source: "website", services: ["Cold Calling", "Transaction Coordination"], agents: 4, managed: true },
+    { email: "admin@harbor-health.example", company: "Harbor Health Clinics", contact: "Liam O'Connor", position: "Practice Manager", industry: "Healthcare", country: "Australia", tz: "Australia/Melbourne", status: "ACTIVE" as const, source: "referral", services: ["Customer Service", "Medical Scheduling"], agents: 2, managed: true },
+    { email: "hr@summit-insurance.example", company: "Summit Insurance Group", contact: "Dana Whitfield", position: "HR Lead", industry: "Insurance", country: "United States", tz: "America/Chicago", status: "ACTIVE" as const, source: "linkedin", services: ["Appointment Setting", "Customer Service"], agents: 3, managed: false },
+    { email: "hello@bright-dental.example", company: "Bright Dental Co", contact: "Tom Ashby", position: "Owner", industry: "Healthcare", country: "United Kingdom", tz: "Europe/London", status: "PENDING_REVIEW" as const, source: "website", services: ["Virtual Assistant"], agents: 1, managed: false },
+  ];
+  const clientByCompany = new Map<string, { id: string; userId: string }>();
+  for (const c of NEW_CLIENTS) {
+    const u = await prisma.user.upsert({ where: { email: c.email }, create: { email: c.email, roleId: roleIds.get("CLIENT")!, passwordHash, emailVerifiedAt: new Date() }, update: { passwordHash, emailVerifiedAt: new Date() } });
+    let contact = await prisma.clientContact.findUnique({ where: { userId: u.id } });
+    if (!contact) {
+      const row = await prisma.client.create({ data: { companyName: c.company, industry: c.industry, country: c.country, timezone: c.tz, status: c.status, source: c.source, accountManagerUserId: c.managed ? salesUser.id : undefined, createdAt: new Date(Date.now() - Math.floor(rng() * 80 + 5) * DAY), contacts: { create: { userId: u.id, name: c.contact, position: c.position, businessEmail: c.email, isPrimary: true } }, onboarding: { create: { servicesNeeded: c.services, agentsRequired: c.agents } } } });
+      contact = await prisma.clientContact.findUniqueOrThrow({ where: { userId: u.id } });
+      void row;
+    }
+    if (c.status === "ACTIVE") await accept(u.id, clientAgreements);
+    clientByCompany.set(c.company, { id: contact.clientId, userId: u.id });
+  }
+
+  // Agents (21 more → 25 total). Names avoid the seeded "Maria" and "Jose" so e2e searches stay unambiguous.
+  const FIRST = ["Andrea", "Bea", "Carmela", "Dominic", "Ella", "Francis", "Gabriel", "Hannah", "Ivan", "Jasmine", "Kyle", "Lorenzo", "Mika", "Nathan", "Olivia", "Paolo", "Queenie", "Rafael", "Sofia", "Tristan", "Vince"];
+  const LAST = ["Aquino", "Bautista", "Cruz", "Dela Rosa", "Espino", "Fernandez", "Garcia", "Hernandez", "Ilagan", "Javier", "Katigbak", "Lim", "Mendoza", "Navarro", "Ocampo", "Pascual", "Quijano", "Reyes", "Santos", "Torres", "Villanueva"];
+  const ROLES = ["Cold Caller", "Appointment Setter", "Sales Development Representative", "Customer Service Representative", "Technical Support Representative", "Virtual Assistant", "Executive Assistant", "Bookkeeper", "Social Media Manager", "Lead Generation Specialist", "Transaction Coordinator"] as const;
+  const ROLE_SKILLS: Record<string, string[]> = { "Cold Caller": ["Cold Calling", "Lead Generation", "CRM Management"], "Appointment Setter": ["Appointment Setting", "Cold Calling", "CRM Management"], "Sales Development Representative": ["Outbound Sales", "Lead Generation", "CRM Management"], "Customer Service Representative": ["Customer Service", "Live Chat Support", "Email Support"], "Technical Support Representative": ["Technical Support", "Email Support", "Customer Service"], "Virtual Assistant": ["Data Entry", "Research", "Inbox Management"], "Executive Assistant": ["Executive Assistance", "Calendar Management", "Inbox Management"], Bookkeeper: ["Bookkeeping", "Invoicing", "Data Entry"], "Social Media Manager": ["Social Media Management", "Content Writing", "Graphic Design"], "Lead Generation Specialist": ["Lead Generation", "Research", "CRM Management"], "Transaction Coordinator": ["Real Estate Transaction Coordination", "Data Entry", "Email Support"] };
+  const ROLE_SOFTWARE: Record<string, string[]> = { "Cold Caller": ["Mojo Dialer", "GoHighLevel"], "Appointment Setter": ["HubSpot", "RingCentral"], "Sales Development Representative": ["Salesforce", "Aircall"], "Customer Service Representative": ["Zendesk", "Slack"], "Technical Support Representative": ["Freshdesk", "Intercom"], "Virtual Assistant": ["Google Workspace", "Notion"], "Executive Assistant": ["Google Workspace", "Asana"], Bookkeeper: ["QuickBooks", "Xero"], "Social Media Manager": ["Canva", "Notion"], "Lead Generation Specialist": ["HubSpot", "Google Workspace"], "Transaction Coordinator": ["Google Workspace", "Microsoft 365"] };
+  const INDUSTRY_LIST = ["Real Estate", "Insurance", "Solar / Energy", "Healthcare", "E-commerce", "SaaS / Technology", "Logistics", "Marketing Agency"];
+  // Stage plan for the 21 generated agents (Section 12: "varied stages").
+  const STAGES: Array<{ status: "DRAFT" | "SUBMITTED" | "UNDER_REVIEW" | "REVISION_REQUIRED" | "REJECTED" | "APPROVED" | "HIDDEN"; availability: "AVAILABLE" | "AVAILABLE_SOON" | "UNAVAILABLE" | "PAUSED"; verification: "PROFILE_SUBMITTED" | "PROFILE_VERIFIED" | "SKILLS_ASSESSED" | "HIREWISE_CERTIFIED" | "INTERVIEW_READY"; rate?: number; certified?: boolean }> = [
+    { status: "DRAFT", availability: "UNAVAILABLE", verification: "PROFILE_SUBMITTED" },
+    { status: "DRAFT", availability: "UNAVAILABLE", verification: "PROFILE_SUBMITTED" },
+    { status: "DRAFT", availability: "UNAVAILABLE", verification: "PROFILE_SUBMITTED" },
+    { status: "SUBMITTED", availability: "UNAVAILABLE", verification: "PROFILE_SUBMITTED" },
+    { status: "SUBMITTED", availability: "UNAVAILABLE", verification: "PROFILE_SUBMITTED" },
+    { status: "SUBMITTED", availability: "UNAVAILABLE", verification: "PROFILE_SUBMITTED" },
+    { status: "UNDER_REVIEW", availability: "UNAVAILABLE", verification: "PROFILE_SUBMITTED" },
+    { status: "UNDER_REVIEW", availability: "UNAVAILABLE", verification: "PROFILE_SUBMITTED" },
+    { status: "REVISION_REQUIRED", availability: "UNAVAILABLE", verification: "PROFILE_SUBMITTED" },
+    { status: "REJECTED", availability: "UNAVAILABLE", verification: "PROFILE_SUBMITTED" },
+    { status: "HIDDEN", availability: "PAUSED", verification: "PROFILE_VERIFIED" },
+    { status: "APPROVED", availability: "AVAILABLE", verification: "HIREWISE_CERTIFIED", rate: 950, certified: true },
+    { status: "APPROVED", availability: "AVAILABLE", verification: "HIREWISE_CERTIFIED", rate: 1000, certified: true },
+    { status: "APPROVED", availability: "AVAILABLE", verification: "SKILLS_ASSESSED", rate: 800 },
+    { status: "APPROVED", availability: "AVAILABLE", verification: "PROFILE_VERIFIED", rate: 750 },
+    { status: "APPROVED", availability: "AVAILABLE", verification: "PROFILE_VERIFIED" },
+    { status: "APPROVED", availability: "AVAILABLE_SOON", verification: "PROFILE_VERIFIED", rate: 850 },
+    { status: "APPROVED", availability: "AVAILABLE_SOON", verification: "INTERVIEW_READY", rate: 1200, certified: true },
+    { status: "APPROVED", availability: "AVAILABLE", verification: "PROFILE_VERIFIED", rate: 700 },
+    { status: "APPROVED", availability: "PAUSED", verification: "PROFILE_VERIFIED" },
+    { status: "APPROVED", availability: "AVAILABLE", verification: "SKILLS_ASSESSED", rate: 900 },
+  ];
+  const generated: Array<{ id: string; userId: string; displayName: string; role: string; status: string; availability: string }> = [];
+  const csrTemplate = templateIds.get("csr")!;
+  const goodLabel = labelIds.get("GOOD")!;
+  for (let i = 0; i < STAGES.length; i++) {
+    const st = STAGES[i];
+    const first = FIRST[i];
+    const last = LAST[(i * 7) % LAST.length];
+    const email = `${first.toLowerCase()}.${last.toLowerCase().replace(/\s+/g, "")}@talent.example`;
+    const displayName = `${first} ${last[0]}.`;
+    const role = ROLES[i % ROLES.length];
+    const u = await prisma.user.upsert({ where: { email }, create: { email, roleId: roleIds.get("AGENT")!, passwordHash, emailVerifiedAt: new Date() }, update: { passwordHash } });
+    await accept(u.id, agentAgreements);
+    let p = await prisma.agentProfile.findUnique({ where: { userId: u.id } });
+    if (!p) {
+      const years = 1 + Math.floor(rng() * 8);
+      const level = years <= 1 ? "ENTRY" : years <= 3 ? "JUNIOR" : years <= 5 ? "MID" : years <= 7 ? "SENIOR" : "LEAD";
+      const industries = [pick(INDUSTRY_LIST), pick(INDUSTRY_LIST)].filter((v, k, a) => a.indexOf(v) === k);
+      const submitted = st.status === "DRAFT" ? null : new Date(Date.now() - Math.floor(rng() * 40 + 3) * DAY);
+      const approved = st.status === "APPROVED" || st.status === "HIDDEN" ? new Date((submitted ?? new Date()).getTime() + Math.floor(rng() * 5 + 1) * DAY) : null;
+      p = await prisma.agentProfile.create({
+        data: {
+          userId: u.id, displayName, headline: `${role} with ${years} year${years === 1 ? "" : "s"} on ${industries[0]} accounts`, primaryRole: role, summary: `${years} years as a ${role.toLowerCase()} for ${industries.join(" and ")} clients. Comfortable with ${ROLE_SOFTWARE[role].join(" and ")}, clear written English, and a quiet home office with fibre internet and a backup connection.`,
+          yearsExperience: years, experienceLevel: level, locationCity: pick(["Manila", "Cebu City", "Davao City", "Iloilo City", "Baguio"]), locationCountry: "Philippines", timezone: "Asia/Manila", languages: ["English", "Filipino"], workSetup: "REMOTE", preferredShift: pick(["US Day (PH Night)", "AU Day (PH Day)", "UK Day (PH Afternoon)"]),
+          equipmentSummary: "Laptop, headset, UPS", internetSummary: "Fibre 100 Mbps, LTE backup",
+          status: st.status, verificationLevel: st.verification, availabilityStatus: st.availability, availableFrom: st.availability === "AVAILABLE_SOON" ? new Date(Date.now() + 14 * DAY) : undefined,
+          profileCompletion: st.status === "DRAFT" ? 40 + Math.floor(rng() * 30) : 85 + Math.floor(rng() * 15), submittedAt: submitted ?? undefined, approvedAt: approved ?? undefined, approvedById: approved ? adminUser.id : undefined, hiddenAt: st.status === "HIDDEN" ? new Date() : undefined,
+          createdAt: new Date(Date.now() - Math.floor(rng() * 60 + 10) * DAY),
+          privateContact: { create: { fullLegalName: `${first} ${last}`, personalEmail: email, phone: `+63 917 ${String(100 + i).padStart(3, "0")} ${String(1000 + i * 37).slice(-4)}`, resumeKey: st.status === "DRAFT" ? undefined : `agents/seed/resume/${displayName}.pdf` } },
+          skills: { create: ROLE_SKILLS[role].map((name, k) => ({ skillId: skillIds.get(name)!, level: k === 0 ? "EXPERT" : "ADVANCED", yearsUsed: Math.max(1, years - k) })) },
+          softwareExperiences: { create: ROLE_SOFTWARE[role].map((name) => ({ softwareId: softwareIds.get(name)!, level: "ADVANCED" })) },
+          industryExperiences: { create: industries.map((industry) => ({ industry, years: Math.max(1, Math.floor(years / industries.length)) })) },
+          experiences: { create: [{ title: role, company: "Confidential campaign", industry: industries[0], startDate: new Date(Date.now() - years * 365 * DAY), description: `${role} for ${industries[0]} clients.`, isCampaign: ["Cold Caller", "Appointment Setter", "Sales Development Representative", "Lead Generation Specialist"].includes(role), campaignType: ["Cold Caller", "Appointment Setter"].includes(role) ? `${industries[0]} outbound` : undefined }] },
+          availabilityHistory: { create: { status: st.availability, setById: adminUser.id, reason: "Seed" } },
+          ...(st.status === "APPROVED" || st.status === "HIDDEN" ? { videos: { create: { storageKey: `agents/seed/video/${i}.mp4`, status: "APPROVED", isCurrent: true, durationSec: 90, reviewedById: adminUser.id, reviewedAt: approved ?? undefined } } } : {}),
+        },
+      });
+      if (st.rate) {
+        const r = await prisma.clientBillingRate.create({ data: { agentProfileId: p.id, amount: st.rate, currency: "USD", unit: "HOURLY", status: "PUBLISHED", proposedById: salesUser.id, approvedById: adminUser.id, effectiveFrom: new Date(Date.now() - 15 * DAY) } });
+        await prisma.rateHistory.create({ data: { subjectType: "CLIENT_BILLING_RATE", subjectId: r.id, agentProfileId: p.id, newAmount: st.rate, currency: "USD", unit: "HOURLY", previousStatus: "PENDING_APPROVAL", newStatus: "PUBLISHED", changedById: adminUser.id, reason: "Seed" } });
+        const comp = Math.round(st.rate * 0.55);
+        const c = await prisma.agentCompensation.create({ data: { agentProfileId: p.id, amount: comp, currency: "USD", unit: "HOURLY", setById: ownerUser.id, effectiveFrom: new Date(Date.now() - 15 * DAY) } });
+        await prisma.rateHistory.create({ data: { subjectType: "AGENT_COMPENSATION", subjectId: c.id, agentProfileId: p.id, newAmount: comp, currency: "USD", unit: "HOURLY", newStatus: "CURRENT", changedById: ownerUser.id, reason: "Seed" } });
+      }
+      if (st.certified) {
+        const csr = await prisma.academyCourse.findUniqueOrThrow({ where: { code: "customer-service-excellence" } });
+        const enrol = await prisma.courseEnrollment.create({ data: { courseId: csr.id, agentProfileId: p.id, status: "COMPLETED", paymentStatus: "WAIVED", priceCents: csr.priceCents, enrolledAt: new Date(Date.now() - 20 * DAY), completion: { create: { examScore: 80 + Math.floor(rng() * 20), completedAt: new Date(Date.now() - 12 * DAY) } } } });
+        const a = await prisma.assessment.create({ data: { courseId: csr.id, agentProfileId: p.id, coachUserId: coachUser.id, type: "MOCK_CALL", examScore: 85, communicationScore: 88, strengths: "Calm under pressure.", areasForImprovement: "Faster ticket notes.", resultLabelId: goodLabel, certificationRecommended: true, status: "FINAL", assessedAt: new Date(Date.now() - 10 * DAY) } });
+        await prisma.certification.create({ data: { agentProfileId: p.id, templateId: csrTemplate, origin: "ACADEMY", assessmentId: a.id, courseId: csr.id, status: "APPROVED", approvedById: adminUser.id, approvedAt: new Date(Date.now() - 10 * DAY), issuedAt: new Date(Date.now() - 10 * DAY), expiresAt: new Date(Date.now() + 720 * DAY) } });
+        void enrol;
+      }
+    }
+    generated.push({ id: p.id, userId: u.id, displayName, role, status: st.status, availability: st.availability });
+  }
+
+  // Courses (2 more → 5 total), owned by the two extra coaches
+  const coach2 = await prisma.user.findUniqueOrThrow({ where: { email: "coach2@hirewise.example" } });
+  const coach3 = await prisma.user.findUniqueOrThrow({ where: { email: "coach3@hirewise.example" } });
+  const MORE_COURSES = [
+    { code: "objection-handling-masterclass", owner: coach2, title: "Objection Handling Masterclass", category: "Sales and Appointment Setting", priceCents: 2900, passingScore: 70, template: "setter", description: "Turn price, timing, and trust objections into booked appointments. USD 29.00.", syllabus: "Module 1 — Listening for the real objection\nModule 2 — Price and value\nModule 3 — Timing and urgency\nModule 4 — Trust and social proof", questions: [{ prompt: "The prospect says the price is too high. First step?", options: ["Offer a discount", "Ask what they are comparing it with", "End the call", "Repeat the price"], correctIndex: 1 }, { prompt: "\"Call me next quarter\" usually signals:", options: ["A firm no", "Low urgency; clarify what changes next quarter", "Interest in a discount", "A wrong number"], correctIndex: 1 }, { prompt: "Best response to \"I have never heard of you\":", options: ["Argue", "Share a short, relevant proof point and ask permission to continue", "Hang up", "Send a brochure only"], correctIndex: 1 }] },
+    { code: "healthcare-scheduling-basics", owner: coach3, title: "Healthcare Scheduling Basics", category: "Customer Service", priceCents: 0, passingScore: 75, template: "csr", description: "Front-desk scheduling for US and AU clinics: intake, confirmations, cancellations, privacy basics. Free.", syllabus: "Module 1 — Intake calls\nModule 2 — Confirmations and reminders\nModule 3 — Cancellations and waitlists\nModule 4 — Privacy basics (HIPAA / Australian Privacy Principles)", questions: [{ prompt: "A caller asks for another patient's appointment time. You should:", options: ["Share it if they sound related", "Decline and offer to pass a message to the patient", "Read it out", "Ask for their phone number and share it later"], correctIndex: 1 }, { prompt: "Best confirmation cadence for a new patient appointment:", options: ["No confirmation", "48 hours and 2 hours before", "Only after the appointment", "Every hour"], correctIndex: 1 }, { prompt: "A patient cancels for the third time this month. You should:", options: ["Refuse future bookings", "Rebook and note the pattern for the practice manager", "Charge them personally", "Ignore it"], correctIndex: 1 }] },
+  ];
+  for (const c of MORE_COURSES) {
+    if (await prisma.academyCourse.findUnique({ where: { code: c.code } })) continue;
+    const course = await prisma.academyCourse.create({ data: { code: c.code, title: c.title, category: c.category, description: c.description, syllabus: c.syllabus, ownerCoachUserId: c.owner.id, priceCents: c.priceCents, currency: "USD", passingScore: c.passingScore, requiresCoachReview: false, certificationTemplateId: templateIds.get(c.template), status: "PUBLISHED", publishedAt: new Date(Date.now() - 7 * DAY), publishedById: adminUser.id, coaches: { create: { coachUserId: c.owner.id } } } });
+    await prisma.exam.create({ data: { courseId: course.id, title: `${c.title} — final exam`, instructions: "Single answer per question. Two attempts.", maxAttempts: 2, status: "PUBLISHED", questions: { create: c.questions.map((q, i) => ({ order: i + 1, prompt: q.prompt, options: q.options, correctIndex: q.correctIndex, points: 1 })) } } });
+  }
+
+  // Shortlists for the new clients (never Acme: the e2e suite expects Acme's shortlist empty)
+  const approvedAvailable = generated.filter((g) => g.status === "APPROVED" && g.availability === "AVAILABLE");
+  const shortlistFor = async (company: string, agents: typeof generated) => {
+    const c = clientByCompany.get(company)!;
+    let list = await prisma.shortlist.findFirst({ where: { clientId: c.id, isDefault: true } });
+    if (!list) list = await prisma.shortlist.create({ data: { clientId: c.id, createdById: c.userId, isDefault: true } });
+    for (const a of agents) {
+      if (!(await prisma.shortlistCandidate.findFirst({ where: { shortlistId: list.id, agentProfileId: a.id, removedAt: null } }))) await prisma.shortlistCandidate.create({ data: { shortlistId: list.id, agentProfileId: a.id, addedById: c.userId } });
+      await prisma.introduction.upsert({ where: { clientId_agentProfileId: { clientId: c.id, agentProfileId: a.id } }, create: { clientId: c.id, agentProfileId: a.id, firstEvent: "SHORTLIST" }, update: {} });
+    }
+  };
+  await shortlistFor("Northwind Realty", approvedAvailable.slice(0, 3));
+  await shortlistFor("Harbor Health Clinics", approvedAvailable.slice(3, 5));
+  await shortlistFor("Summit Insurance Group", approvedAvailable.slice(1, 4));
+
+  // Interview requests at four stages
+  const requestFor = async (company: string, role: string, status: "REQUESTED" | "SALES_REVIEW" | "SCHEDULED" | "CLOSED", agents: typeof generated, opts: { assigned?: boolean; interview?: boolean; decision?: "NOT_SELECTED" | "SELECTED" } = {}) => {
+    const c = clientByCompany.get(company)!;
+    const existing = await prisma.interviewRequest.findFirst({ where: { clientId: c.id, role, status } });
+    if (existing) return existing;
+    const r = await prisma.interviewRequest.create({ data: { clientId: c.id, requestedById: c.userId, role, schedule: "Mon-Fri, client business hours", timezone: (await prisma.client.findUniqueOrThrow({ where: { id: c.id } })).timezone ?? "UTC", status, assignedSalesUserId: opts.assigned ? salesUser.id : undefined, createdAt: new Date(Date.now() - Math.floor(rng() * 20 + 1) * DAY), candidates: { create: agents.map((a) => ({ agentProfileId: a.id, status: status === "SCHEDULED" || status === "CLOSED" ? "CONFIRMED" : "PENDING" })) } } });
+    if (opts.interview) {
+      for (const a of agents) {
+        await prisma.interview.create({ data: { interviewRequestId: r.id, agentProfileId: a.id, round: 1, scheduledAt: status === "CLOSED" ? new Date(Date.now() - 5 * DAY) : new Date(Date.now() + 3 * DAY), timezone: r.timezone, durationMin: 30, meetingLink: `https://meet.hirewise.example/seed-${r.id.slice(-6)}`, coordinatorUserId: salesUser.id, status: status === "CLOSED" ? "COMPLETED" : "SCHEDULED", clientDecision: opts.decision ?? "NONE", decidedAt: opts.decision ? new Date(Date.now() - 3 * DAY) : undefined } });
+        await prisma.introduction.upsert({ where: { clientId_agentProfileId: { clientId: c.id, agentProfileId: a.id } }, create: { clientId: c.id, agentProfileId: a.id, firstEvent: "INTERVIEW" }, update: {} });
+      }
+    }
+    return r;
+  };
+  await requestFor("Northwind Realty", "Cold Caller", "REQUESTED", approvedAvailable.slice(0, 2));
+  await requestFor("Harbor Health Clinics", "Customer Service Representative", "SALES_REVIEW", approvedAvailable.slice(3, 5), { assigned: true });
+  await requestFor("Summit Insurance Group", "Appointment Setter", "SCHEDULED", approvedAvailable.slice(1, 3), { assigned: true, interview: true });
+  await requestFor("Northwind Realty", "Transaction Coordinator", "CLOSED", approvedAvailable.slice(5, 6), { assigned: true, interview: true, decision: "NOT_SELECTED" });
+
+  // Placements at two more stages: Summit → AWAITING_DEPOSIT (open invoice: try "Pay online"); Harbor → DEPLOYMENT_PREP
+  const onePolicySeed = await prisma.depositPolicy.findUniqueOrThrow({ where: { name: "One month (default)" } });
+  const psaSeed = await prisma.agreement.findFirstOrThrow({ where: { type: "PLACEMENT_SERVICE_AGREEMENT", isActive: true } });
+  const placementAt = async (company: string, agent: (typeof generated)[number], position: string, stage: "AWAITING_DEPOSIT" | "DEPLOYMENT_PREP") => {
+    const c = clientByCompany.get(company)!;
+    if (await prisma.placement.findFirst({ where: { clientId: c.id, agentProfileId: agent.id } })) return;
+    const rate = await prisma.clientBillingRate.findFirst({ where: { agentProfileId: agent.id, status: "PUBLISHED" } });
+    const comp = await prisma.agentCompensation.findFirst({ where: { agentProfileId: agent.id, effectiveTo: null } });
+    if (!rate) return;
+    const amount = rate.amount * 173;
+    const placement = await prisma.placement.create({ data: { clientId: c.id, agentProfileId: agent.id, positionTitle: position, schedule: "Mon-Fri, client business hours", timezone: "America/Chicago", startDate: new Date(Date.now() + 14 * DAY), status: stage, accountManagerUserId: salesUser.id, approvedById: adminUser.id, clientBillingRateId: rate.id, agentCompensationId: comp?.id, agreementAcceptedAt: new Date(Date.now() - 2 * DAY), createdAt: new Date(Date.now() - 6 * DAY) } });
+    const paid = stage === "DEPLOYMENT_PREP";
+    const deposit = await prisma.deposit.create({ data: { placementId: placement.id, policyId: onePolicySeed.id, requiredAmount: amount, currency: "USD", dueDate: new Date(Date.now() + 5 * DAY), status: paid ? "PAID" : "PENDING", approvedById: adminUser.id } });
+    const count = await prisma.invoice.count();
+    const invoice = await prisma.invoice.create({ data: { clientId: c.id, placementId: placement.id, depositId: deposit.id, number: `HW-${new Date().getUTCFullYear()}-${String(count + 1).padStart(5, "0")}`, description: `Placement deposit (One month (default)) for ${agent.displayName} - ${position}`, amount, currency: "USD", status: paid ? "PAID" : "ISSUED", issuedAt: new Date(Date.now() - 2 * DAY), dueAt: new Date(Date.now() + 5 * DAY), paidAt: paid ? new Date(Date.now() - DAY) : undefined } });
+    if (paid) {
+      await prisma.payment.create({ data: { invoiceId: invoice.id, amount, currency: "USD", method: "BANK_TRANSFER", reference: "WIRE-SEED", paidAt: new Date(Date.now() - DAY), recordedById: salesUser.id } });
+      await prisma.deploymentChecklistItem.createMany({ data: ["Equipment and internet check completed", "Client tool accounts provisioned", "Schedule and timezone confirmed with client and agent", "Client kickoff call scheduled", "Agent briefed on client communication rules", "Welcome pack sent to client"].map((label, i) => ({ placementId: placement.id, order: i + 1, label, isRequired: i < 5, isDone: i < 2, doneById: i < 2 ? opsUser.id : undefined, doneAt: i < 2 ? new Date() : undefined })) });
+      await prisma.agentProfile.update({ where: { id: agent.id }, data: { availabilityStatus: "RESERVED" } });
+      await prisma.reservation.create({ data: { agentProfileId: agent.id, clientId: c.id, placementId: placement.id, reservedById: salesUser.id, reason: "Selected after interview (seed)", expiresAt: new Date(Date.now() + 7 * DAY) } });
+    }
+    await prisma.agreementAcceptance.create({ data: { agreementId: psaSeed.id, userId: c.userId, placementId: placement.id, bodyChecksum: checksum("seed-psa"), ipAddress: "127.0.0.1", userAgent: "seed" } });
+  };
+  const withRate = generated.filter((g) => g.status === "APPROVED" && ["AVAILABLE", "AVAILABLE_SOON"].includes(g.availability));
+  await placementAt("Summit Insurance Group", withRate[withRate.length - 1], "Appointment Setter", "AWAITING_DEPOSIT");
+  await placementAt("Harbor Health Clinics", withRate[withRate.length - 2], "Customer Service Representative", "DEPLOYMENT_PREP");
+
   console.log("Seed complete.");
   console.log("Roles:", roleIds.size, "| Permissions:", permIds.size, "| Agreements:", AGREEMENTS.length, "| Skills:", SKILLS.length, "| Software:", SOFTWARE.length);
   console.log(`\nDemo accounts (password: ${DEMO_PASSWORD}):`);
@@ -401,6 +598,8 @@ async function main() {
   console.log(`  ${"AGENT".padEnd(12)} maria@talent.example  (draft profile: add résumé + video, then submit)`);
   console.log(`  ${"AGENT".padEnd(12)} jose@ / ana@ / carlo@talent.example  (approved, searchable; jose@ certified, ana@ has a pending course payment)`);
   console.log(`  ${"COACH".padEnd(12)} coach@hirewise.example  (owns 3 courses: 2 published, 1 draft)`);
+  console.log(`  More clients: talent@northwind-realty.example, admin@harbor-health.example (DEPLOYMENT_PREP placement), hr@summit-insurance.example (open deposit invoice: try Pay online), hello@bright-dental.example (pending review)`);
+  console.log(`  21 more agents (<first>.<last>@talent.example) at every profile stage; coach2@/coach3@ own two more courses.`);
   console.log(`  Commercial: jose@/carlo@ have published client rates and compensation; ana@ has a pending rate proposal; carlo@ is ACTIVE at Acme Solar with a paid deposit invoice.`);
 }
 
