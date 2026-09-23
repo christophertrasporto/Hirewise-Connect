@@ -1,6 +1,6 @@
 # Entity relationship diagram
 
-Phase 0 scope: identity, clients, agents, agreements, and operations tables. Later phases add marketplace (shortlists, introductions), interviews, placements, commercial (rates, deposits, invoices, payments), and academy aggregates from MASTER_PROMPT.md Section 4. Keep this file current when the Prisma schema changes.
+All phases. Phase 0: identity, clients, agents, agreements, operations. Phase 1: marketplace (shortlists, views, introductions). Phase 2: interview requests, interviews, messages, placements, reservations, flags. Phase 3: academy (courses, exams, enrollments, assessments, certifications, verification requirements). Phase 4: commercial (billing rates, compensation, rate history, deposit policies, deposits, invoices, payments, deployment checklist). Phase 5: incidents, saved searches. Keep this file current when the Prisma schema changes.
 
 ```mermaid
 erDiagram
@@ -77,3 +77,53 @@ Phase 1: `Shortlist`, `ShortlistCandidate`, `CandidateView`, `Introduction`, `Ad
 Phase 2: `InterviewRequest`, `InterviewRequestCandidate`, `Interview`, `InterviewMessage`, `Placement`, `DeploymentChecklist*`, `Task`, `Incident`, `ActivityFlag`.
 Phase 3: `AcademyCourse`, `CourseCoach`, `TrainingGroup*`, `CourseEnrollment`, `CourseCompletion`, `Assessment`, `AssessmentResultLabel`, `CoachEvaluation`, `CertificationTemplate`, `Certification`, `CertificationRequirement`, `VerificationRequirement`.
 Phase 4: `ClientBillingRate`, `AgentCompensation`, `RateHistory`, `DepositPolicy`, `Deposit`, `Invoice`, `Payment`.
+
+## Phases 1–5 additions
+
+```mermaid
+erDiagram
+    Client ||--o{ Shortlist : "owns"
+    Shortlist ||--o{ ShortlistCandidate : "lists"
+    AgentProfile ||--o{ ShortlistCandidate : "in"
+    Client ||--o{ CandidateView : "views"
+    Client ||--o{ Introduction : "ledger"
+    Client ||--o{ InterviewRequest : "raises"
+    ClientRequirement ||--o{ InterviewRequest : "for"
+    InterviewRequest ||--o{ InterviewRequestCandidate : "has"
+    InterviewRequest ||--o{ Interview : "schedules"
+    InterviewRequest ||--o{ InterviewMessage : "thread"
+    Interview ||--o| Placement : "selected into"
+    Client ||--o{ Placement : "has"
+    AgentProfile ||--o{ Placement : "placed"
+    ClientBillingRate ||--o{ Placement : "snapshot"
+    AgentCompensation ||--o{ Placement : "snapshot (restricted)"
+    Placement ||--o| Deposit : "requires"
+    DepositPolicy ||--o{ Deposit : "computed by"
+    Placement ||--o{ Invoice : "bills"
+    Deposit ||--o{ Invoice : "invoiced as"
+    Client ||--o{ Invoice : "pays"
+    Invoice ||--o{ Payment : "settled by"
+    Placement ||--o{ DeploymentChecklistItem : "checklist"
+    AgentProfile ||--o{ ClientBillingRate : "priced"
+    AgentProfile ||--o{ AgentCompensation : "paid"
+    User ||--o{ RateHistory : "changes"
+    User ||--o{ AcademyCourse : "coaches (owner)"
+    AcademyCourse ||--o{ CourseCoach : "co-coached"
+    AcademyCourse ||--o| Exam : "has"
+    Exam ||--o{ ExamQuestion : "asks"
+    AcademyCourse ||--o{ CourseEnrollment : "enrols"
+    AgentProfile ||--o{ CourseEnrollment : "takes"
+    CourseEnrollment ||--o| CourseCompletion : "completes"
+    CourseEnrollment ||--o{ ExamAttempt : "attempts"
+    AgentProfile ||--o{ Assessment : "assessed"
+    AssessmentResultLabel ||--o{ Assessment : "labelled"
+    AgentProfile ||--o{ CoachEvaluation : "evaluated"
+    CertificationTemplate ||--o{ AcademyCourse : "awarded by"
+    CertificationTemplate ||--o{ Certification : "instances"
+    AgentProfile ||--o{ Certification : "holds"
+    Assessment ||--o{ Certification : "supports"
+    User ||--o{ ActivityFlag : "flagged"
+    User ||--o{ Incident : "subject"
+    User ||--o{ Incident : "reported"
+    Client ||--o{ SavedSearch : "saves"
+```

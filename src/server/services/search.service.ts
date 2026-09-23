@@ -7,6 +7,19 @@ import { shortlistRepository } from "@/server/repositories/shortlist.repository"
 import { clientRepository } from "@/server/repositories/client.repository";
 import { toCandidateCardView, toCandidateClientView, type CandidateCardView } from "@/server/views/agent.views";
 import { timezoneOffsetHours } from "@/lib/timezones";
+import { flagRepository } from "@/server/repositories/flag.repository";
+import { getSetting } from "./setting.service";
+
+/** Section 8.8: more than N profile views in an hour looks like scraping; one flag per hour. */
+async function raiseViewBurstFlag(db: PrismaClient, actor: Actor, clientId: string) {
+  const threshold = await getSetting(db, "profileViewBurstPerHour");
+  const since = new Date(Date.now() - 3_600_000);
+  const views = await db.candidateView.count({ where: { clientId, viewedAt: { gte: since } } });
+  if (views < threshold) return;
+  const recent = await db.activityFlag.findFirst({ where: { userId: actor.userId, rule: "PROFILE_VIEW_BURST", createdAt: { gte: since } }, select: { id: true } });
+  if (recent) return;
+  await flagRepository.create(db, { userId: actor.userId, rule: "PROFILE_VIEW_BURST", details: { viewsLastHour: views, threshold }, relatedType: "Client", relatedId: clientId });
+}
 
 const VERIFICATION_ORDER = ["PROFILE_SUBMITTED", "PROFILE_VERIFIED", "SKILLS_ASSESSED", "HIREWISE_CERTIFIED", "INTERVIEW_READY", "DEPLOYMENT_READY"] as const;
 const AVAILABILITY_ORDER = ["AVAILABLE", "AVAILABLE_SOON", "INTERVIEWING", "RESERVED", "PAUSED", "PLACED", "UNAVAILABLE"] as const;
@@ -108,6 +121,7 @@ export async function getCandidateForClient(db: PrismaClient, actor: Actor, agen
   let shortlisted = false;
   if (access.clientId) {
     await shortlistRepository.recordView(db, access.clientId, p.id);
+    await raiseViewBurstFlag(db, actor, access.clientId);
     await shortlistRepository.upsertIntroduction(db, access.clientId, p.id, "VIEW");
     const list = await shortlistRepository.defaultForClient(db, access.clientId, actor.userId);
     shortlisted = !!(await shortlistRepository.activeEntry(db, list.id, p.id));

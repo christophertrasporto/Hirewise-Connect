@@ -11,7 +11,7 @@ export default async function CompanyPage() {
   const c = await getOwnClient(prisma, actor);
   return (
     <>
-      <PageHeader eyebrow="Company" title={c.companyName} actions={<StatusBadge status={c.status} />} description="What Hirewise knows about your company and your hiring need. Editing arrives with the requirements module in Phase 2." />
+      <PageHeader eyebrow="Company" title={c.companyName} actions={<><StatusBadge status={c.status} /><a href="/api/export/client" className="rounded-full border border-ink-200 bg-white px-4 py-1.5 text-[13.5px] font-semibold text-ink-700 hover:bg-ink-50">Export my data (JSON)</a></>} description="What Hirewise knows about your company and your hiring need. Requirements are managed under Requirements; your data export includes everything you can see here." />
       <div className="grid gap-5 lg:grid-cols-2">
         <Card title="Company">
           <dl className="grid gap-4 sm:grid-cols-2">

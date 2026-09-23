@@ -61,7 +61,7 @@ export const interviewRepository = {
     return db.interviewRequestCandidate.updateMany({ where: { interviewRequestId: requestId, agentProfileId }, data: { status, respondedAt: new Date() } });
   },
 
-  createInterview(db: Db, d: { interviewRequestId: string; agentProfileId: string; round: number; scheduledAt: Date; timezone: string; durationMin: number; meetingLink: string | null; coordinatorUserId: string }) {
+  createInterview(db: Db, d: { interviewRequestId: string; agentProfileId: string; round: number; scheduledAt: Date; timezone: string; durationMin: number; meetingLink: string | null; coordinatorUserId: string; meetingProvider?: string | null; meetingExternalId?: string | null }) {
     return db.interview.create({ data: { ...d, meetingLink: d.meetingLink ?? undefined } });
   },
 

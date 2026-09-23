@@ -70,7 +70,7 @@ export const billingRepository = {
     return db.invoice.findMany({ where: status ? { status } : {}, include: invoiceInclude(), orderBy: { issuedAt: "desc" }, take });
   },
 
-  updateInvoice(db: Db, id: string, data: { status?: InvoiceStatus; paidAt?: Date | null; voidReason?: string; pdfKey?: string }) {
+  updateInvoice(db: Db, id: string, data: { status?: InvoiceStatus; paidAt?: Date | null; voidReason?: string; pdfKey?: string; providerCheckoutId?: string }) {
     return db.invoice.update({ where: { id }, data });
   },
 

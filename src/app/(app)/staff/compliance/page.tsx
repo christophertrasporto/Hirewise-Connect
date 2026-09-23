@@ -14,7 +14,7 @@ export default async function CompliancePage() {
   const flags = actor.permissions.has("flag.review") ? await listOpenFlags(prisma, actor) : [];
   return (
     <>
-      <PageHeader eyebrow="Non-circumvention" title="Held messages and activity flags" description="Practical safeguards from Section 8.8: messages carrying contact details wait here; rate talk and unusual activity raise flags for review. Nothing outside the platform is inspected." />
+      <PageHeader eyebrow="Non-circumvention" title="Held messages and activity flags" description="Practical safeguards from Section 8.8: messages carrying contact details wait here; rate talk, profile-view bursts, shortlist churn, and contact details in profiles raise flags for review. Nothing outside the platform is inspected." actions={<><Link href="/staff/compliance/incidents" className="rounded-full border border-ink-200 bg-white px-4 py-1.5 text-[13.5px] font-semibold text-ink-700">Incidents</Link>{actor.permissions.has("user.manage") && <Link href="/staff/compliance/data" className="rounded-full border border-ink-200 bg-white px-4 py-1.5 text-[13.5px] font-semibold text-ink-700">Data protection</Link>}</>} />
       <div className="grid gap-5 lg:grid-cols-2">
         <Card title="Messages held for review" description="Release to deliver, block to keep it from the other party.">
           {held.length === 0 ? <EmptyState title="Nothing held" /> : (
@@ -42,7 +42,10 @@ export default async function CompliancePage() {
                     <p className="text-ink-500">user {f.userId} · {new Date(f.createdAt).toLocaleString()}{f.relatedType === "InterviewRequest" && f.relatedId ? <> · <Link href={`/staff/interviews/${f.relatedId}`} className="font-semibold text-brand-600">request</Link></> : null}</p>
                     {f.details ? <p className="text-[12.5px] text-ink-400">{JSON.stringify(f.details)}</p> : null}
                   </div>
-                  <form action={markFlagReviewedAction}><input type="hidden" name="flagId" value={f.id} /><button className="rounded-full border border-ink-200 px-3 py-1 text-[12.5px] font-semibold text-ink-700">Reviewed</button></form>
+                  <div className="flex shrink-0 items-center gap-2">
+                    {actor.permissions.has("incident.write") && <Link href={`/staff/users?user=${f.userId}`} className="rounded-full bg-ink-900 px-3 py-1 text-[12.5px] font-semibold text-white">Open incident</Link>}
+                    <form action={markFlagReviewedAction}><input type="hidden" name="flagId" value={f.id} /><button className="rounded-full border border-ink-200 px-3 py-1 text-[12.5px] font-semibold text-ink-700">Reviewed</button></form>
+                  </div>
                 </li>
               ))}
             </ul>

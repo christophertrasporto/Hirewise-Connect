@@ -36,6 +36,10 @@ const SETTINGS: Record<string, unknown> = {
   allowFreeMailClients: false,
   autoAssignAccountManager: false,
   marketplaceAccess: "GATED",
+  matchWeights: { skills: 30, industry: 10, experienceLevel: 10, certifications: 15, timezone: 15, budget: 10, assessment: 10 },
+  retentionDays: 730,
+  profileViewBurstPerHour: 60,
+  shortlistChurnPerDay: 12,
 };
 
 const SKILLS: Array<[string, string]> = [

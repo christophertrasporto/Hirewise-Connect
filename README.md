@@ -17,7 +17,8 @@ Claude Code are in [CLAUDE.md](./CLAUDE.md).
 | Phase 2 — Requirements, interview requests, mediated messaging, scheduling, decisions, placements, reservations | Done |
 | Phase 3 — Academy: coach-built courses with USD pricing, exams, assessments, certifications, verification ladder | Done |
 | Phase 4 — Commercial: billing rates with history, compensation, placement pipeline, deposits, invoices (PDF), manual payments, reports | Done |
-| Phase 5 — Advanced: Stripe adapter, rule-based matching, calendar/Zoom, data retention | Next |
+| Phase 5 — Advanced: rule-based matching, analytics, saved searches, in-browser recording, Stripe/Zoom/SMS adapters with fakes, incidents, bulk actions, data export, retention | Done |
+| Launch prep — counsel-approved agreement text (Q11), production integrations, retention periods (Q18) | Next |
 
 ## Run locally
 
@@ -58,7 +59,7 @@ npm run test:e2e      # Playwright against the running dev server and seeded dat
 
 ## Demo accounts
 
-After `npm run db:seed`, every account uses the password `Hirewise!2026`: `owner@`, `admin@`, `sales@`, `recruiter@`, `coach@`, `ops@` at `hirewise.example`, plus `hiring@acme-solar.example` and `ops@beta-corp.example` (active clients), `maria@talent.example` (draft agent), and `jose@`, `ana@`, `carlo@talent.example` (approved agents; `jose@` holds a certification, `ana@` has a pending course payment). `coach@` owns three Academy courses (two published, one draft). `carlo@` is ACTIVE at Acme Solar with a paid deposit invoice; `jose@` and `carlo@` have published client rates; `ana@` has a pending rate proposal for Admin. Admin roles are asked to enrol TOTP on first login. Set `DEV_EXPOSE_LINKS=true` in `.env` to see emailed links in the UI locally.
+After `npm run db:seed`, every account uses the password `Hirewise!2026`: `owner@`, `admin@`, `sales@`, `recruiter@`, `coach@`, `ops@` at `hirewise.example`, plus `hiring@acme-solar.example` and `ops@beta-corp.example` (active clients), `maria@talent.example` (draft agent), and `jose@`, `ana@`, `carlo@talent.example` (approved agents; `jose@` holds a certification, `ana@` has a pending course payment). `coach@` owns three Academy courses (two published, one draft). `carlo@` is ACTIVE at Acme Solar with a paid deposit invoice; `jose@` and `carlo@` have published client rates; `ana@` has a pending rate proposal for Admin. Local `.env` uses the fake payment and meeting providers (`PAYMENT_PROVIDER=fake`, `MEETING_PROVIDER=fake`). Local `.env` uses the fake payment and meeting providers (`PAYMENT_PROVIDER=fake`, `MEETING_PROVIDER=fake`). Admin roles are asked to enrol TOTP on first login. Set `DEV_EXPOSE_LINKS=true` in `.env` to see emailed links in the UI locally.
 
 ## Stack
 

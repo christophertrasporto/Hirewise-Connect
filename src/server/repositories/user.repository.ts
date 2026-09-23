@@ -56,6 +56,10 @@ export const userRepository = {
     return db.role.findUniqueOrThrow({ where: { key }, select: { id: true } });
   },
 
+  search(db: Db, q?: string, take = 50) {
+    return db.user.findMany({ where: q ? { email: { contains: q, mode: "insensitive" } } : {}, select: { id: true, email: true, status: true, deletedAt: true, createdAt: true, lastLoginAt: true, role: { select: { key: true } }, agentProfile: { select: { id: true, displayName: true } }, clientContact: { select: { clientId: true, client: { select: { companyName: true } } } } }, orderBy: { createdAt: "desc" }, take });
+  },
+
   idsByRole(db: Db, keys: Array<"SUPER_ADMIN" | "ADMIN" | "SALES" | "RECRUITER" | "COACH" | "OPERATIONS">) {
     return db.user.findMany({ where: { status: "ACTIVE", deletedAt: null, role: { key: { in: keys } } }, select: { id: true, email: true } });
   },

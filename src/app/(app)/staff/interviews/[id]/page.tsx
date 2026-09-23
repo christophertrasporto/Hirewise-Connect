@@ -75,6 +75,7 @@ export default async function StaffInterviewRequestPage({ params }: { params: Pr
                       <div key={i.id} className="mt-3 rounded-xl bg-ink-50 p-3">
                         <div className="flex items-center justify-between"><p className="text-[13.5px] font-semibold">Round {i.round} · {fmt(i.scheduledAt, i.timezone)} ({i.timezone}) · {i.durationMin} min</p><StatusBadge status={i.status} /></div>
                         {i.meetingLink && <a href={i.meetingLink} target="_blank" rel="noopener" className="mt-1 inline-flex items-center gap-1.5 text-[13px] font-semibold text-brand-600"><Video className="h-3.5 w-3.5" /> {i.meetingLink}</a>}
+                        {i.status === "SCHEDULED" && <a href={`/api/calendar/interviews/${i.id}.ics`} className="mt-1 ml-4 inline-flex items-center gap-1.5 text-[13px] font-semibold text-ink-600 hover:text-ink-900">Add to calendar (.ics)</a>}
                         {i.clientDecision !== "NONE" && <p className="mt-1 text-[13px] text-ink-700">Client decision: <span className="font-semibold">{labelFor(i.clientDecision)}</span>{i.clientFeedback ? ` · "${i.clientFeedback}"` : ""}</p>}
                         {i.internalFeedback && <p className="mt-1 text-[13px] text-ink-500">Internal: {i.internalFeedback}</p>}
                         {i.status === "SCHEDULED" && canCoordinate && <div className="mt-3"><CompleteInterviewForm requestId={r.id} interviewId={i.id} /></div>}
@@ -89,7 +90,7 @@ export default async function StaffInterviewRequestPage({ params }: { params: Pr
           <Card title="Client request details">
             <dl className="grid gap-3 text-[14px] sm:grid-cols-2">
               <Item k="Schedule" v={r.schedule ?? "TBD"} /><Item k="Timezone" v={r.timezone} /><Item k="Preferred" v={`${r.preferredDate ? new Date(r.preferredDate).toLocaleDateString() : "any date"}${r.preferredTime ? ` · ${r.preferredTime}` : ""}`} /><Item k="Target start" v={r.targetStartDate ? new Date(r.targetStartDate).toLocaleDateString() : "TBD"} />
-              {r.requirement && <Item k="Requirement" v={r.requirement.title} />}
+              {r.requirement && <div><dt className="text-[12px] font-semibold uppercase tracking-[0.12em] text-ink-400">Requirement</dt><dd className="mt-0.5 font-medium text-ink-800">{r.requirement.title} · <Link href={`/staff/requirements/${r.requirement.id}`} className="font-semibold text-brand-600">matches</Link></dd></div>}
               {r.notes && <div className="sm:col-span-2"><Item k="Client notes" v={r.notes} /></div>}
             </dl>
           </Card>

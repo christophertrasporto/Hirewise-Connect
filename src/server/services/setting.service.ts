@@ -18,6 +18,13 @@ export const SETTING_SCHEMAS = {
   allowFreeMailClients: z.boolean().default(false),
   autoAssignAccountManager: z.boolean().default(false),
   marketplaceAccess: z.enum(["GATED", "PUBLIC"]).default("GATED"),
+  /** Section 10: weights for rule-based matching. Hard rules are not weighted. */
+  matchWeights: z.object({ skills: z.number().default(30), industry: z.number().default(10), experienceLevel: z.number().default(10), certifications: z.number().default(15), timezone: z.number().default(15), budget: z.number().default(10), assessment: z.number().default(10) }).default({ skills: 30, industry: 10, experienceLevel: 10, certifications: 15, timezone: 15, budget: 10, assessment: 10 }),
+  /** Section 14 Q18: days of inactivity after which a soft-deleted or inactive account is anonymised by the admin-run job. */
+  retentionDays: z.number().int().positive().default(730),
+  /** Section 8.8 thresholds. */
+  profileViewBurstPerHour: z.number().int().positive().default(60),
+  shortlistChurnPerDay: z.number().int().positive().default(12),
 } as const;
 
 export type SettingKey = keyof typeof SETTING_SCHEMAS;

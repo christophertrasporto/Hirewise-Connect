@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { prisma } from "@/server/db/client";
 import { requireActor } from "@/server/auth/require-actor";
 import { listOwnRequirements } from "@/server/services/requirement.service";
@@ -22,8 +23,8 @@ export default async function RequirementsPage() {
               {rows.map((r) => (
                 <li key={r.id} className="py-3">
                   <div className="flex items-center justify-between gap-3">
-                    <p className="text-[15px] font-semibold text-ink-900">{r.title}</p>
-                    <StatusBadge status={r.status} />
+                    <Link href={`/requirements/${r.id}`} className="text-[15px] font-semibold text-ink-900 hover:text-brand-700">{r.title}</Link>
+                    <span className="flex items-center gap-2"><Link href={`/requirements/${r.id}`} className="text-[12.5px] font-semibold text-brand-600">See matches</Link><StatusBadge status={r.status} /></span>
                   </div>
                   <p className="text-[12.5px] text-ink-400">{r.role} · {r.agentsRequired} agent(s){r.schedule ? ` · ${r.schedule}` : ""} · start {fmtDate(r.startDate)}</p>
                   {r.skills.length > 0 && <p className="mt-1 text-[13px] text-ink-500">Skills: {r.skills.join(", ")}</p>}

@@ -9,12 +9,16 @@ import { NotFoundError } from "@/server/policies/authorize";
 import { Card, StatusBadge, Banner, fmtDate } from "@/components/app/ui";
 import { InvoicePdfLink } from "@/components/commercial/PlacementActions";
 import { labelFor } from "@/lib/options";
+import { PayOnlineButton } from "@/components/phase5/AdminTools";
+import { getPaymentProvider } from "@/server/adapters/payments";
 
 export const metadata: Metadata = { title: "Invoice" };
 
-export default async function ClientInvoicePage({ params }: { params: Promise<{ id: string }> }) {
+export default async function ClientInvoicePage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ paid?: string }> }) {
   const actor = await requireActor();
   const { id } = await params;
+  const sp = await searchParams;
+  const online = getPaymentProvider().name !== "manual";
   let data: Awaited<ReturnType<typeof getInvoiceForClient>>;
   try {
     data = await getInvoiceForClient(prisma, actor, id);
@@ -31,6 +35,8 @@ export default async function ClientInvoicePage({ params }: { params: Promise<{ 
         <p className="mt-3 font-display text-[2.2rem] font-extrabold text-ink-900">{i.amountLabel}</p>
         {i.balance > 0 && i.status === "ISSUED" && <p className="text-[13px] text-ink-500">Balance due {i.currency} {(i.balance / 100).toFixed(2)}</p>}
         {i.placement && <p className="mt-2 text-[13.5px]"><Link href={`/placements/${i.placement.id}`} className="font-semibold text-brand-600">Placement: {i.placement.displayName} · {i.placement.positionTitle}</Link></p>}
+        {sp.paid && i.status === "PAID" && <div className="mt-5"><Banner tone="success" title="Payment received">Thank you. Your placement moves to deployment preparation.</Banner></div>}
+        {i.status === "ISSUED" && online && <div className="mt-5"><PayOnlineButton invoiceId={i.id} /></div>}
         {i.status === "ISSUED" && <div className="mt-5"><Banner tone="info" title="How to pay">{data.paymentInstructions}</Banner></div>}
         {i.payments.length > 0 && (
           <ul className="mt-5 divide-y divide-ink-100 text-[13.5px]">

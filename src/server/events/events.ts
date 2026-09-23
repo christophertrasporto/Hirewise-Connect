@@ -48,6 +48,10 @@ export type DomainEventMap = {
   DEPOSIT_PAID: { placementId: string; how: "PAID" | "WAIVED"; clientUserId: string | null; clientEmail: string | null; companyName: string; agentUserId: string; agentEmail: string; displayName: string; salesUserId: string | null };
   CANDIDATE_DEPLOYED: { placementId: string; clientUserId: string | null; clientEmail: string | null; companyName: string; agentUserId: string; agentEmail: string; displayName: string; positionTitle: string; startDate: string; salesUserId: string | null };
   PLACEMENT_STATUS_CHANGED: { placementId: string; status: string; reason: string | null; clientUserId: string | null; companyName: string; agentUserId: string; displayName: string; positionTitle: string; salesUserId: string | null };
+  // Phase 5
+  INCIDENT_CREATED: { incidentId: string; subjectUserId: string; type: string; severity: string; reportedByUserId: string };
+  USER_SUSPENDED: { userId: string; email: string; reason: string };
+  ONLINE_PAYMENT_RECEIVED: { invoiceId: string; number: string; amount: number; currency: string; clientUserId: string | null; companyName: string; salesUserId: string | null };
 };
 
 export type DomainEventType = keyof DomainEventMap;

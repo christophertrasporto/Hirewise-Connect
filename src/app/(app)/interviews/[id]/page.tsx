@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { ArrowLeft, Video } from "lucide-react";
+import { ArrowLeft, Video, CalendarPlus } from "lucide-react";
 import { prisma } from "@/server/db/client";
 import { requireActor } from "@/server/auth/require-actor";
 import { getRequest } from "@/server/services/interview.service";
@@ -67,6 +67,7 @@ export default async function InterviewRequestPage({ params }: { params: Promise
                       <div className="flex items-center justify-between"><p className="text-[14.5px] font-semibold">Round {i.round} · {fmt(i.scheduledAt, i.timezone)} ({i.timezone})</p><StatusBadge status={i.status} /></div>
                       <p className="text-[13px] text-ink-500">{i.durationMin} minutes{i.outcome ? ` · outcome: ${labelFor(i.outcome)}` : ""}</p>
                       {i.meetingLink && i.status === "SCHEDULED" && <a href={i.meetingLink} target="_blank" rel="noopener" className="mt-2 inline-flex items-center gap-1.5 text-[13.5px] font-semibold text-brand-600"><Video className="h-4 w-4" /> Join meeting</a>}
+                      {i.status === "SCHEDULED" && <a href={`/api/calendar/interviews/${i.id}.ics`} className="mt-2 ml-4 inline-flex items-center gap-1.5 text-[13.5px] font-semibold text-ink-600 hover:text-ink-900"><CalendarPlus className="h-4 w-4" /> Add to calendar</a>}
                     </li>
                   ))}
                 </ul>
@@ -103,6 +104,7 @@ export default async function InterviewRequestPage({ params }: { params: Promise
                       <div key={i.id} className="mt-3 rounded-xl bg-ink-50 p-3">
                         <div className="flex items-center justify-between"><p className="text-[13.5px] font-semibold">Round {i.round} · {fmt(i.scheduledAt, i.timezone)} ({i.timezone})</p><StatusBadge status={i.status} /></div>
                         {i.meetingLink && i.status === "SCHEDULED" && <a href={i.meetingLink} target="_blank" rel="noopener" className="mt-1 inline-flex items-center gap-1.5 text-[13px] font-semibold text-brand-600"><Video className="h-3.5 w-3.5" /> Join meeting</a>}
+                        {i.status === "SCHEDULED" && <a href={`/api/calendar/interviews/${i.id}.ics`} className="mt-1 ml-4 inline-flex items-center gap-1.5 text-[13px] font-semibold text-ink-600 hover:text-ink-900"><CalendarPlus className="h-3.5 w-3.5" /> Add to calendar</a>}
                         {i.clientDecision !== "NONE" && <p className="mt-1 text-[13px] text-ink-600">Your decision: <span className="font-semibold">{labelFor(i.clientDecision)}</span>{i.clientFeedback ? ` · ${i.clientFeedback}` : ""}</p>}
                         {r.status === "CLIENT_DECISION_PENDING" && i.status === "COMPLETED" && (i.clientDecision === "NONE" || i.clientDecision === "INTERESTED") && <div className="mt-3"><DecisionForm requestId={r.id} interviewId={i.id} displayName={c.displayName} /></div>}
                       </div>

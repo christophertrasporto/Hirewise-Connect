@@ -7,6 +7,8 @@ import { shortlistRepository } from "@/server/repositories/shortlist.repository"
 import { agentRepository } from "@/server/repositories/agent.repository";
 import { clientRepository } from "@/server/repositories/client.repository";
 import { audit } from "@/server/audit/audit";
+import { flagRepository } from "@/server/repositories/flag.repository";
+import { getSetting } from "./setting.service";
 import { publishEvent } from "@/server/events/outbox";
 import { toCandidateCardView, toCandidateClientView } from "@/server/views/agent.views";
 import { assertMarketplaceAccess } from "./search.service";
@@ -37,6 +39,18 @@ export async function addToShortlist(db: PrismaClient, actor: Actor, agentProfil
 export async function removeFromShortlist(db: PrismaClient, actor: Actor, agentProfileId: string) {
   const list = await ownDefaultList(db, actor);
   await shortlistRepository.remove(db, list.id, agentProfileId);
+  await raiseChurnFlag(db, actor, list.id);
+}
+
+/** Section 8.8: repeated add/remove churn in a day. Adds plus removals over the threshold raise one flag per day. */
+async function raiseChurnFlag(db: PrismaClient, actor: Actor, shortlistId: string) {
+  const threshold = await getSetting(db, "shortlistChurnPerDay");
+  const since = new Date(Date.now() - 86_400_000);
+  const [added, removed] = await Promise.all([db.shortlistCandidate.count({ where: { shortlistId, addedAt: { gte: since } } }), db.shortlistCandidate.count({ where: { shortlistId, removedAt: { gte: since } } })]);
+  if (added + removed < threshold) return;
+  const recent = await db.activityFlag.findFirst({ where: { userId: actor.userId, rule: "SHORTLIST_CHURN", createdAt: { gte: since } }, select: { id: true } });
+  if (recent) return;
+  await flagRepository.create(db, { userId: actor.userId, rule: "SHORTLIST_CHURN", details: { added, removed, threshold }, relatedType: "Shortlist", relatedId: shortlistId });
 }
 
 export async function setShortlistNote(db: PrismaClient, actor: Actor, agentProfileId: string, note: string) {

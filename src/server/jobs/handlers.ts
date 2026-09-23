@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { Db } from "@/server/db/types";
 import { getEmailChannel } from "@/server/adapters/email";
+import { getSmsChannel, normalisePhone } from "@/server/adapters/sms";
 import { notificationRepository } from "@/server/repositories/notification.repository";
 import { interviewRepository } from "@/server/repositories/interview.repository";
 import { notifyUser } from "@/server/services/notification.service";
@@ -30,7 +31,16 @@ export const JOB_HANDLERS: Record<string, JobHandler> = {
     const soon = p.label === "1h" ? "in about an hour" : "tomorrow";
     const contact = iv.interviewRequest.client.contacts[0];
     if (contact?.userId) await notifyUser(db, { userId: contact.userId, type: "INTERVIEW_REMINDER", title: `Interview ${soon}: ${iv.agentProfile.displayName}`, body: `${when} (${iv.timezone}).${iv.meetingLink ? ` Link: ${iv.meetingLink}` : ""}`, email: { to: contact.businessEmail }, dedupeKey: `REM:${iv.id}:${p.label}:client` });
-    await notifyUser(db, { userId: iv.agentProfile.userId, type: "INTERVIEW_REMINDER", title: `Interview ${soon} with ${iv.interviewRequest.client.companyName}`, body: `${when} (${iv.timezone}).${iv.meetingLink ? ` Link: ${iv.meetingLink}` : ""}`, email: { to: iv.agentProfile.user.email }, dedupeKey: `REM:${iv.id}:${p.label}:agent` });
+    const phone = (await db.agentPrivateContact.findUnique({ where: { agentProfileId: iv.agentProfileId }, select: { phone: true } }))?.phone ?? null;
+    await notifyUser(db, { userId: iv.agentProfile.userId, type: "INTERVIEW_REMINDER", title: `Interview ${soon} with ${iv.interviewRequest.client.companyName}`, body: `${when} (${iv.timezone}).${iv.meetingLink ? ` Link: ${iv.meetingLink}` : ""}`, email: { to: iv.agentProfile.user.email }, sms: { to: phone }, dedupeKey: `REM:${iv.id}:${p.label}:agent` });
+  },
+
+  SEND_SMS: async (db, raw) => {
+    const p = z.object({ notificationId: z.string().optional(), to: z.string(), subject: z.string(), text: z.string() }).parse(raw);
+    const to = normalisePhone(p.to);
+    if (!to) return;
+    const result = await getSmsChannel().send({ to, subject: p.subject, text: p.text });
+    if (p.notificationId) await notificationRepository.setChannelStatus(db, p.notificationId, "sms", { sentAt: new Date().toISOString(), providerId: result.providerId ?? null });
   },
 
   SEND_EMAIL: async (db, raw) => {

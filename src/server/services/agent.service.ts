@@ -12,6 +12,17 @@ import { emailSchema, requestEmailVerification } from "./auth.service";
 import { createSession } from "@/server/auth/session";
 import { audit } from "@/server/audit/audit";
 import { recomputeVerification } from "./verification.service";
+import { scanMessage } from "@/lib/message-filter";
+import { flagRepository } from "@/server/repositories/flag.repository";
+
+/** Section 8.8: contact details typed into free-text profile fields raise a flag (the edit is still saved). */
+async function flagContactInfoInProfile(db: PrismaClient, actor: Actor, agentProfileId: string, fields: Array<string | null | undefined>) {
+  const text = fields.filter(Boolean).join("\n");
+  if (!text) return;
+  const scan = scanMessage(text);
+  if (!scan.contactInfo) return;
+  await flagRepository.create(db, { userId: actor.userId, rule: "CONTACT_INFO_IN_PROFILE", details: { reasons: scan.reasons }, relatedType: "AgentProfile", relatedId: agentProfileId });
+}
 import { publishEvent } from "@/server/events/outbox";
 import { rateLimit } from "@/server/auth/rate-limit";
 import { toAgentSelfView, toAgentStaffListView, type AgentSelfView } from "@/server/views/agent.views";
@@ -168,6 +179,7 @@ export async function updatePersonal(db: PrismaClient, actor: Actor, input: z.in
 
 export async function updateProfessional(db: PrismaClient, actor: Actor, input: z.infer<typeof professionalSchema>) {
   const p = await loadOwn(db, actor);
+  await flagContactInfoInProfile(db, actor, p.id, [input.headline, input.summary]);
   await agentRepository.updateProfessional(db, p.id, { headline: input.headline, primaryRole: input.primaryRole, summary: input.summary, yearsExperience: input.yearsExperience, experienceLevel: input.experienceLevel });
   await agentRepository.replaceIndustries(db, p.id, input.industries);
   return recomputeCompletion(db, p.id);
@@ -184,6 +196,7 @@ export async function updateSkills(db: PrismaClient, actor: Actor, input: z.infe
 
 export async function addExperience(db: PrismaClient, actor: Actor, input: z.infer<typeof experienceSchema>) {
   const p = await loadOwn(db, actor);
+  await flagContactInfoInProfile(db, actor, p.id, [input.description, input.company]);
   await agentRepository.addExperience(db, p.id, {
     company: input.company || null,
     title: input.title,
@@ -257,7 +270,7 @@ export async function getAgentForStaff(db: PrismaClient, actor: Actor, agentProf
   const view = toAgentSelfView(p);
   // Private contact only with the dedicated permission (INV-P1).
   if (!actor.permissions.has("agent.read_private_contact")) view.privateContact = null;
-  return { ...view, email: actor.permissions.has("agent.read_private_contact") ? p.user.email : null };
+  return { ...view, userId: p.userId, email: actor.permissions.has("agent.read_private_contact") ? p.user.email : null };
 }
 
 export async function reviewTransition(db: PrismaClient, actor: Actor, agentProfileId: string, to: "UNDER_REVIEW" | "APPROVED" | "REVISION_REQUIRED" | "REJECTED" | "HIDDEN" | "SUSPENDED", reason?: string) {

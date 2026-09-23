@@ -10,6 +10,7 @@ import { publishEvent } from "@/server/events/outbox";
 import { getStorage } from "@/server/adapters/storage";
 import { renderSimplePdf } from "@/server/adapters/pdf";
 import { getPaymentProvider } from "@/server/adapters/payments";
+import { getEnv } from "@/server/env";
 import { toInvoiceClientView, toInvoiceStaffView, money } from "@/server/views/commercial.views";
 
 /**
@@ -225,4 +226,66 @@ export async function changeDepositPolicy(db: PrismaClient, actor: Actor, deposi
     await audit(tx, { actor, action: "DEPOSIT_RECALCULATED", entityType: "Deposit", entityId: deposit.id, previousValue: { policyId: deposit.policyId, requiredAmount: deposit.requiredAmount }, newValue: { policyId: policy.id, requiredAmount: next.amount, invoiceId: inv.id } });
     await publishEvent(tx, "DEPOSIT_REQUIRED", { placementId: placement.id, clientUserId: placement.client.contacts[0]?.userId ?? null, clientEmail: placement.client.contacts[0]?.businessEmail ?? null, companyName: placement.client.companyName, invoiceNumber: inv.number, amount: next.amount, currency: next.currency, dueAt: deposit.dueDate.toISOString(), displayName: placement.agentProfile.displayName });
   });
+}
+
+// ---------------------------------------------------------------------------
+// Online payments (Phase 5): hosted checkout through the provider adapter and webhook recording
+// ---------------------------------------------------------------------------
+
+/** The owning client starts a hosted checkout for an open invoice. Returns null when the provider has none. */
+export async function createCheckout(db: PrismaClient, actor: Actor, invoiceId: string): Promise<{ url: string } | null> {
+  const inv = await billingRepository.findInvoice(db, invoiceId);
+  if (!inv) throw new NotFoundError();
+  assertClientOwns(actor, inv);
+  if (inv.status !== "ISSUED") throw new Error("Only open invoices can be paid.");
+  const balance = inv.amount - inv.payments.reduce((s, p) => s + p.amount, 0);
+  if (balance <= 0) throw new Error("This invoice has no balance.");
+  const contact = await db.clientContact.findFirst({ where: { clientId: inv.clientId, userId: actor.userId }, select: { businessEmail: true } });
+  const base = getEnv().APP_URL;
+  const checkout = await getPaymentProvider().createCheckout({ invoiceId: inv.id, number: inv.number, amount: balance, currency: inv.currency, description: inv.description, clientEmail: contact?.businessEmail ?? null, successUrl: `${base}/billing/invoices/${inv.id}?paid=1`, cancelUrl: `${base}/billing/invoices/${inv.id}` });
+  if (!checkout) return null;
+  await billingRepository.updateInvoice(db, inv.id, { providerCheckoutId: checkout.sessionId });
+  await audit(db, { actor, action: "CHECKOUT_CREATED", entityType: "Invoice", entityId: inv.id, newValue: { provider: getPaymentProvider().name, sessionId: checkout.sessionId, amount: balance } });
+  return { url: checkout.url };
+}
+
+/**
+ * Record a payment reported by the provider (webhook or the local fake route). Idempotent on the
+ * provider reference. Runs as the system actor and reuses the same settlement path as manual recording.
+ */
+export async function recordProviderPayment(db: PrismaClient, p: { invoiceId: string; amount: number; currency: string; reference: string; payload: unknown }) {
+  const inv = await billingRepository.findInvoice(db, p.invoiceId);
+  if (!inv) throw new NotFoundError();
+  if (inv.payments.some((x) => x.reference === p.reference)) return { duplicate: true as const };
+  if (inv.status !== "ISSUED") return { duplicate: false as const, ignored: inv.status };
+  if (p.currency.toUpperCase() !== inv.currency) throw new Error(`Currency mismatch: ${p.currency} vs ${inv.currency}`);
+  const system: Actor = { userId: "system", role: "SUPER_ADMIN", permissions: new Set(["payment.record"]) };
+  const paidAt = new Date();
+  const result = await db.$transaction(async (tx) => {
+    const payment = await billingRepository.createPayment(tx, { invoiceId: inv.id, amount: p.amount, currency: inv.currency, method: "CARD", reference: p.reference, paidAt, recordedById: inv.payments[0]?.recordedById ?? (await tx.user.findFirstOrThrow({ where: { role: { key: "SUPER_ADMIN" } }, select: { id: true } })).id, providerPayload: JSON.parse(JSON.stringify({ provider: getPaymentProvider().name, payload: p.payload })) });
+    const paidTotal = await billingRepository.paidTotal(tx, inv.id);
+    const invoicePaid = paidTotal >= inv.amount;
+    if (invoicePaid) await billingRepository.updateInvoice(tx, inv.id, { status: "PAID", paidAt });
+    await audit(tx, { actor: system, action: "PAYMENT_RECORDED", entityType: "Payment", entityId: payment.id, newValue: { invoiceId: inv.id, number: inv.number, amount: p.amount, currency: inv.currency, method: "CARD", reference: p.reference, provider: getPaymentProvider().name } });
+    let depositSettled = false;
+    if (inv.depositId) {
+      const deposit = await billingRepository.findDeposit(tx, inv.depositId);
+      if (deposit && deposit.status !== "WAIVED") {
+        const depositPaid = deposit.invoices.filter((i) => i.status !== "VOID").reduce((s, i) => s + i.payments.reduce((a, x) => a + x.amount, 0), 0);
+        const status = depositPaid >= deposit.requiredAmount ? "PAID" : depositPaid > 0 ? "PARTIALLY_PAID" : "PENDING";
+        await billingRepository.updateDeposit(tx, deposit.id, { status });
+        await audit(tx, { actor: system, action: "DEPOSIT_RECORDED", entityType: "Deposit", entityId: deposit.id, previousValue: { status: deposit.status }, newValue: { status, paid: depositPaid, required: deposit.requiredAmount } });
+        if (status === "PAID" && deposit.status !== "PAID") {
+          depositSettled = true;
+          const { onDepositSettled } = await import("./placement.service");
+          await onDepositSettled(tx, system, deposit.placementId, "PAID");
+        }
+      }
+    }
+    const contact = await tx.clientContact.findFirst({ where: { clientId: inv.clientId, isPrimary: true }, select: { userId: true } });
+    const client = await tx.client.findUnique({ where: { id: inv.clientId }, select: { companyName: true, accountManagerUserId: true } });
+    await publishEvent(tx, "ONLINE_PAYMENT_RECEIVED", { invoiceId: inv.id, number: inv.number, amount: p.amount, currency: inv.currency, clientUserId: contact?.userId ?? null, companyName: client?.companyName ?? "Client", salesUserId: client?.accountManagerUserId ?? null });
+    return { duplicate: false as const, paymentId: payment.id, invoicePaid, depositSettled };
+  });
+  return result;
 }

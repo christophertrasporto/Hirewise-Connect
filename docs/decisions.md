@@ -59,3 +59,13 @@ Answers to MASTER_PROMPT.md Section 14. On 2026-09-21 Hirewise chose **"use the 
 - **Invoice PDFs** use a dependency-free single-page writer (`src/server/adapters/pdf.ts`) stored in private object storage and served by signed URL; no PDF library was added.
 - **Recurring invoicing** after activation is not automated in Phase 4; only the deposit invoice is generated. Monthly billing runs can be added as a worker job in Phase 5.
 - **Do not run `next build` while the dev server is running.** Both write `.next`; the running server then fails with ENOENT until `.next` is deleted and the server restarted (hit during Phase 4 verification).
+
+## Phase 5 notes
+
+- **`SavedSearch` table added** (not in Section 4). Section 13 Phase 5 requires saved searches for the client portal; a table keyed by client with a JSON filter set in the marketplace search schema is the smallest faithful shape.
+- **`Incident` created as specified in Section 4.8**; it had not been built in earlier phases. Evidence is stored as `Document` rows (kind INCIDENT_EVIDENCE) referenced by id.
+- **Matching is rule-based only** (INV-C6). Hard rules never score; soft rules use `Setting.matchWeights`. Skill coverage below 100% still scores proportionally but zero coverage is a hard fail. Timezone credit uses the wrapped hour difference (Manila vs Los Angeles counts as 9h).
+- **Integrations ship behind adapters with local fakes:** `PAYMENT_PROVIDER=manual|fake|stripe`, `MEETING_PROVIDER=none|fake|zoom`, `SMS_DRIVER=console|twilio`. The fake payment route is refused in production. Stripe and Zoom use their REST APIs directly (no SDKs).
+- **Online payments reuse the manual settlement path** (`recordProviderPayment` → deposit → placement), keyed idempotently on the provider reference, and are recorded as method CARD under the system actor.
+- **Data protection (Q18):** anonymisation keeps commercial and audit rows and scrubs personal data; the retention job is admin-run from Compliance → Data protection until retention periods are confirmed with counsel. Default `retentionDays` is 730.
+- **Section 8.8 thresholds** are settings: `profileViewBurstPerHour` (60) and `shortlistChurnPerDay` (12).

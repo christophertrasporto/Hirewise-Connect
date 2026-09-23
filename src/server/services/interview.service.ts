@@ -14,6 +14,8 @@ import { assertRequestTransition, OPEN_REQUEST_STATUSES, type InterviewRequestSt
 import { toRequestAgentView, toRequestClientView, toRequestStaffView, type RequestRecord } from "@/server/views/interview.views";
 import { assertMarketplaceAccess } from "./search.service";
 import { createPlacementFromSelection } from "./placement.service";
+import { getMeetingProvider } from "@/server/adapters/meetings";
+import { buildIcs, googleCalendarUrl } from "@/lib/ics";
 import { reserveForClient } from "./reservation.service";
 
 // ---------------------------------------------------------------------------
@@ -199,7 +201,17 @@ export async function scheduleInterviews(db: PrismaClient, actor: Actor, id: str
       const scheduledAt = new Date(it.scheduledAt);
       if (Number.isNaN(scheduledAt.getTime()) || scheduledAt.getTime() < Date.now()) throw new Error("Interview time must be in the future.");
       const round = r.interviews.filter((x) => x.agentProfileId === it.agentProfileId).reduce((m, x) => Math.max(m, x.round), 0) + 1;
-      const iv = await interviewRepository.createInterview(tx, { interviewRequestId: r.id, agentProfileId: it.agentProfileId, round, scheduledAt, timezone: input.timezone, durationMin: it.durationMin, meetingLink: it.meetingLink || null, coordinatorUserId: actor.userId });
+      let meetingLink = it.meetingLink || null;
+      let meeting: { provider: string; externalId: string } | null = null;
+      if (!meetingLink) {
+        const created = await getMeetingProvider().createMeeting({ topic: `Hirewise interview: ${r.role} (round ${round})`, startAt: scheduledAt, durationMin: it.durationMin, timezone: input.timezone, agenda: "Coordinated by Hirewise Connect. Please keep commercial discussion with Hirewise." }).catch(() => null);
+        if (created) {
+          meetingLink = created.joinUrl;
+          meeting = { provider: created.provider, externalId: created.externalId };
+        }
+      }
+      const iv = await interviewRepository.createInterview(tx, { interviewRequestId: r.id, agentProfileId: it.agentProfileId, round, scheduledAt, timezone: input.timezone, durationMin: it.durationMin, meetingLink, coordinatorUserId: actor.userId, meetingProvider: meeting?.provider ?? null, meetingExternalId: meeting?.externalId ?? null });
+      if (meeting) await audit(tx, { actor, action: "MEETING_CREATED", entityType: "Interview", entityId: iv.id, newValue: { provider: meeting.provider, externalId: meeting.externalId } });
       const cand = r.candidates.find((c) => c.agentProfileId === it.agentProfileId)!;
       if (cand.agentProfile.availabilityStatus === "AVAILABLE") await agentRepository.setAvailability(tx, it.agentProfileId, "INTERVIEWING", { setById: actor.userId, reason: `Interview scheduled (${r.id})` });
       for (const [label, ms] of [["24h", 24 * 3_600_000], ["1h", 3_600_000]] as const) {
@@ -207,7 +219,7 @@ export async function scheduleInterviews(db: PrismaClient, actor: Actor, id: str
         if (runAt.getTime() > Date.now()) await jobRepository.enqueue(tx, "INTERVIEW_REMINDER", { interviewId: iv.id, label }, runAt);
       }
       await audit(tx, { actor, action: "INTERVIEW_SCHEDULED", entityType: "Interview", entityId: iv.id, newValue: { requestId: r.id, agentProfileId: it.agentProfileId, scheduledAt: scheduledAt.toISOString(), round } });
-      await publishEvent(tx, "INTERVIEW_SCHEDULED", { interviewId: iv.id, requestId: r.id, clientUserId: r.client.contacts[0]?.userId ?? null, clientEmail: r.client.contacts[0]?.businessEmail ?? null, agentUserId: cand.agentProfile.userId, agentEmail: cand.agentProfile.user.email, companyName: r.client.companyName, displayName: cand.agentProfile.displayName, scheduledAt: scheduledAt.toISOString(), timezone: input.timezone, meetingLink: it.meetingLink || null, salesUserId: r.assignedSalesUserId });
+      await publishEvent(tx, "INTERVIEW_SCHEDULED", { interviewId: iv.id, requestId: r.id, clientUserId: r.client.contacts[0]?.userId ?? null, clientEmail: r.client.contacts[0]?.businessEmail ?? null, agentUserId: cand.agentProfile.userId, agentEmail: cand.agentProfile.user.email, companyName: r.client.companyName, displayName: cand.agentProfile.displayName, scheduledAt: scheduledAt.toISOString(), timezone: input.timezone, meetingLink, salesUserId: r.assignedSalesUserId });
     }
     await move(tx, actor, r, "SCHEDULED");
   });
@@ -309,4 +321,16 @@ export async function upcomingInterviewsForStaff(db: PrismaClient, actor: Actor,
   const now = new Date();
   const rows = await interviewRepository.upcomingInterviews(db, now, new Date(now.getTime() + days * 86_400_000));
   return rows.map((i) => ({ id: i.id, requestId: i.interviewRequest.id, scheduledAt: i.scheduledAt, timezone: i.timezone, displayName: i.agentProfile.displayName, companyName: i.interviewRequest.client.companyName, role: i.interviewRequest.role }));
+}
+
+/** Calendar entry for a scheduled interview: the client contact, the candidate, or staff. Agents never see internal notes. */
+export async function interviewCalendar(db: PrismaClient, actor: Actor, interviewId: string) {
+  const iv = await interviewRepository.findInterview(db, interviewId);
+  if (!iv) throw new NotFoundError();
+  const r = iv.interviewRequest;
+  const who = assertStaffOrOwner(actor, r, "interview.read_all");
+  if (who === "AGENT" && iv.agentProfileId !== actor.agentProfileId) throw new NotFoundError();
+  const title = who === "AGENT" ? `Interview with ${r.client.companyName} (${r.role})` : `Interview: ${iv.agentProfile.displayName} for ${r.role}`;
+  const ev = { uid: iv.id, title, description: `Coordinated by Hirewise Connect.${iv.meetingLink ? ` Join: ${iv.meetingLink}` : ""}`, location: iv.meetingLink ?? undefined, startAt: iv.scheduledAt, durationMin: iv.durationMin, url: iv.meetingLink ?? undefined };
+  return { ics: buildIcs(ev), googleUrl: googleCalendarUrl(ev), filename: `interview-${iv.id}.ics` };
 }

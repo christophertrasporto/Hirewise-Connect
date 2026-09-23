@@ -7,6 +7,7 @@ import { listAgentsForStaff } from "@/server/services/agent.service";
 import { PageHeader, Card, StatusBadge, EmptyState, fmtDate } from "@/components/app/ui";
 import { cn } from "@/lib/cn";
 import type { AgentProfileStatus } from "@/server/state/agent-profile";
+import { BulkAgentActions } from "@/components/phase5/AdminTools";
 
 export const metadata: Metadata = { title: "Talent" };
 
@@ -38,6 +39,7 @@ export default async function StaffTalentPage({ searchParams }: { searchParams: 
           </Link>
         ))}
       </div>
+      {rows.length > 0 && <BulkAgentActions rows={rows.map((a) => ({ id: a.id, displayName: a.displayName, status: a.status }))} canHide={actor.permissions.has("agent.hide")} canAvailability={actor.permissions.has("agent.set_availability")} canVerification={actor.permissions.has("agent.set_verification")} canNotify={actor.permissions.has("notification.broadcast")} />}
       <Card>
         {rows.length === 0 ? (
           <EmptyState title="No profiles match this filter" />

@@ -10,6 +10,8 @@ import { ForbiddenError } from "@/server/policies/authorize";
 import { PageHeader, Banner, EmptyState } from "@/components/app/ui";
 import { SearchFilters } from "@/components/marketplace/SearchFilters";
 import { CandidateCard } from "@/components/marketplace/CandidateCard";
+import { SavedSearches } from "@/components/phase5/SavedSearches";
+import { listSavedSearches } from "@/server/services/saved-search.service";
 
 export const metadata: Metadata = { title: "Find talent" };
 
@@ -36,6 +38,7 @@ export default async function TalentSearchPage({ searchParams }: { searchParams:
     if (e instanceof ForbiddenError) blocked = e.message;
     else throw e;
   }
+  const saved = await listSavedSearches(prisma, actor);
   const [skills, software, templates, courses, labels] = await Promise.all([taxonomyRepository.activeSkills(prisma), taxonomyRepository.activeSoftware(prisma), certificationRepository.templates(prisma), academyRepository.listCourses(prisma, { status: ["PUBLISHED"] }), assessmentRepository.labels(prisma)]);
 
   return (
@@ -46,6 +49,7 @@ export default async function TalentSearchPage({ searchParams }: { searchParams:
       ) : (
         <>
           <SearchFilters filters={filters} skills={skills.map((s) => ({ id: s.id, name: s.name, category: s.category }))} software={software.map((s) => ({ id: s.id, name: s.name, category: s.category }))} hasClientTimezone={!!result?.clientTimezone} certifications={templates.map((t) => ({ id: t.id, name: t.name }))} courses={courses.map((c) => ({ id: c.id, title: c.title }))} labels={labels.map((l) => ({ rank: l.rank, label: l.label }))} />
+          {actor.role === "CLIENT" && <SavedSearches saved={saved.map((s) => ({ id: s.id, name: s.name, query: s.query, lastRunAt: s.lastRunAt }))} currentFilters={filters as Record<string, unknown>} />}
           <p className="mt-6 mb-3 text-[13.5px] text-ink-500">{result!.total} candidate{result!.total === 1 ? "" : "s"}{result?.clientTimezone ? ` · timezone overlap measured from ${result.clientTimezone}` : ""}</p>
           {result!.cards.length === 0 ? (
             <EmptyState title="No candidates match these filters" description="Try widening availability or removing a skill." />

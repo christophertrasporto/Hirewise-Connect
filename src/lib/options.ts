@@ -93,6 +93,14 @@ export const RECORDING_KINDS: Array<{ value: "INTRODUCTION" | "COLD_CALL" | "CUS
 ];
 
 export const STATUS_LABELS: Record<string, string> = {
+  RATE_DISCUSSION: "Rate discussion",
+  OFF_PLATFORM_CONTACT: "Off-platform contact",
+  DIRECT_HIRE_ATTEMPT: "Direct hire attempt",
+  POLICY_VIOLATION: "Policy violation",
+  DEACTIVATED: "Deactivated",
+  DISMISSED: "Dismissed",
+  RESOLVED: "Resolved",
+  OPEN: "Open",
   AWAITING_AGREEMENT: "Awaiting agreement",
   AWAITING_DEPOSIT: "Awaiting deposit",
   DEPLOYMENT_PREP: "Deployment prep",

@@ -365,6 +365,9 @@ model User {
   compensationsSet          AgentCompensation[] @relation("CompensationSetter")
   rateChanges               RateHistory[]       @relation("RateChanger")
   paymentsRecorded          Payment[]           @relation("PaymentRecorder")
+  incidentsAsSubject        Incident[]          @relation("IncidentSubject")
+  incidentsReported         Incident[]          @relation("IncidentReporter")
+  incidentsResolved         Incident[]          @relation("IncidentResolver")
 
   permissionOverrides  UserPermissionOverride[] @relation("OverrideSubject")
   grantedOverrides     UserPermissionOverride[] @relation("OverrideGrantor")
@@ -462,6 +465,7 @@ model Client {
   interviewRequests InterviewRequest[]
   placements        Placement[]
   invoices          Invoice[]
+  savedSearches     SavedSearch[]
 
   @@index([status])
   @@index([accountManagerUserId])
@@ -917,6 +921,7 @@ model NotificationPreference {
   type   String
   inApp  Boolean @default(true)
   email  Boolean @default(true)
+  sms    Boolean @default(false)
 
   @@id([userId, type])
 }
@@ -1046,6 +1051,8 @@ model Interview {
   timezone           String
   durationMin        Int              @default(30)
   meetingLink        String?
+  meetingProvider    String?
+  meetingExternalId  String?
   coordinatorUserId  String?
   status             InterviewStatus  @default(SCHEDULED)
   clientDecision     ClientDecision   @default(NONE)
@@ -1617,25 +1624,27 @@ model Deposit {
 }
 
 model Invoice {
-  id          String        @id @default(cuid())
-  clientId    String
-  client      Client        @relation(fields: [clientId], references: [id])
-  placementId String?
-  placement   Placement?    @relation(fields: [placementId], references: [id])
-  depositId   String?
-  deposit     Deposit?      @relation(fields: [depositId], references: [id])
-  number      String        @unique
-  description String
-  amount      Int
-  currency    String        @db.Char(3)
-  status      InvoiceStatus @default(ISSUED)
-  issuedAt    DateTime      @default(now())
-  dueAt       DateTime
-  paidAt      DateTime?
-  voidReason  String?
-  pdfKey      String?
-  createdAt   DateTime      @default(now())
-  updatedAt   DateTime      @updatedAt
+  id                 String        @id @default(cuid())
+  clientId           String
+  client             Client        @relation(fields: [clientId], references: [id])
+  placementId        String?
+  placement          Placement?    @relation(fields: [placementId], references: [id])
+  depositId          String?
+  deposit            Deposit?      @relation(fields: [depositId], references: [id])
+  number             String        @unique
+  description        String
+  amount             Int
+  currency           String        @db.Char(3)
+  status             InvoiceStatus @default(ISSUED)
+  issuedAt           DateTime      @default(now())
+  dueAt              DateTime
+  paidAt             DateTime?
+  voidReason         String?
+  pdfKey             String?
+  /// Hosted checkout session id from the payment provider, when one was created.
+  providerCheckoutId String?
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
 
   payments Payment[]
 
@@ -1673,4 +1682,70 @@ model DeploymentChecklistItem {
   doneAt      DateTime?
 
   @@index([placementId, order])
+}
+
+// ---------------------------------------------------------------------------
+// Phase 5 — incidents (Section 4.8), saved searches (Section 13 Phase 5)
+// ---------------------------------------------------------------------------
+
+enum IncidentType {
+  RATE_DISCUSSION
+  OFF_PLATFORM_CONTACT
+  DIRECT_HIRE_ATTEMPT
+  POLICY_VIOLATION
+  OTHER
+}
+
+enum IncidentSeverity {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+enum IncidentStatus {
+  OPEN
+  UNDER_REVIEW
+  RESOLVED
+  DISMISSED
+}
+
+/// Section 8.8: created by Admin or Sales from flags, held messages, or reports. Evidence is Document rows.
+model Incident {
+  id                  String           @id @default(cuid())
+  subjectUserId       String
+  subjectUser         User             @relation("IncidentSubject", fields: [subjectUserId], references: [id])
+  reportedById        String
+  reportedBy          User             @relation("IncidentReporter", fields: [reportedById], references: [id])
+  type                IncidentType
+  severity            IncidentSeverity @default(MEDIUM)
+  description         String
+  evidenceDocumentIds String[]
+  relatedType         String?
+  relatedId           String?
+  status              IncidentStatus   @default(OPEN)
+  resolution          String?
+  resolvedById        String?
+  resolvedBy          User?            @relation("IncidentResolver", fields: [resolvedById], references: [id])
+  resolvedAt          DateTime?
+  createdAt           DateTime         @default(now())
+  updatedAt           DateTime         @updatedAt
+
+  @@index([subjectUserId, status])
+  @@index([status, createdAt])
+}
+
+/// Client portal: a named marketplace filter set (Phase 5). Filters use the search schema shape.
+model SavedSearch {
+  id          String    @id @default(cuid())
+  clientId    String
+  client      Client    @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  createdById String
+  name        String
+  filters     Json
+  lastRunAt   DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@unique([clientId, name])
+  @@index([clientId])
 }

@@ -20,6 +20,8 @@ import { certificationRepository } from "@/server/repositories/certification.rep
 import { LEVELS } from "@/server/services/verification.service";
 import { IssueCertificationForm, VerificationForm, CertificationReviewActions } from "@/components/academy/CourseActions";
 import { Award } from "lucide-react";
+import { incidentsForUser } from "@/server/services/incident.service";
+import { IncidentForm } from "@/components/phase5/IncidentForms";
 import { billingRatesForAgent, currentCompensationFor, compensationHistoryFor } from "@/server/services/rate.service";
 import { ProposeRateForm, RateDecision, CompensationForm } from "@/components/commercial/RateForms";
 import { rateLabel } from "@/server/views/commercial.views";
@@ -40,6 +42,7 @@ export default async function StaffAgentPage({ params }: { params: Promise<{ id:
   const notes = actor.permissions.has("note.internal.read") ? await listNotesForStaff(prisma, actor, "AGENT", a.id) : [];
   const reservableClients = actor.permissions.has("reservation.manage") && a.status === "APPROVED" ? (await clientRepository.listByStatus(prisma, "ACTIVE")).map((c) => ({ id: c.id, companyName: c.companyName })) : [];
   const templates = actor.permissions.has("certification.issue") ? await certificationRepository.templates(prisma) : [];
+  const incidents = await incidentsForUser(prisma, actor, a.userId);
   const rates = actor.permissions.has("billing_rate.read") ? await billingRatesForAgent(prisma, actor, a.id) : null;
   const compensation = actor.permissions.has("compensation.read") ? await currentCompensationFor(prisma, actor, a.id) : null;
   const compHistory = actor.permissions.has("compensation.read") ? await compensationHistoryFor(prisma, actor, a.id) : null;
@@ -178,6 +181,12 @@ export default async function StaffAgentPage({ params }: { params: Promise<{ id:
           {actor.permissions.has("agent.set_verification") && (
             <Card title="Verification level" description="Normally computed from the ladder rules. Set manually only with a reason.">
               <VerificationForm agentProfileId={a.id} current={a.verificationLevel} levels={LEVELS} />
+            </Card>
+          )}
+          {(actor.permissions.has("incident.read") || actor.permissions.has("incident.write")) && (
+            <Card title="Incidents" description="Section 8.8. Sales sees incidents they reported under Compliance.">
+              {incidents.length === 0 ? <p className="mb-3 text-[13.5px] text-ink-400">No incidents on record.</p> : <ul className="mb-3 divide-y divide-ink-100 text-[13.5px]">{incidents.map((i) => <li key={i.id} className="flex items-center justify-between py-2"><Link href={`/staff/compliance/incidents/${i.id}`} className="font-semibold text-brand-600">{labelFor(i.type)}</Link><StatusBadge status={i.status} /></li>)}</ul>}
+              {actor.permissions.has("incident.write") && <details><summary className="cursor-pointer text-[13px] font-semibold text-brand-700">Open an incident</summary><div className="mt-3"><IncidentForm subjectUserId={a.userId} subjectLabel={a.displayName} compact /></div></details>}
             </Card>
           )}
           <Card title="Timeline">

@@ -307,4 +307,20 @@ export const EVENT_HANDLERS: { [T in DomainEventType]: EventHandler<T> } = {
     await notifyUser(db, { userId: p.agentUserId, type: "PLACEMENT_STATUS_CHANGED", title: `Your placement with ${p.companyName} is ${label}`, body: p.reason ? `Reason: ${p.reason}` : "Contact Hirewise with any questions.", dedupeKey: `PLST:${p.placementId}:${p.status}:agent:${Date.now() >> 16}` });
     if (p.salesUserId) await notifyUser(db, { userId: p.salesUserId, type: "PLACEMENT_STATUS_CHANGED", title: `Placement ${label}: ${p.displayName} at ${p.companyName}`, body, dedupeKey: `PLST:${p.placementId}:${p.status}:sales:${Date.now() >> 16}` });
   },
+
+  // Phase 5
+  INCIDENT_CREATED: async (db, p) => {
+    await notifyStaff(db, ["ADMIN"], { type: "INCIDENT_CREATED", title: `${p.severity} incident: ${p.type.replace(/_/g, " ").toLowerCase()}`, body: "Review the incident under Compliance → Incidents.", dedupeKey: `INC:${p.incidentId}`, email: p.severity === "HIGH" });
+  },
+
+  USER_SUSPENDED: async (db, p) => {
+    await notifyUser(db, { userId: p.userId, type: "USER_SUSPENDED", title: "Your account has been suspended", body: `Reason: ${p.reason}. Contact Hirewise to resolve this.`, email: { to: p.email }, dedupeKey: `SUSP:${p.userId}:${Date.now() >> 16}` });
+    await notifyStaff(db, ["ADMIN"], { type: "USER_SUSPENDED", title: `User suspended: ${p.email}`, body: p.reason, dedupeKey: `SUSPA:${p.userId}:${Date.now() >> 16}` });
+  },
+
+  ONLINE_PAYMENT_RECEIVED: async (db, p) => {
+    const amount = `${p.currency} ${(p.amount / 100).toFixed(2)}`;
+    if (p.clientUserId) await notifyUser(db, { userId: p.clientUserId, type: "PAYMENT_RECEIVED", title: `Payment received for ${p.number}`, body: `${amount} was received online. Thank you.`, dedupeKey: `OPAY:${p.invoiceId}:client` });
+    if (p.salesUserId) await notifyUser(db, { userId: p.salesUserId, type: "PAYMENT_RECEIVED", title: `${p.companyName} paid ${p.number} online`, body: amount, dedupeKey: `OPAY:${p.invoiceId}:sales` });
+  },
 };

@@ -1,4 +1,4 @@
-import { LayoutDashboard, UserCircle, Building2, FileSignature, Users, Bell, Film, Search, Bookmark, ClipboardCheck, ListChecks, CalendarClock, ClipboardList, Handshake, Lock, ShieldAlert, GraduationCap, Award, Receipt, BarChart3 } from "lucide-react";
+import { LayoutDashboard, UserCircle, Building2, FileSignature, Users, Bell, Film, Search, Bookmark, ClipboardCheck, ListChecks, CalendarClock, ClipboardList, Handshake, Lock, ShieldAlert, GraduationCap, Award, Receipt, BarChart3, LineChart, UserCog } from "lucide-react";
 import { prisma } from "@/server/db/client";
 import { requireAuth } from "@/server/auth/require-actor";
 import { can } from "@/server/policies/authorize";
@@ -37,6 +37,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   if (can(actor, "reservation.manage")) nav.push({ href: "/staff/reservations", label: "Reservations", icon: <Lock /> });
   if (can(actor, "billing_rate.approve") || can(actor, "invoice.manage") || can(actor, "deposit.read")) nav.push({ href: "/staff/commercial", label: "Commercial", icon: <Receipt /> });
   if (can(actor, "report.revenue") || can(actor, "report.pipeline")) nav.push({ href: "/staff/reports", label: "Reports", icon: <BarChart3 /> });
+  if (can(actor, "report.talent") || can(actor, "report.pipeline") || can(actor, "report.academy") || can(actor, "client.read")) nav.push({ href: "/staff/analytics", label: "Analytics", icon: <LineChart /> });
+  if (can(actor, "user.manage")) nav.push({ href: "/staff/users", label: "Users", icon: <UserCog /> });
   if (can(actor, "interview.coordinate") || can(actor, "flag.review")) nav.push({ href: "/staff/compliance", label: "Compliance", icon: <ShieldAlert /> });
   if (actor.role === "AGENT" || actor.role === "CLIENT") nav.push({ href: "/account/agreements", label: "Agreements", icon: <FileSignature /> });
   nav.push({ href: "/notifications", label: "Notifications", icon: <Bell /> });
