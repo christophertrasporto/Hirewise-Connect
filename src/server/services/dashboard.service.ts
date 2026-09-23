@@ -71,7 +71,8 @@ async function interviewCounters(db: PrismaClient) {
 async function placementCounters(db: PrismaClient) {
   const rows = await placementRepository.countByStatus(db);
   const by = Object.fromEntries(rows.map((r) => [r.status, r._count._all])) as Record<string, number>;
-  return { selected: by.SELECTED ?? 0, awaitingAgreement: by.AWAITING_AGREEMENT ?? 0, awaitingDeposit: by.AWAITING_DEPOSIT ?? 0, active: by.ACTIVE ?? 0 };
+  const [pendingRates, openInvoices] = await Promise.all([db.clientBillingRate.count({ where: { status: "PENDING_APPROVAL" } }), db.invoice.count({ where: { status: "ISSUED" } })]);
+  return { selected: by.SELECTED ?? 0, awaitingAgreement: by.AWAITING_AGREEMENT ?? 0, awaitingDeposit: by.AWAITING_DEPOSIT ?? 0, deploymentPrep: by.DEPLOYMENT_PREP ?? 0, active: by.ACTIVE ?? 0, pendingRates, openInvoices };
 }
 
 function taskView(t: { id: string; type: string; title: string; dueAt: Date | null; status: string; relatedType: string | null; relatedId: string | null }) {

@@ -49,6 +49,16 @@ export function StaffDashboard({ role, stats, notifications }: Props) {
             <StatTile label="Awaiting decision" value={stats.interviews.awaitingDecision} href="/staff/interviews?f=CLIENT_DECISION_PENDING" />
             <StatTile label="Selected" value={stats.placements?.selected ?? 0} href="/staff/placements" hint="Placements awaiting terms" />
           </div>
+          {stats.placements && (
+            <div className="mt-3 grid gap-3 sm:grid-cols-3 lg:grid-cols-6">
+              <StatTile label="Awaiting agreement" value={stats.placements.awaitingAgreement} href="/staff/placements?status=AWAITING_AGREEMENT" />
+              <StatTile label="Awaiting deposit" value={stats.placements.awaitingDeposit} href="/staff/placements?status=AWAITING_DEPOSIT" />
+              <StatTile label="Deployment prep" value={stats.placements.deploymentPrep} href="/staff/placements?status=DEPLOYMENT_PREP" />
+              <StatTile label="Active placements" value={stats.placements.active} href="/staff/placements?status=ACTIVE" />
+              <StatTile label="Rate approvals" value={stats.placements.pendingRates} href="/staff/commercial" />
+              <StatTile label="Open invoices" value={stats.placements.openInvoices} href="/staff/commercial/invoices?status=ISSUED" />
+            </div>
+          )}
           <div className="mt-3 grid gap-3 sm:grid-cols-3">
             <StatTile label="Open requirements" value={stats.requirementsOpen} hint="Client hiring requirements" />
             <StatTile label="Held messages" value={stats.heldMessages} href="/staff/compliance" hint="Awaiting release or block" />

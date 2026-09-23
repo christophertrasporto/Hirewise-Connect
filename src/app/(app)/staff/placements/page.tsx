@@ -7,12 +7,14 @@ import { PageHeader, Card, StatusBadge, EmptyState, fmtDate } from "@/components
 
 export const metadata: Metadata = { title: "Placements" };
 
-export default async function StaffPlacementsPage() {
+export default async function StaffPlacementsPage({ searchParams }: { searchParams: Promise<{ status?: string }> }) {
   const actor = await requireActor();
-  const rows = await listPlacementsForStaff(prisma, actor);
+  const sp = await searchParams;
+  const status = sp.status as Parameters<typeof listPlacementsForStaff>[2];
+  const rows = await listPlacementsForStaff(prisma, actor, status);
   return (
     <>
-      <PageHeader eyebrow="Placements" title="Placement records" description="Created at client selection. The commercial pipeline (Hirewise approval, agreement, deposit, deployment checklist, activation) arrives in Phase 4." />
+      <PageHeader eyebrow="Placements" title="Placement records" description="From client selection through Hirewise approval, service agreement, deposit, deployment checklist, and activation (Section 5.5)." />
       <Card>
         {rows.length === 0 ? <EmptyState title="No placements yet" /> : (
           <table className="w-full text-left text-[14px]">
@@ -20,7 +22,7 @@ export default async function StaffPlacementsPage() {
             <tbody className="divide-y divide-ink-100">
               {rows.map((p) => (
                 <tr key={p.id}>
-                  <td className="py-3"><Link href={`/staff/talent/${p.agent.id}`} className="font-semibold text-brand-600">{p.agent.displayName}</Link></td>
+                  <td className="py-3"><Link href={`/staff/placements/${p.id}`} className="font-semibold text-brand-600">{p.agent.displayName}</Link></td>
                   <td className="py-3 text-ink-800">{p.client.companyName}</td>
                   <td className="py-3 text-ink-700">{p.positionTitle}{p.schedule ? ` · ${p.schedule}` : ""}</td>
                   <td className="py-3 text-ink-500">{fmtDate(p.createdAt)}</td>

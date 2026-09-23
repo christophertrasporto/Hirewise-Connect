@@ -20,6 +20,9 @@ import { certificationRepository } from "@/server/repositories/certification.rep
 import { LEVELS } from "@/server/services/verification.service";
 import { IssueCertificationForm, VerificationForm, CertificationReviewActions } from "@/components/academy/CourseActions";
 import { Award } from "lucide-react";
+import { billingRatesForAgent, currentCompensationFor, compensationHistoryFor } from "@/server/services/rate.service";
+import { ProposeRateForm, RateDecision, CompensationForm } from "@/components/commercial/RateForms";
+import { rateLabel } from "@/server/views/commercial.views";
 
 export const metadata: Metadata = { title: "Agent profile" };
 
@@ -37,6 +40,9 @@ export default async function StaffAgentPage({ params }: { params: Promise<{ id:
   const notes = actor.permissions.has("note.internal.read") ? await listNotesForStaff(prisma, actor, "AGENT", a.id) : [];
   const reservableClients = actor.permissions.has("reservation.manage") && a.status === "APPROVED" ? (await clientRepository.listByStatus(prisma, "ACTIVE")).map((c) => ({ id: c.id, companyName: c.companyName })) : [];
   const templates = actor.permissions.has("certification.issue") ? await certificationRepository.templates(prisma) : [];
+  const rates = actor.permissions.has("billing_rate.read") ? await billingRatesForAgent(prisma, actor, a.id) : null;
+  const compensation = actor.permissions.has("compensation.read") ? await currentCompensationFor(prisma, actor, a.id) : null;
+  const compHistory = actor.permissions.has("compensation.read") ? await compensationHistoryFor(prisma, actor, a.id) : null;
   const allowed = AGENT_PROFILE_TRANSITIONS.filter((t) => t.from === a.status && t.permission !== "OWNER" && actor.permissions.has(t.permission)).map((t) => ({ to: t.to, requiresReason: !!t.requiresReason }));
 
   return (
@@ -131,6 +137,26 @@ export default async function StaffAgentPage({ params }: { params: Promise<{ id:
           {actor.permissions.has("note.internal.read") && (
             <Card title="Internal notes" description="Never shown to the agent or clients unless you mark a note visible.">
               <NotesPanel subjectType="AGENT" subjectId={a.id} notes={notes} canWrite={actor.permissions.has("note.internal.write")} />
+            </Card>
+          )}
+          {rates && (
+            <Card title="Client billing rate" description={actor.permissions.has("billing_rate.approve") ? "What clients pay Hirewise. Publishing requires billing_rate.approve; every change is in RateHistory." : "Current published rate and your proposals. History and positioning notes are Admin-only."}>
+              {rates.published ? <p className="font-display text-[1.8rem] font-extrabold text-ink-900">{rateLabel(rates.published)}</p> : <p className="text-[13.5px] text-ink-400">No published rate. Clients see &ldquo;Set by Hirewise&rdquo;.</p>}
+              {rates.published && actor.permissions.has("billing_rate.approve") && <div className="mt-2"><RateDecision rateId={rates.published.id} mode="PUBLISHED" /></div>}
+              {rates.pending.length > 0 && (
+                <ul className="mt-3 space-y-2">
+                  {rates.pending.map((r) => <li key={r.id} className="rounded-xl border border-gold-200 bg-gold-50/60 p-3 text-[13.5px]"><p className="font-semibold text-ink-900">{rateLabel(r)} <span className="font-normal text-ink-500">· proposed by {r.proposedBy} · {fmtDate(r.createdAt)}</span></p>{r.positioningNotes && <p className="mt-1 text-[12.5px] text-ink-500">{r.positioningNotes}</p>}{actor.permissions.has("billing_rate.approve") && <div className="mt-2"><RateDecision rateId={r.id} mode="PENDING" /></div>}</li>)}
+                </ul>
+              )}
+              {a.status === "APPROVED" && actor.permissions.has("billing_rate.propose") && <div className="mt-4 border-t border-ink-100 pt-4"><ProposeRateForm agentProfileId={a.id} canSeeNotes={actor.permissions.has("billing_rate.approve")} /></div>}
+              {rates.history.length > 0 && <details className="mt-4"><summary className="cursor-pointer text-[12.5px] font-semibold text-ink-500">Rate history ({rates.history.length})</summary><ul className="mt-2 space-y-1 text-[12.5px] text-ink-500">{rates.history.map((h) => <li key={h.id}>{fmtDate(h.changedAt)} · {h.previousStatus ?? "—"} → {h.newStatus}{h.previousAmount !== null && h.previousAmount !== h.newAmount ? ` · ${(h.previousAmount / 100).toFixed(2)} → ${(h.newAmount / 100).toFixed(2)}` : ` · ${(h.newAmount / 100).toFixed(2)}`} · {h.changedBy}{h.reason ? ` · ${h.reason}` : ""}</li>)}</ul></details>}
+            </Card>
+          )}
+          {actor.permissions.has("compensation.read") && (
+            <Card title="Agent compensation (confidential)" description="What Hirewise pays the agent. Separate table, separate permission, never shown with client rates (INV-C1).">
+              {compensation ? <p className="font-display text-[1.8rem] font-extrabold text-ink-900">{rateLabel(compensation)}</p> : <p className="text-[13.5px] text-ink-400">No compensation record.</p>}
+              {actor.permissions.has("compensation.write") && <div className="mt-4 border-t border-ink-100 pt-4"><CompensationForm agentProfileId={a.id} /></div>}
+              {compHistory && compHistory.history.length > 0 && <details className="mt-4"><summary className="cursor-pointer text-[12.5px] font-semibold text-ink-500">History ({compHistory.history.length})</summary><ul className="mt-2 space-y-1 text-[12.5px] text-ink-500">{compHistory.history.map((h) => <li key={h.id}>{fmtDate(h.changedAt)} · {h.previousAmount !== null ? `${(h.previousAmount / 100).toFixed(2)} → ` : ""}{(h.newAmount / 100).toFixed(2)} {h.currency} {h.unit.toLowerCase()} · {h.changedBy}{h.reason ? ` · ${h.reason}` : ""}</li>)}</ul></details>}
             </Card>
           )}
           <Card title="Certifications and Academy">

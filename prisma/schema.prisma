@@ -353,13 +353,18 @@ model User {
 
   sessions                  Session[]
   authTokens                AuthToken[]
-  tasksAssigned             Task[]             @relation("TaskAssignee")
-  interviewRequestsAssigned InterviewRequest[] @relation("RequestSales")
-  placementsManaged         Placement[]        @relation("PlacementManager")
-  coursesOwned              AcademyCourse[]    @relation("CourseOwner")
-  courseCoachings           CourseCoach[]      @relation("CourseCoach")
-  assessmentsGiven          Assessment[]       @relation("AssessmentCoach")
-  evaluationsGiven          CoachEvaluation[]  @relation("EvaluationCoach")
+  tasksAssigned             Task[]              @relation("TaskAssignee")
+  interviewRequestsAssigned InterviewRequest[]  @relation("RequestSales")
+  placementsManaged         Placement[]         @relation("PlacementManager")
+  coursesOwned              AcademyCourse[]     @relation("CourseOwner")
+  courseCoachings           CourseCoach[]       @relation("CourseCoach")
+  assessmentsGiven          Assessment[]        @relation("AssessmentCoach")
+  evaluationsGiven          CoachEvaluation[]   @relation("EvaluationCoach")
+  ratesProposed             ClientBillingRate[] @relation("RateProposer")
+  ratesApproved             ClientBillingRate[] @relation("RateApprover")
+  compensationsSet          AgentCompensation[] @relation("CompensationSetter")
+  rateChanges               RateHistory[]       @relation("RateChanger")
+  paymentsRecorded          Payment[]           @relation("PaymentRecorder")
 
   permissionOverrides  UserPermissionOverride[] @relation("OverrideSubject")
   grantedOverrides     UserPermissionOverride[] @relation("OverrideGrantor")
@@ -456,6 +461,7 @@ model Client {
   introductions     Introduction[]
   interviewRequests InterviewRequest[]
   placements        Placement[]
+  invoices          Invoice[]
 
   @@index([status])
   @@index([accountManagerUserId])
@@ -581,6 +587,8 @@ model AgentProfile {
   interviewCandidacies InterviewRequestCandidate[]
   interviews           Interview[]
   placements           Placement[]
+  billingRates         ClientBillingRate[]
+  compensations        AgentCompensation[]
   enrollments          CourseEnrollment[]
   assessments          Assessment[]
   coachEvaluations     CoachEvaluation[]
@@ -1074,30 +1082,42 @@ model InterviewMessage {
 }
 
 model Placement {
-  id                   String            @id @default(cuid())
+  id                   String             @id @default(cuid())
   clientId             String
-  client               Client            @relation(fields: [clientId], references: [id])
+  client               Client             @relation(fields: [clientId], references: [id])
   agentProfileId       String
-  agentProfile         AgentProfile      @relation(fields: [agentProfileId], references: [id])
+  agentProfile         AgentProfile       @relation(fields: [agentProfileId], references: [id])
   requirementId        String?
   interviewRequestId   String?
-  interviewRequest     InterviewRequest? @relation(fields: [interviewRequestId], references: [id])
+  interviewRequest     InterviewRequest?  @relation(fields: [interviewRequestId], references: [id])
   interviewId          String?
-  interview            Interview?        @relation(fields: [interviewId], references: [id])
+  interview            Interview?         @relation(fields: [interviewId], references: [id])
   positionTitle        String
   schedule             String?
   timezone             String?
   startDate            DateTime?
-  status               PlacementStatus   @default(SELECTED)
+  status               PlacementStatus    @default(SELECTED)
   accountManagerUserId String?
-  accountManager       User?             @relation("PlacementManager", fields: [accountManagerUserId], references: [id])
+  accountManager       User?              @relation("PlacementManager", fields: [accountManagerUserId], references: [id])
   approvedById         String?
   activatedAt          DateTime?
   endedAt              DateTime?
   endReason            String?
   cancelledReason      String?
-  createdAt            DateTime          @default(now())
-  updatedAt            DateTime          @updatedAt
+  /// Snapshot refs taken at Hirewise approval (Section 4.6). Compensation ref is restricted (INV-C1).
+  clientBillingRateId  String?
+  clientBillingRate    ClientBillingRate? @relation(fields: [clientBillingRateId], references: [id])
+  agentCompensationId  String?
+  agentCompensation    AgentCompensation? @relation(fields: [agentCompensationId], references: [id])
+  agreementAcceptedAt  DateTime?
+  signedAgreementKey   String?
+  pausedAt             DateTime?
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+
+  deposit        Deposit?
+  invoices       Invoice[]
+  checklistItems DeploymentChecklistItem[]
 
   @@index([clientId, status])
   @@index([agentProfileId, status])
@@ -1437,4 +1457,220 @@ model VerificationRequirement {
   level     VerificationLevel @id
   rules     Json
   updatedAt DateTime          @updatedAt
+}
+
+// ---------------------------------------------------------------------------
+// 4.7 Commercial (Phase 4) — billing rates, compensation, deposits, invoices, payments
+// INV-C1: ClientBillingRate and AgentCompensation are separate tables. Never join them
+// outside a report that checks both compensation.read and billing_rate.read.
+// ---------------------------------------------------------------------------
+
+enum RateUnit {
+  HOURLY
+  MONTHLY
+}
+
+enum BillingRateStatus {
+  DRAFT
+  PENDING_APPROVAL
+  PUBLISHED
+  RETIRED
+}
+
+enum RateSubjectType {
+  CLIENT_BILLING_RATE
+  AGENT_COMPENSATION
+}
+
+enum DepositPolicyType {
+  ONE_MONTH
+  TWO_WEEKS
+  FIXED
+  PERCENTAGE
+  CUSTOM
+}
+
+enum DepositStatus {
+  PENDING
+  PARTIALLY_PAID
+  PAID
+  WAIVED
+}
+
+enum InvoiceStatus {
+  DRAFT
+  ISSUED
+  PAID
+  VOID
+}
+
+enum PaymentMethod {
+  BANK_TRANSFER
+  CARD
+  PAYPAL
+  OTHER
+}
+
+/// What the client pays Hirewise for this agent. Clients see PUBLISHED only (INV-C3).
+model ClientBillingRate {
+  id               String            @id @default(cuid())
+  agentProfileId   String
+  agentProfile     AgentProfile      @relation(fields: [agentProfileId], references: [id], onDelete: Cascade)
+  /// Minor units (cents). Never floats (INV-C4 history keeps every change).
+  amount           Int
+  currency         String            @db.Char(3)
+  unit             RateUnit
+  status           BillingRateStatus @default(PENDING_APPROVAL)
+  proposedById     String
+  proposedBy       User              @relation("RateProposer", fields: [proposedById], references: [id])
+  approvedById     String?
+  approvedBy       User?             @relation("RateApprover", fields: [approvedById], references: [id])
+  effectiveFrom    DateTime          @default(now())
+  effectiveTo      DateTime?
+  /// Internal only: never in any client, agent, or Sales projection (Section 6, footnote 7).
+  positioningNotes String?
+  decisionReason   String?
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+
+  placements Placement[]
+
+  @@index([agentProfileId, status])
+  @@index([status])
+}
+
+/// What Hirewise pays the agent. Read requires compensation.read; the agent sees their own.
+model AgentCompensation {
+  id             String       @id @default(cuid())
+  agentProfileId String
+  agentProfile   AgentProfile @relation(fields: [agentProfileId], references: [id], onDelete: Cascade)
+  amount         Int
+  currency       String       @db.Char(3)
+  unit           RateUnit
+  effectiveFrom  DateTime     @default(now())
+  effectiveTo    DateTime?
+  setById        String
+  setBy          User         @relation("CompensationSetter", fields: [setById], references: [id])
+  notes          String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  placements Placement[]
+
+  @@index([agentProfileId, effectiveTo])
+}
+
+/// INV-C4: one row per change on either rate table, written in the same transaction.
+model RateHistory {
+  id             String          @id @default(cuid())
+  subjectType    RateSubjectType
+  subjectId      String
+  agentProfileId String
+  previousAmount Int?
+  newAmount      Int
+  currency       String          @db.Char(3)
+  unit           RateUnit
+  previousStatus String?
+  newStatus      String?
+  changedById    String
+  changedBy      User            @relation("RateChanger", fields: [changedById], references: [id])
+  reason         String?
+  changedAt      DateTime        @default(now())
+
+  @@index([subjectType, subjectId])
+  @@index([agentProfileId, changedAt])
+}
+
+model DepositPolicy {
+  id        String            @id @default(cuid())
+  name      String            @unique
+  type      DepositPolicyType
+  /// FIXED/CUSTOM: minor units. PERCENTAGE: basis points of one month. Others: unused.
+  value     Int               @default(0)
+  currency  String?           @db.Char(3)
+  isDefault Boolean           @default(false)
+  isActive  Boolean           @default(true)
+  createdAt DateTime          @default(now())
+  updatedAt DateTime          @updatedAt
+
+  deposits Deposit[]
+}
+
+model Deposit {
+  id             String        @id @default(cuid())
+  placementId    String        @unique
+  placement      Placement     @relation(fields: [placementId], references: [id], onDelete: Cascade)
+  policyId       String
+  policy         DepositPolicy @relation(fields: [policyId], references: [id])
+  requiredAmount Int
+  currency       String        @db.Char(3)
+  dueDate        DateTime
+  status         DepositStatus @default(PENDING)
+  waivedById     String?
+  waivedReason   String?
+  waivedAt       DateTime?
+  approvedById   String?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  invoices Invoice[]
+}
+
+model Invoice {
+  id          String        @id @default(cuid())
+  clientId    String
+  client      Client        @relation(fields: [clientId], references: [id])
+  placementId String?
+  placement   Placement?    @relation(fields: [placementId], references: [id])
+  depositId   String?
+  deposit     Deposit?      @relation(fields: [depositId], references: [id])
+  number      String        @unique
+  description String
+  amount      Int
+  currency    String        @db.Char(3)
+  status      InvoiceStatus @default(ISSUED)
+  issuedAt    DateTime      @default(now())
+  dueAt       DateTime
+  paidAt      DateTime?
+  voidReason  String?
+  pdfKey      String?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  payments Payment[]
+
+  @@index([clientId, status])
+  @@index([placementId])
+}
+
+model Payment {
+  id              String        @id @default(cuid())
+  invoiceId       String
+  invoice         Invoice       @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  amount          Int
+  currency        String        @db.Char(3)
+  method          PaymentMethod
+  reference       String?
+  paidAt          DateTime      @default(now())
+  recordedById    String
+  recordedBy      User          @relation("PaymentRecorder", fields: [recordedById], references: [id])
+  providerPayload Json?
+  createdAt       DateTime      @default(now())
+
+  @@index([invoiceId])
+}
+
+/// Section 4.6 DeploymentChecklist: seeded from a template at DEPLOYMENT_PREP.
+model DeploymentChecklistItem {
+  id          String    @id @default(cuid())
+  placementId String
+  placement   Placement @relation(fields: [placementId], references: [id], onDelete: Cascade)
+  order       Int
+  label       String
+  isRequired  Boolean   @default(true)
+  isDone      Boolean   @default(false)
+  doneById    String?
+  doneAt      DateTime?
+
+  @@index([placementId, order])
 }

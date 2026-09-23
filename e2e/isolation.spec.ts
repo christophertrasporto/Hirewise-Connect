@@ -50,7 +50,7 @@ test("client can search, open a candidate, shortlist, and compare", async ({ pag
 
   await page.getByRole("link", { name: "Jose R." }).first().click();
   await expect(page).toHaveURL(/\/talent\//);
-  await expect(page.getByText("Set by Hirewise")).toBeVisible();
+  await expect(page.getByText(/Set by Hirewise|USD 9\.00 \/ hour/).first()).toBeVisible(); // published client rate (Phase 4) or placeholder
   await expect(page.getByText("+63")).toHaveCount(0); // no phone anywhere
   if ((await page.getByRole("button", { name: "Shortlisted" }).count()) === 0) await page.getByRole("button", { name: "Shortlist", exact: true }).click();
   await expect(page.getByRole("button", { name: "Shortlisted" })).toBeVisible();

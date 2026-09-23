@@ -44,7 +44,7 @@ export function CandidateCard({ c, canShortlist = true }: { c: CandidateCardView
       <div className="mt-auto flex items-center justify-between gap-2 pt-4">
         <div>
           <p className="text-[10.5px] font-semibold uppercase tracking-wider text-ink-400">Client rate</p>
-          <p className="text-[12.5px] font-semibold text-ink-700">Set by Hirewise</p>
+          <p className="text-[12.5px] font-semibold text-ink-700">{c.clientRate ? c.clientRate.label : "Set by Hirewise"}</p>
         </div>
         <div className="flex gap-2">
           <Link href={`/talent/${c.id}`} className="inline-flex h-9 items-center rounded-full border border-ink-200 bg-white px-3.5 text-[13px] font-semibold text-ink-800 hover:bg-ink-50">View</Link>

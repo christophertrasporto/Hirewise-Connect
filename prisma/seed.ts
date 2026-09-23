@@ -101,7 +101,9 @@ async function main() {
   // Agreements v1 with LEGAL_PLACEHOLDER bodies
   const agreementIds: Record<string, string> = {};
   for (const a of AGREEMENTS) {
-    const body = [`# ${a.title}`, "", "> LEGAL_PLACEHOLDER — replace with counsel-approved text before launch.", "", ...a.covers.map((c, i) => `## ${i + 1}. ${c}\n\nLEGAL_PLACEHOLDER`)].join("\n");
+    const body = a.type === "PLACEMENT_SERVICE_AGREEMENT"
+      ? [`# ${a.title}`, "", "> LEGAL_PLACEHOLDER — replace with counsel-approved text before launch. Placeholders in double braces are filled per placement.", "", "## 1. Parties", "", "This agreement is between Hirewise Virtual Assistance Services (\"Hirewise\") and {{companyName}} (\"Client\").", "", "## 2. Position and schedule", "", "Hirewise places {{agentName}} as {{positionTitle}}, working {{schedule}}, starting {{startDate}}.", "", "## 3. Client billing rate", "", "The Client pays Hirewise {{billingRate}}. The talent's compensation is set by Hirewise and is not part of this agreement. LEGAL_PLACEHOLDER", "", "## 4. Deposit", "", "A deposit of {{deposit}} is invoiced at approval and is due before deployment. LEGAL_PLACEHOLDER", "", "## 5. Pausing, replacement, termination", "", "LEGAL_PLACEHOLDER", "", "## 6. Invoicing and payment", "", "LEGAL_PLACEHOLDER", "", "## 7. Non-circumvention", "", "The Client engages the talent only through Hirewise for the duration set out in the Non-Circumvention Policy. LEGAL_PLACEHOLDER"].join("\n")
+      : [`# ${a.title}`, "", "> LEGAL_PLACEHOLDER — replace with counsel-approved text before launch.", "", ...a.covers.map((c, i) => `## ${i + 1}. ${c}\n\nLEGAL_PLACEHOLDER`)].join("\n");
     const row = await prisma.agreement.upsert({
       where: { type_version: { type: a.type, version: 1 } },
       create: { type: a.type, version: 1, title: a.title, bodyMarkdown: body, bodyChecksum: checksum(body), effectiveFrom: new Date("2026-01-01"), isActive: true, requiredForRole: (a.requiredForRole as DbRoleKey | null) ?? undefined },
@@ -335,6 +337,57 @@ async function main() {
     await prisma.courseEnrollment.create({ data: { courseId: csrCourse.id, agentProfileId: ana.id, status: "ENROLLED", paymentStatus: "PENDING", priceCents: csrCourse.priceCents } });
   }
 
+
+  // Phase 4 — Commercial: deposit policies, published client rates, compensation, an active placement with a paid deposit.
+  const POLICIES = [
+    { name: "One month (default)", type: "ONE_MONTH" as const, value: 0, isDefault: true },
+    { name: "Two weeks", type: "TWO_WEEKS" as const, value: 0, isDefault: false },
+    { name: "Fixed USD 500", type: "FIXED" as const, value: 50_000, currency: "USD", isDefault: false },
+    { name: "Custom (set at approval)", type: "CUSTOM" as const, value: 0, isDefault: false },
+  ];
+  for (const p of POLICIES) await prisma.depositPolicy.upsert({ where: { name: p.name }, create: { name: p.name, type: p.type, value: p.value, currency: "currency" in p ? p.currency : undefined, isDefault: p.isDefault }, update: { type: p.type, value: p.value, isDefault: p.isDefault } });
+  const ownerUser = await prisma.user.findUniqueOrThrow({ where: { email: "owner@hirewise.example" } });
+  const opsUser = await prisma.user.findUniqueOrThrow({ where: { email: "ops@hirewise.example" } });
+  const carlo = await prisma.agentProfile.findFirstOrThrow({ where: { displayName: "Carlo D." } });
+  const anaProfile = await prisma.agentProfile.findFirstOrThrow({ where: { displayName: "Ana L." } });
+  const publishRate = async (agentProfileId: string, amount: number, unit: "HOURLY" | "MONTHLY") => {
+    const existing = await prisma.clientBillingRate.findFirst({ where: { agentProfileId, status: "PUBLISHED" } });
+    if (existing) return existing;
+    const r = await prisma.clientBillingRate.create({ data: { agentProfileId, amount, currency: "USD", unit, status: "PUBLISHED", proposedById: salesUser.id, approvedById: adminUser.id, effectiveFrom: new Date(Date.now() - 20 * 86_400_000), positioningNotes: "Seeded published rate" } });
+    await prisma.rateHistory.create({ data: { subjectType: "CLIENT_BILLING_RATE", subjectId: r.id, agentProfileId, newAmount: amount, currency: "USD", unit, previousStatus: "PENDING_APPROVAL", newStatus: "PUBLISHED", changedById: adminUser.id, reason: "Seed" } });
+    return r;
+  };
+  const setComp = async (agentProfileId: string, amount: number, unit: "HOURLY" | "MONTHLY") => {
+    const existing = await prisma.agentCompensation.findFirst({ where: { agentProfileId, effectiveTo: null } });
+    if (existing) return existing;
+    const c = await prisma.agentCompensation.create({ data: { agentProfileId, amount, currency: "USD", unit, setById: ownerUser.id, effectiveFrom: new Date(Date.now() - 20 * 86_400_000), notes: "Seeded" } });
+    await prisma.rateHistory.create({ data: { subjectType: "AGENT_COMPENSATION", subjectId: c.id, agentProfileId, newAmount: amount, currency: "USD", unit, newStatus: "CURRENT", changedById: ownerUser.id, reason: "Seed" } });
+    return c;
+  };
+  const joseRate = await publishRate(jose.id, 900, "HOURLY");
+  const carloRate = await publishRate(carlo.id, 1100, "HOURLY");
+  await setComp(jose.id, 500, "HOURLY");
+  const carloComp = await setComp(carlo.id, 600, "HOURLY");
+  void joseRate;
+  // Ana: a pending proposal from Sales for Admin to approve.
+  if (!(await prisma.clientBillingRate.findFirst({ where: { agentProfileId: anaProfile.id } }))) {
+    const r = await prisma.clientBillingRate.create({ data: { agentProfileId: anaProfile.id, amount: 800, currency: "USD", unit: "HOURLY", status: "PENDING_APPROVAL", proposedById: salesUser.id, positioningNotes: "EA with AU/US founder experience; price at the top of the EA band." } });
+    await prisma.rateHistory.create({ data: { subjectType: "CLIENT_BILLING_RATE", subjectId: r.id, agentProfileId: anaProfile.id, newAmount: 800, currency: "USD", unit: "HOURLY", newStatus: "PENDING_APPROVAL", changedById: salesUser.id, reason: "Proposed" } });
+  }
+  // Carlo is ACTIVE with Acme Solar: approved, agreement accepted, deposit paid, invoice paid, checklist done.
+  const acme = await prisma.client.findFirstOrThrow({ where: { companyName: "Acme Solar" } });
+  if (!(await prisma.placement.findFirst({ where: { clientId: acme.id, agentProfileId: carlo.id } }))) {
+    const onePolicy = await prisma.depositPolicy.findUniqueOrThrow({ where: { name: "One month (default)" } });
+    const depositAmount = carloRate.amount * 173;
+    const placement = await prisma.placement.create({ data: { clientId: acme.id, agentProfileId: carlo.id, positionTitle: "Cold Caller", schedule: "Mon-Fri 9am-6pm PST", timezone: "America/Los_Angeles", startDate: new Date(Date.now() - 30 * 86_400_000), status: "ACTIVE", accountManagerUserId: salesUser.id, approvedById: adminUser.id, activatedAt: new Date(Date.now() - 30 * 86_400_000), clientBillingRateId: carloRate.id, agentCompensationId: carloComp.id, agreementAcceptedAt: new Date(Date.now() - 40 * 86_400_000), createdAt: new Date(Date.now() - 45 * 86_400_000) } });
+    const deposit = await prisma.deposit.create({ data: { placementId: placement.id, policyId: onePolicy.id, requiredAmount: depositAmount, currency: "USD", dueDate: new Date(Date.now() - 33 * 86_400_000), status: "PAID", approvedById: adminUser.id } });
+    const invoice = await prisma.invoice.create({ data: { clientId: acme.id, placementId: placement.id, depositId: deposit.id, number: `HW-${new Date().getUTCFullYear()}-00001`, description: "Placement deposit (One month) for Carlo D. - Cold Caller", amount: depositAmount, currency: "USD", status: "PAID", issuedAt: new Date(Date.now() - 40 * 86_400_000), dueAt: new Date(Date.now() - 33 * 86_400_000), paidAt: new Date(Date.now() - 35 * 86_400_000) } });
+    await prisma.payment.create({ data: { invoiceId: invoice.id, amount: depositAmount, currency: "USD", method: "BANK_TRANSFER", reference: "WIRE-48213", paidAt: new Date(Date.now() - 35 * 86_400_000), recordedById: salesUser.id } });
+    await prisma.deploymentChecklistItem.createMany({ data: ["Equipment and internet check completed", "Client tool accounts provisioned", "Schedule and timezone confirmed with client and agent", "Client kickoff call scheduled", "Agent briefed on client communication rules"].map((label, i) => ({ placementId: placement.id, order: i + 1, label, isRequired: true, isDone: true, doneById: opsUser.id, doneAt: new Date(Date.now() - 31 * 86_400_000) })) });
+    const psa = await prisma.agreement.findFirstOrThrow({ where: { type: "PLACEMENT_SERVICE_AGREEMENT", isActive: true } });
+    await prisma.agreementAcceptance.create({ data: { agreementId: psa.id, userId: clientUser.id, placementId: placement.id, bodyChecksum: checksum("seed-psa"), ipAddress: "127.0.0.1", userAgent: "seed" } });
+  }
+
   console.log("Seed complete.");
   console.log("Roles:", roleIds.size, "| Permissions:", permIds.size, "| Agreements:", AGREEMENTS.length, "| Skills:", SKILLS.length, "| Software:", SOFTWARE.length);
   console.log(`\nDemo accounts (password: ${DEMO_PASSWORD}):`);
@@ -344,6 +397,7 @@ async function main() {
   console.log(`  ${"AGENT".padEnd(12)} maria@talent.example  (draft profile: add résumé + video, then submit)`);
   console.log(`  ${"AGENT".padEnd(12)} jose@ / ana@ / carlo@talent.example  (approved, searchable; jose@ certified, ana@ has a pending course payment)`);
   console.log(`  ${"COACH".padEnd(12)} coach@hirewise.example  (owns 3 courses: 2 published, 1 draft)`);
+  console.log(`  Commercial: jose@/carlo@ have published client rates and compensation; ana@ has a pending rate proposal; carlo@ is ACTIVE at Acme Solar with a paid deposit invoice.`);
 }
 
 main()

@@ -34,6 +34,7 @@ function agentFixture() {
     coachEvaluations: [{ id: "ev1", agentProfileId: "a1", coachUserId: "coach", summary: "Reliable and coachable.", communication: 5, reliability: 4, coachability: 5, overallLabelId: "l3", visibleToClients: true, createdAt: now, updatedAt: now, overallLabel: { id: "l3", key: "EXCELLENT", label: "Excellent", rank: 3, isActive: true, createdAt: now } }],
     enrollments: [{ id: "en1", courseId: "co1", agentProfileId: "a1", status: "COMPLETED" as const, source: "INTERNAL" as const, paymentStatus: "PAID" as const, priceCents: 4900, paidCents: 4900, paymentReference: "GCASH-123", paidAt: now, paymentRecordedById: "sales", enrolledAt: now, updatedAt: now,
       course: { id: "co1", title: "Appointment Setting Fundamentals", category: "Sales" }, completion: { id: "cp1", enrollmentId: "en1", completedAt: now, examScore: 88, source: "INTERNAL" as const, externalRef: null } }],
+    billingRates: [{ amount: 900, currency: "USD", unit: "HOURLY" as const }],
   };
 }
 
@@ -56,6 +57,10 @@ describe("client-facing candidate projection (INV-A3, INV-P1)", () => {
     expect(view.locationCountry).toBe("PH");
   });
 
+  it("shows the PUBLISHED client rate amount to the client (INV-C3)", () => {
+    expect(view.clientRate).toEqual({ amount: 900, currency: "USD", unit: "HOURLY", label: "USD 9.00 / hour" });
+  });
+
   it("shows only APPROVED certifications with template-allowed scores, never the practical score or coach comments", () => {
     expect(view.certifications.map((c) => c.name)).toEqual(["Hirewise Certified Appointment Setter"]);
     expect(view.certifications[0].scores).toEqual({ examScore: 88, roleplayScore: 91 });
@@ -75,6 +80,13 @@ describe("agent self projection", () => {
     expect(keys.has("resumeKey")).toBe(false);
     expect(keys.has("governmentIdRefs")).toBe(false);
     expect(keys.has("storageKey")).toBe(false);
+  });
+
+  it("tells the agent only that a client rate is published, never the amount (INV-C2)", () => {
+    const view = toAgentSelfView(agentFixture());
+    expect(view.clientRatePublished).toBe(true);
+    const keys = collectKeys(view);
+    for (const k of ["clientRate", "billingRate", "clientBillingRateId", "amount", "positioningNotes"]) expect(keys.has(k), `forbidden key present: ${k}`).toBe(false);
   });
 });
 

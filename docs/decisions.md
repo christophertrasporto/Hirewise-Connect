@@ -50,3 +50,12 @@ Answers to MASTER_PROMPT.md Section 14. On 2026-09-21 Hirewise chose **"use the 
 - **Coach-reviewed certifications are approved on the coach recommendation**; exam-only templates approve automatically when the score clears `minExamScore`. Admin can still issue directly or revoke, always with a reason.
 - **Local Postgres clusters are now initialised as UTF8.** The embedded server on Windows defaulted to WIN1252, which rejects characters outside Latin-1 (found when a notification body contained an arrow). New clusters (`npm run db:local` on a fresh `.pgdata/`, and every test run) pass `--encoding=UTF8 --locale=C`. An existing `.pgdata/` keeps WIN1252 until it is deleted and re-seeded.
 - **Agent-facing Academy lives at `/courses`** because `/academy` is the public marketing page.
+
+## Phase 4 notes
+
+- **Deposit and invoice are created at Hirewise approval**, not at agreement acceptance, so the client sees the exact amount inside the rendered service agreement. The DEPOSIT_REQUIRED notification is sent when the agreement is accepted (entering AWAITING_DEPOSIT).
+- **Coach-style scoping for Sales on placements:** a Sales rep sees and acts on placements for assigned clients only, whatever the catalog grants, matching `assertClientOwns`.
+- **Invoice numbering** is `HW-<year>-<5 digits>` from a count inside the transaction; a unique constraint guards collisions.
+- **Invoice PDFs** use a dependency-free single-page writer (`src/server/adapters/pdf.ts`) stored in private object storage and served by signed URL; no PDF library was added.
+- **Recurring invoicing** after activation is not automated in Phase 4; only the deposit invoice is generated. Monthly billing runs can be added as a worker job in Phase 5.
+- **Do not run `next build` while the dev server is running.** Both write `.next`; the running server then fails with ENOENT until `.next` is deleted and the server restarted (hit during Phase 4 verification).

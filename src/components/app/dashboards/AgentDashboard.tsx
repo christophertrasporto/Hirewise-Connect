@@ -78,6 +78,7 @@ export function AgentDashboard({ profile, completion, notifications, requests, p
               <Row k="Availability" v={labelFor(profile.availabilityStatus)} />
               <Row k="Video" v={profile.videos[0] ? labelFor(profile.videos[0].status) : "Not uploaded"} />
               <Row k="Voice samples" v={profile.recordings.length ? `${profile.recordings.filter((r) => r.status === "APPROVED").length}/${profile.recordings.length} approved` : "None"} />
+              <Row k="Client rate" v={profile.clientRatePublished ? "Published by Hirewise" : "Not yet published"} />
               <Row k="Certifications" v={profile.certifications.filter((c) => c.status === "APPROVED").length ? profile.certifications.filter((c) => c.status === "APPROVED").map((c) => c.name).join(", ") : "None yet"} />
               <Row k="Courses" v={profile.courses.length ? `${profile.courses.filter((c) => c.status === "COMPLETED").length}/${profile.courses.length} completed` : "Browse the Academy"} />
             </dl>

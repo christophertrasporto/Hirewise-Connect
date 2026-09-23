@@ -36,7 +36,7 @@ export function ClientDashboard({ client, notifications, recommended, recentlyVi
           <StatTile label="Shortlisted" value={shortlistCount} href="/shortlist" />
           <StatTile label="Open interview requests" value={openRequests} href="/interviews" hint={decisionsPending ? `${decisionsPending} awaiting your decision` : undefined} />
           <StatTile label="Selected candidates" value={placements.filter((p) => p.status !== "CANCELLED" && p.status !== "COMPLETED").length} href="/placements" />
-          <StatTile label="Active agents" value={placements.filter((p) => p.status === "ACTIVE").length} hint="Deployment arrives in Phase 4" />
+          <StatTile label="Active agents" value={placements.filter((p) => p.status === "ACTIVE").length} href="/placements" hint={placements.some((p) => p.status === "AWAITING_AGREEMENT" || p.status === "AWAITING_DEPOSIT") ? "Action needed on a placement" : undefined} />
         </div>
       )}
 

@@ -51,7 +51,8 @@ export default async function CandidatePage({ params }: { params: Promise<{ id: 
         <div className="flex shrink-0 flex-col items-stretch gap-2 md:items-end">
           <div className="text-right">
             <p className="text-[10.5px] font-semibold uppercase tracking-wider text-ink-400">Client rate</p>
-            <p className="text-[14px] font-semibold text-ink-800">Set by Hirewise</p>
+            <p className="text-[14px] font-semibold text-ink-800">{c.clientRate ? c.clientRate.label : "Set by Hirewise"}</p>
+            {c.clientRate && <p className="text-[11.5px] text-ink-400">Published by Hirewise. Includes management and replacement cover.</p>}
           </div>
           {actor.role === "CLIENT" && (
             <div className="flex gap-2">

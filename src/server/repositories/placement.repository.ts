@@ -1,12 +1,19 @@
-import type { PlacementStatus } from "@prisma/client";
+import type { PlacementStatus, Prisma } from "@prisma/client";
 import type { Db } from "@/server/db/types";
 
 export function placementInclude() {
   return {
-    client: { select: { id: true, companyName: true, timezone: true } },
-    agentProfile: { select: { id: true, displayName: true, primaryRole: true, availabilityStatus: true, userId: true } },
+    client: { select: { id: true, companyName: true, timezone: true, accountManagerUserId: true, contacts: { where: { isPrimary: true }, select: { userId: true, businessEmail: true, name: true }, take: 1 } } },
+    agentProfile: { select: { id: true, displayName: true, primaryRole: true, availabilityStatus: true, userId: true, user: { select: { email: true } } } },
     accountManager: { select: { id: true, email: true } },
-  } as const;
+    // Snapshots (Section 4.6). The compensation snapshot is filtered out of every projection
+    // except for holders of compensation.read (INV-C1).
+    clientBillingRate: { select: { id: true, amount: true, currency: true, unit: true, status: true } },
+    agentCompensation: { select: { id: true, amount: true, currency: true, unit: true } },
+    deposit: { include: { policy: { select: { id: true, name: true, type: true } } } },
+    invoices: { orderBy: { issuedAt: "desc" }, select: { id: true, number: true, amount: true, currency: true, status: true, dueAt: true, issuedAt: true, paidAt: true } },
+    checklistItems: { orderBy: { order: "asc" } },
+  } satisfies Prisma.PlacementInclude;
 }
 
 export const placementRepository = {
@@ -49,11 +56,23 @@ export const placementRepository = {
     return db.placement.findMany({ where: status ? { status } : {}, include: placementInclude(), orderBy: { createdAt: "desc" }, take });
   },
 
-  setStatus(db: Db, id: string, status: PlacementStatus, extra: Partial<{ approvedById: string; activatedAt: Date; endedAt: Date; endReason: string; cancelledReason: string; startDate: Date }> = {}) {
+  listByStatuses(db: Db, statuses: PlacementStatus[]) {
+    return db.placement.findMany({ where: { status: { in: statuses } }, include: placementInclude(), orderBy: { activatedAt: "desc" } });
+  },
+
+  setStatus(db: Db, id: string, status: PlacementStatus, extra: Partial<{ approvedById: string; activatedAt: Date; endedAt: Date; endReason: string; cancelledReason: string; startDate: Date; pausedAt: Date | null; clientBillingRateId: string; agentCompensationId: string | null; agreementAcceptedAt: Date; signedAgreementKey: string }> = {}) {
     return db.placement.update({ where: { id }, data: { status, ...extra } });
+  },
+
+  update(db: Db, id: string, data: Partial<{ startDate: Date | null; schedule: string | null; timezone: string | null; agreementAcceptedAt: Date; signedAgreementKey: string }>) {
+    return db.placement.update({ where: { id }, data });
   },
 
   countByStatus(db: Db) {
     return db.placement.groupBy({ by: ["status"], _count: { _all: true } });
+  },
+
+  countCreatedBetween(db: Db, from: Date, to: Date) {
+    return db.placement.count({ where: { createdAt: { gte: from, lte: to } } });
   },
 };

@@ -30,6 +30,12 @@ export const FORBIDDEN_FOR_CLIENT = [
   "priceCents",
   "paidCents",
   "paymentReference",
+  // Commercial (INV-C1, INV-C2, footnote 7)
+  "agentCompensation",
+  "decisionReason",
+  "proposedBy",
+  "monthlyCompensation",
+  "margin",
 ] as const;
 
 export const FORBIDDEN_FOR_AGENT = [
@@ -45,6 +51,14 @@ export const FORBIDDEN_FOR_AGENT = [
   "accountManagerUserId",
   "passwordHash",
   "mfaSecretEnc",
+  // Commercial (INV-C2): amounts the client pays never reach the agent
+  "clientBillingRateId",
+  "clientRate",
+  "deposit",
+  "invoices",
+  "requiredAmount",
+  "positioningNotes",
+  "monthlyBilling",
 ] as const;
 
 /** Recursively collects every key in an object graph. */

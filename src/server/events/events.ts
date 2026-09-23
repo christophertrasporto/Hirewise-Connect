@@ -39,6 +39,15 @@ export type DomainEventMap = {
   CERTIFICATION_REVOKED: { certificationId: string; templateName: string; agentUserId: string; agentEmail: string; reason: string };
   CERTIFICATION_EXPIRING: { certificationId: string; templateName: string; agentUserId: string; agentEmail: string; expiresAt: string };
   ASSESSMENT_FINALISED: { assessmentId: string; agentProfileId: string; courseId: string | null; agentUserId: string; agentEmail: string; label: string | null; courseTitle: string | null };
+  // Phase 4 — commercial. Agent-facing payloads never carry client financial terms (Section 9).
+  BILLING_RATE_PROPOSED: { rateId: string; agentProfileId: string; displayName: string; proposedByUserId: string; amount: number; currency: string; unit: string };
+  BILLING_RATE_PUBLISHED: { rateId: string; agentProfileId: string; agentUserId: string; displayName: string; proposedByUserId: string };
+  BILLING_RATE_REJECTED: { rateId: string; displayName: string; proposedByUserId: string; reason: string };
+  PLACEMENT_APPROVED: { placementId: string; clientUserId: string | null; clientEmail: string | null; companyName: string; displayName: string; positionTitle: string; salesUserId: string | null; rateLabel: string; depositLabel: string };
+  DEPOSIT_REQUIRED: { placementId: string; clientUserId: string | null; clientEmail: string | null; companyName: string; invoiceNumber: string; amount: number; currency: string; dueAt: string; displayName: string };
+  DEPOSIT_PAID: { placementId: string; how: "PAID" | "WAIVED"; clientUserId: string | null; clientEmail: string | null; companyName: string; agentUserId: string; agentEmail: string; displayName: string; salesUserId: string | null };
+  CANDIDATE_DEPLOYED: { placementId: string; clientUserId: string | null; clientEmail: string | null; companyName: string; agentUserId: string; agentEmail: string; displayName: string; positionTitle: string; startDate: string; salesUserId: string | null };
+  PLACEMENT_STATUS_CHANGED: { placementId: string; status: string; reason: string | null; clientUserId: string | null; companyName: string; agentUserId: string; displayName: string; positionTitle: string; salesUserId: string | null };
 };
 
 export type DomainEventType = keyof DomainEventMap;

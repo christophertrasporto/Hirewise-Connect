@@ -24,6 +24,12 @@ function assessmentSummaryForClient(a: AgentSelfRecord) {
   return best?.resultLabel ? { label: best.resultLabel.label, rank: best.resultLabel.rank, courseTitle: best.course?.title ?? null } : null;
 }
 
+/** PUBLISHED client rate for client-facing views (INV-C3). */
+function clientRateFor(a: AgentSelfRecord) {
+  const r = a.billingRates[0];
+  return r ? { amount: r.amount, currency: r.currency, unit: r.unit, label: `${r.currency} ${(r.amount / 100).toFixed(2)} / ${r.unit === "HOURLY" ? "hour" : "month"}` } : null;
+}
+
 function coachEvaluationForClient(a: AgentSelfRecord) {
   const ev = a.coachEvaluations[0];
   if (!ev || !ev.visibleToClients) return null;
@@ -78,6 +84,8 @@ export function toAgentSelfView(a: AgentSelfRecord) {
     certifications: a.certifications.map((c) => ({ id: c.id, name: c.template.name, badgeKey: c.template.badgeKey, status: c.status, issuedAt: c.issuedAt, expiresAt: c.expiresAt })),
     assessments: a.assessments.map((s) => ({ id: s.id, courseTitle: s.course?.title ?? null, type: s.type, examScore: s.examScore, practicalScore: s.practicalScore, roleplayScore: s.roleplayScore, communicationScore: s.communicationScore, result: s.resultLabel?.label ?? null, strengths: s.strengths, areasForImprovement: s.areasForImprovement, assessedAt: s.assessedAt })),
     courses: a.enrollments.map((e) => ({ courseId: e.course.id, title: e.course.title, category: e.course.category, status: e.status, paymentStatus: e.paymentStatus, completedAt: e.completion?.completedAt ?? null, examScore: e.completion?.examScore ?? null })),
+    // Section 14 Q4 / INV-C2: the agent learns only that a client rate exists, never the amount.
+    clientRatePublished: a.billingRates.length > 0,
   };
 }
 
@@ -117,6 +125,7 @@ export function toCandidateClientView(a: AgentSelfRecord) {
     assessment: assessmentSummaryForClient(a),
     coachEvaluation: coachEvaluationForClient(a),
     completedCourses: a.enrollments.filter((e) => e.status === "COMPLETED").map((e) => ({ title: e.course.title, category: e.course.category })),
+    clientRate: clientRateFor(a),
   };
 }
 
@@ -147,6 +156,7 @@ export function toCandidateCardView(a: AgentSelfRecord) {
     campaignExperience: a.experiences.some((e) => e.isCampaign),
     certifications: a.certifications.filter((c) => c.status === "APPROVED").map((c) => ({ name: c.template.name, badgeKey: c.template.badgeKey })),
     assessmentLabel: assessmentSummaryForClient(a)?.label ?? null,
+    clientRate: clientRateFor(a),
   };
 }
 

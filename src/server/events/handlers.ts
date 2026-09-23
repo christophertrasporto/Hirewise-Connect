@@ -250,4 +250,61 @@ export const EVENT_HANDLERS: { [T in DomainEventType]: EventHandler<T> } = {
     await notifyUser(db, { userId: p.agentUserId, type: "ASSESSMENT_FINALISED", title: "Your coach recorded an assessment", body: `${p.courseTitle ? `${p.courseTitle}: ` : ""}${p.label ?? "Result recorded"}. Open Academy to see the feedback.`, email: { to: p.agentEmail }, dedupeKey: `ASMT:${p.assessmentId}` });
     if (p.courseId) await taskRepository.completeByRelated(db, "ASSESS_STUDENT", "CourseEnrollment", `${p.agentProfileId}:${p.courseId}`);
   },
+
+  // Phase 4 — commercial
+  BILLING_RATE_PROPOSED: async (db, p) => {
+    await notifyStaff(db, ["ADMIN"], { type: "BILLING_RATE_PROPOSED", title: `Client rate proposed for ${p.displayName}`, body: `${p.currency} ${(p.amount / 100).toFixed(2)} per ${p.unit === "HOURLY" ? "hour" : "month"}. Review under Commercial → Rate approvals.`, dedupeKey: `RATEP:${p.rateId}`, email: true });
+    const existing = await taskRepository.findOpenByRelated(db, "APPROVE_RATE", "ClientBillingRate", p.rateId);
+    if (!existing) await taskRepository.create(db, { type: "APPROVE_RATE", title: `Approve client rate for ${p.displayName}`, queueRole: "ADMIN", dueAt: new Date(Date.now() + 2 * 24 * 60 * 60_000), relatedType: "ClientBillingRate", relatedId: p.rateId });
+  },
+
+  BILLING_RATE_PUBLISHED: async (db, p) => {
+    await notifyUser(db, { userId: p.proposedByUserId, type: "BILLING_RATE_PUBLISHED", title: `Client rate published for ${p.displayName}`, body: "Clients now see the rate on the profile. Placements for this agent can be approved.", dedupeKey: `RATEPUB:${p.rateId}` });
+    // Agent sees only the boolean (INV-C2): no amount in the notification.
+    await notifyUser(db, { userId: p.agentUserId, type: "CLIENT_RATE_PUBLISHED", title: "Your client rate is published", body: "Hirewise has set and published the rate clients pay for your services. You never negotiate rates with clients directly.", dedupeKey: `RATEAG:${p.rateId}` });
+    await taskRepository.completeByRelated(db, "APPROVE_RATE", "ClientBillingRate", p.rateId);
+  },
+
+  BILLING_RATE_REJECTED: async (db, p) => {
+    await notifyUser(db, { userId: p.proposedByUserId, type: "BILLING_RATE_REJECTED", title: `Rate proposal for ${p.displayName} was not approved`, body: p.reason ? `Reason: ${p.reason}` : "Propose again with a revised amount.", dedupeKey: `RATEREJ:${p.rateId}` });
+    await taskRepository.completeByRelated(db, "APPROVE_RATE", "ClientBillingRate", p.rateId);
+  },
+
+  PLACEMENT_APPROVED: async (db, p) => {
+    if (p.clientUserId) await notifyUser(db, { userId: p.clientUserId, type: "PLACEMENT_APPROVED", title: `Hirewise approved ${p.displayName} for ${p.positionTitle}`, body: `Client rate ${p.rateLabel}. Next: review and accept the Placement Service Agreement under Placements, then the deposit of ${p.depositLabel} is due.`, email: p.clientEmail ? { to: p.clientEmail } : undefined, dedupeKey: `PLAPP:${p.placementId}:client` });
+    if (p.salesUserId) await notifyUser(db, { userId: p.salesUserId, type: "PLACEMENT_APPROVED", title: `Placement approved: ${p.displayName} for ${p.companyName}`, body: "The client has been asked to accept the service agreement. Follow up if it stalls.", dedupeKey: `PLAPP:${p.placementId}:sales` });
+    await taskRepository.completeByRelated(db, "FINALISE_PLACEMENT", "Placement", p.placementId);
+  },
+
+  DEPOSIT_REQUIRED: async (db, p) => {
+    if (p.clientUserId) await notifyUser(db, { userId: p.clientUserId, type: "DEPOSIT_REQUIRED", title: `Deposit invoice ${p.invoiceNumber} for ${p.displayName}`, body: `${p.currency} ${(p.amount / 100).toFixed(2)} due ${new Date(p.dueAt).toLocaleDateString()}. Open Billing to view the invoice and payment instructions.`, email: p.clientEmail ? { to: p.clientEmail } : undefined, dedupeKey: `DEPREQ:${p.placementId}:${p.invoiceNumber}` });
+  },
+
+  DEPOSIT_PAID: async (db, p) => {
+    const how = p.how === "WAIVED" ? "waived" : "received";
+    if (p.clientUserId) await notifyUser(db, { userId: p.clientUserId, type: "DEPOSIT_PAID", title: `Deposit ${how}: deployment preparation started`, body: `Hirewise is preparing ${p.displayName} for deployment. You will be notified at activation.`, email: p.clientEmail ? { to: p.clientEmail } : undefined, dedupeKey: `DEPPAID:${p.placementId}:client` });
+    // Agent: no amounts (Section 9).
+    await notifyUser(db, { userId: p.agentUserId, type: "DEPOSIT_PAID", title: `${p.companyName}: deployment preparation started`, body: "The client completed the commercial steps. Operations will confirm your schedule, equipment, and tool access before the start date.", email: { to: p.agentEmail }, dedupeKey: `DEPPAID:${p.placementId}:agent` });
+    const staff = await userRepository.idsByRole(db, ["OPERATIONS"]);
+    for (const s of [...staff.map((x) => x.id), ...(p.salesUserId ? [p.salesUserId] : [])]) await notifyUser(db, { userId: s, type: "DEPOSIT_PAID", title: `Deposit ${how}: ${p.displayName} for ${p.companyName}`, body: "Run the deployment checklist, set the start date, then activate.", dedupeKey: `DEPPAID:${p.placementId}:${s}` });
+    const existing = await taskRepository.findOpenByRelated(db, "DEPLOY_AGENT", "Placement", p.placementId);
+    if (!existing) await taskRepository.create(db, { type: "DEPLOY_AGENT", title: `Deploy ${p.displayName} to ${p.companyName}`, queueRole: "OPERATIONS", dueAt: new Date(Date.now() + 5 * 24 * 60 * 60_000), relatedType: "Placement", relatedId: p.placementId });
+  },
+
+  CANDIDATE_DEPLOYED: async (db, p) => {
+    const start = new Date(p.startDate).toLocaleDateString();
+    if (p.clientUserId) await notifyUser(db, { userId: p.clientUserId, type: "CANDIDATE_DEPLOYED", title: `${p.displayName} is active from ${start}`, body: `Your ${p.positionTitle} placement is live. Your account manager stays your point of contact.`, email: p.clientEmail ? { to: p.clientEmail } : undefined, dedupeKey: `DEPLOY:${p.placementId}:client` });
+    await notifyUser(db, { userId: p.agentUserId, type: "CANDIDATE_DEPLOYED", title: `You start with ${p.companyName} on ${start}`, body: `Position: ${p.positionTitle}. Follow the client communication rules and keep Hirewise in the loop.`, email: { to: p.agentEmail }, dedupeKey: `DEPLOY:${p.placementId}:agent` });
+    const staff = await userRepository.idsByRole(db, ["OPERATIONS"]);
+    for (const s of [...staff.map((x) => x.id), ...(p.salesUserId ? [p.salesUserId] : [])]) await notifyUser(db, { userId: s, type: "CANDIDATE_DEPLOYED", title: `Deployed: ${p.displayName} at ${p.companyName}`, body: `Start ${start}.`, dedupeKey: `DEPLOY:${p.placementId}:${s}` });
+    await taskRepository.completeByRelated(db, "DEPLOY_AGENT", "Placement", p.placementId);
+  },
+
+  PLACEMENT_STATUS_CHANGED: async (db, p) => {
+    const label = p.status.toLowerCase();
+    const body = `${p.displayName} - ${p.positionTitle} is now ${label}.${p.reason ? ` Reason: ${p.reason}` : ""}`;
+    if (p.clientUserId) await notifyUser(db, { userId: p.clientUserId, type: "PLACEMENT_STATUS_CHANGED", title: `Placement ${label}`, body, dedupeKey: `PLST:${p.placementId}:${p.status}:client:${Date.now() >> 16}` });
+    await notifyUser(db, { userId: p.agentUserId, type: "PLACEMENT_STATUS_CHANGED", title: `Your placement with ${p.companyName} is ${label}`, body: p.reason ? `Reason: ${p.reason}` : "Contact Hirewise with any questions.", dedupeKey: `PLST:${p.placementId}:${p.status}:agent:${Date.now() >> 16}` });
+    if (p.salesUserId) await notifyUser(db, { userId: p.salesUserId, type: "PLACEMENT_STATUS_CHANGED", title: `Placement ${label}: ${p.displayName} at ${p.companyName}`, body, dedupeKey: `PLST:${p.placementId}:${p.status}:sales:${Date.now() >> 16}` });
+  },
 };

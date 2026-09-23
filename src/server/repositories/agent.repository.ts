@@ -34,6 +34,7 @@ export function agentSelfInclude() {
     assessments: { where: { status: "FINAL" as const }, include: { resultLabel: true, course: { select: { title: true } } }, orderBy: { assessedAt: "desc" as const } },
     coachEvaluations: { include: { overallLabel: true }, orderBy: { createdAt: "desc" as const }, take: 1 },
     enrollments: { include: { course: { select: { id: true, title: true, category: true } }, completion: true }, orderBy: { enrolledAt: "desc" as const } },
+    billingRates: { where: { status: "PUBLISHED" as const }, select: { amount: true, currency: true, unit: true }, orderBy: { effectiveFrom: "desc" as const }, take: 1 },
   } as const;
 }
 
