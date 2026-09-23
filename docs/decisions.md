@@ -78,6 +78,7 @@ Answers to MASTER_PROMPT.md Section 14. On 2026-09-21 Hirewise chose **"use the 
 - **Security headers** are set in `next.config.ts`; a strict Content-Security-Policy is deferred until a nonce pipeline for Next.js inline scripts is added.
 - **Retention job stays admin-run** until periods are confirmed with counsel; `retentionDays` is editable under Staff → Settings and the readiness page warns while it is the default.
 - **Seed** now matches Section 12 volumes and is idempotent by email; e2e specs rely on Acme's shortlist being empty and on the names Jose R., Carlo D., and Maria S. being unique.
+- **Seed scopes (2026-09-24).** `prisma/seed-foundation.ts` holds the reference data (roles, permissions, agreements, settings, taxonomies, Academy labels and templates, verification ladder, deposit policies) and is what `npm run db:seed:foundation` runs in production. `npm run db:seed` adds the demo accounts and refuses Supabase hosts or `NODE_ENV=production` unless `ALLOW_DEMO_SEED=1`. The first Super Admin is created by `npm run bootstrap:admin` (`scripts/bootstrap-admin.ts`), which runs outside the service layer because no actor exists yet, writes the `USER_CREATED` audit row, and never overwrites an existing password without `--reset-password`.
 
 ## Supabase integration notes
 

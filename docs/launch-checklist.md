@@ -42,7 +42,7 @@ Both contain the database password, so they are secrets: put them only in Vercel
 DATABASE_URL="<pooled>" DIRECT_URL="<direct>" npm run db:deploy
 ```
 
-Then seed the foundation data only (roles, permissions, agreements, settings, taxonomies) and remove the demo accounts; the readiness page warns while any `.example` login exists.
+Then seed the foundation data only with `npm run db:seed:foundation` (roles, permissions, agreement placeholders, settings, taxonomies, Academy labels and templates, verification ladder, deposit policies; no accounts) and create the first Super Admin with `npm run bootstrap:admin -- --email <you> --production`. The plain `db:seed` (demo accounts) refuses Supabase hosts unless `ALLOW_DEMO_SEED=1`.
 
 **Connect Vercel**
 
@@ -80,8 +80,8 @@ Then seed the foundation data only (roles, permissions, agreements, settings, ta
 ## 4. Go-live sequence
 
 1. Provision the Supabase projects (Section 2a); run `npm run db:deploy` with the environment's `DIRECT_URL`.
-2. Run the seed **only** for roles, permissions, agreements, settings, and taxonomies, then delete the demo accounts (every `*.example` login) from Staff → Users, or run the seed against an empty database and anonymise them. The readiness page warns while any `.example` account exists.
-3. Create the real Super Admin, sign in, enrol MFA, then create Admin, Sales, Recruiter, Coach, and Operations accounts.
+2. Run `DATABASE_URL=<session pooler> npm run db:seed:foundation`: reference data only, no accounts, safe to re-run. Never run the plain `db:seed` here; it refuses Supabase hosts because every demo account shares a published password. The readiness page warns while any `.example` account exists.
+3. Create the real Super Admin with `npm run bootstrap:admin -- --email <you> --production` (reads `PROD_DIRECT_URL` from the local, git-ignored `.env`; prints a one-time password unless `BOOTSTRAP_ADMIN_PASSWORD` is set). Sign in, enrol MFA, then create Admin, Sales, Recruiter, Coach, and Operations accounts from Staff → Users. Re-run with `--reset-password` to rotate the password until SMTP delivers reset links.
 4. Publish counsel text for every agreement (Staff → Agreements) and confirm the readiness page shows no placeholder failures.
 5. Set retention days, hours per month, reservation TTL, and match weights under Staff → Settings. Check deposit policies under Commercial → Deposit policies.
 6. Configure Stripe, Zoom, Twilio, SMTP, and storage; redeploy; confirm the readiness page is all green apart from deliberate warnings.
