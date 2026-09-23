@@ -18,7 +18,8 @@
     "db:generate": "prisma generate",
     "worker": "tsx scripts/worker.ts",
     "postinstall": "prisma generate",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "hooks:install": "git config core.hooksPath scripts/git-hooks"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1136.0",
