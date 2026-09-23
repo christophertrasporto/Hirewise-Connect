@@ -60,9 +60,13 @@ export function getEnv(): Env {
   }
   // Supabase pooler (Supavisor, transaction mode): prepared statements are unsupported, so Prisma needs
   // pgbouncer=true, and migrations must go through the direct connection.
-  if (/pooler\.supabase\.com/.test(parsed.data.DATABASE_URL)) {
-    if (!/[?&]pgbouncer=true/.test(parsed.data.DATABASE_URL)) throw new Error("DATABASE_URL points at the Supabase pooler but lacks ?pgbouncer=true");
-    if (!parsed.data.DIRECT_URL || /pooler\.supabase\.com/.test(parsed.data.DIRECT_URL)) throw new Error("DIRECT_URL must be the direct (non-pooled) Supabase connection when DATABASE_URL uses the pooler");
+  // Port 6543 on the pooler host is transaction mode (needs pgbouncer=true, no migrations). Port 5432 on the
+  // same host is session mode and is the right DIRECT_URL for IPv4-only hosts such as Vercel and CI.
+  const port = (u: string) => { try { return new URL(u).port; } catch { return ""; } };
+  if (/pooler\.supabase\.com/.test(parsed.data.DATABASE_URL) && port(parsed.data.DATABASE_URL) === "6543") {
+    if (!/[?&]pgbouncer=true/.test(parsed.data.DATABASE_URL)) throw new Error("DATABASE_URL uses the Supabase transaction pooler (6543) but lacks ?pgbouncer=true");
+    if (!parsed.data.DIRECT_URL) throw new Error("DIRECT_URL is required when DATABASE_URL uses the Supabase transaction pooler");
+    if (port(parsed.data.DIRECT_URL) === "6543") throw new Error("DIRECT_URL must not use the transaction pooler port 6543; use the session connection on port 5432");
   }
   if (parsed.data.STORAGE_DRIVER === "s3") {
     const missing = ["S3_ENDPOINT", "S3_BUCKET", "S3_ACCESS_KEY_ID", "S3_SECRET_ACCESS_KEY"].filter((k) => !parsed.data[k as keyof Env]);

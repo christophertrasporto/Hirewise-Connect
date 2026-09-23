@@ -99,9 +99,10 @@ export async function launchReadiness(db: PrismaClient, actor: Actor): Promise<{
   add({ key: "devLinks", label: "DEV_EXPOSE_LINKS off", status: process.env.DEV_EXPOSE_LINKS === "true" ? (env.NODE_ENV === "production" ? "fail" : "warn") : "pass", detail: process.env.DEV_EXPOSE_LINKS === "true" ? "Emailed links are shown in the UI." : "Links are only emailed." });
 
   // Database (Supabase pooled + direct)
-  const pooled = /pooler\.supabase\.com/.test(env.DATABASE_URL);
+  const portOf = (u: string) => { try { return new URL(u).port; } catch { return ""; } };
+  const pooled = /pooler\.supabase\.com/.test(env.DATABASE_URL) && portOf(env.DATABASE_URL) === "6543";
   const direct = process.env.DIRECT_URL ?? "";
-  add({ key: "database", label: "Database connection", status: pooled ? (direct && !/pooler\.supabase\.com:6543/.test(direct) ? "pass" : "fail") : direct ? "pass" : "warn", detail: pooled ? "DATABASE_URL uses the Supabase pooler; migrations go through DIRECT_URL." : direct ? "Direct connection for both runtime and migrations." : "DIRECT_URL not set; prisma migrate falls back to DATABASE_URL. Set both for Supabase." });
+  add({ key: "database", label: "Database connection", status: pooled ? (direct && portOf(direct) !== "6543" ? "pass" : "fail") : direct ? "pass" : "warn", detail: pooled ? "DATABASE_URL uses the Supabase transaction pooler (6543); migrations go through DIRECT_URL on 5432." : direct ? "Direct connection for both runtime and migrations." : "DIRECT_URL not set; prisma migrate falls back to DATABASE_URL. Set both for Supabase." });
 
   // Accounts
   const demo = await db.user.count({ where: { email: { endsWith: ".example" }, deletedAt: null } });
