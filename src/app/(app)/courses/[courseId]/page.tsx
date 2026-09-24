@@ -8,6 +8,7 @@ import { getEnrollmentForAgent } from "@/server/services/academy.service";
 import { NotFoundError } from "@/server/policies/authorize";
 import { PageHeader, Card, StatusBadge, Banner, EmptyState, fmtDate } from "@/components/app/ui";
 import { EnrolButton, StartExamButton } from "@/components/academy/AgentCourseActions";
+import { LessonContent, LessonOutline } from "@/components/academy/LessonContent";
 
 export const metadata: Metadata = { title: "Course" };
 
@@ -35,10 +36,22 @@ export default async function CoursePage({ params }: { params: Promise<{ courseI
 
       <div className="grid gap-5 lg:grid-cols-[1.3fr_0.7fr]">
         <div className="space-y-5">
-          <Card title="Syllabus">
-            {course.syllabus ? <div className="whitespace-pre-line text-[14.5px] leading-relaxed text-ink-700">{course.syllabus}</div> : enrollment && !locked ? <EmptyState title="The coach has not added a syllabus" /> : <div className="flex items-center gap-3 rounded-2xl bg-ink-50 p-5 text-[14px] text-ink-500"><Lock className="h-5 w-5 text-ink-300" /> {enrollment ? "Unlocks after payment." : "Enrol to read the syllabus and lesson content."}</div>}
-            {course.contentUrl && <a href={course.contentUrl} target="_blank" rel="noreferrer" className="mt-4 inline-flex items-center gap-1.5 text-[14px] font-semibold text-brand-600 hover:text-brand-700">Open lesson materials <ExternalLink className="h-4 w-4" /></a>}
+          <Card title="Lessons" description={course.lessonCount > 0 ? `${course.outline.length} module${course.outline.length === 1 ? "" : "s"} · ${course.lessonCount} lesson${course.lessonCount === 1 ? "" : "s"}` : undefined}>
+            {course.modules ? (
+              course.modules.length === 0 ? <EmptyState title="The coach has not added lessons yet" description={course.syllabus ? "See the overview below." : undefined} /> : <LessonContent modules={course.modules} />
+            ) : (
+              <>
+                <div className="mb-4 flex items-center gap-3 rounded-2xl bg-ink-50 p-5 text-[14px] text-ink-500"><Lock className="h-5 w-5 text-ink-300" /> {enrollment ? "Lessons unlock as soon as your payment is recorded." : "Enrol to open the lessons."}</div>
+                {course.outline.length > 0 && <LessonOutline modules={course.outline} />}
+              </>
+            )}
           </Card>
+          {(course.syllabus || course.contentUrl) && (
+            <Card title="Overview">
+              {course.syllabus && <div className="whitespace-pre-line text-[14.5px] leading-relaxed text-ink-700">{course.syllabus}</div>}
+              {course.contentUrl && <a href={course.contentUrl} target="_blank" rel="noreferrer" className="mt-4 inline-flex items-center gap-1.5 text-[14px] font-semibold text-brand-600 hover:text-brand-700">Open external course materials <ExternalLink className="h-4 w-4" /></a>}
+            </Card>
+          )}
           {enrollment && enrollment.attempts.length > 0 && (
             <Card title="Exam attempts">
               <ul className="divide-y divide-ink-100 text-[14px]">

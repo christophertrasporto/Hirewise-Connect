@@ -8,6 +8,9 @@ import { audit } from "@/server/audit/audit";
 import { publishEvent } from "@/server/events/outbox";
 import { evaluateCertification } from "./certification.service";
 import { toCourseAgentView, toCourseCoachView, toEnrollmentAgentView } from "@/server/views/academy.views";
+import { getStorage, newStorageKey } from "@/server/adapters/storage";
+import { rateLimit } from "@/server/auth/rate-limit";
+import type { LessonWrite } from "@/server/repositories/academy.repository";
 
 const optionalText = (max: number) => z.string().trim().max(max).optional().or(z.literal(""));
 
@@ -71,7 +74,10 @@ export async function updateCourse(db: PrismaClient, actor: Actor, courseId: str
   });
 }
 
-/** Coach submits for Admin publishing. A published course being edited stays published. */
+/**
+ * Coach submits for Admin publishing. Course details, curriculum, and exam stay editable at every status,
+ * including PUBLISHED: edits go live immediately and the course never leaves the catalog.
+ */
 export async function submitCourseForApproval(db: PrismaClient, actor: Actor, courseId: string) {
   const c = await loadEditable(db, actor, courseId);
   if (c.status !== "DRAFT") throw new Error("Only draft courses can be submitted.");
@@ -133,6 +139,7 @@ export const examSchema = z.object({
   timeLimitMin: z.coerce.number().int().min(5).max(240).optional().or(z.literal("")),
   maxAttempts: z.coerce.number().int().min(1).max(10).default(2),
   questions: z.array(z.object({
+    id: z.string().trim().min(1).optional(),
     prompt: z.string().trim().min(5, "Write the question.").max(1000),
     options: z.array(z.string().trim().min(1)).min(2, "At least two options.").max(6),
     correctIndex: z.coerce.number().int().min(0),
@@ -146,9 +153,212 @@ export async function saveExam(db: PrismaClient, actor: Actor, courseId: string,
   for (const q of input.questions) if (q.correctIndex >= q.options.length) throw new Error(`Question "${q.prompt.slice(0, 40)}" marks an answer that does not exist.`);
   await db.$transaction(async (tx) => {
     const exam = await academyRepository.upsertExam(tx, c.id, { title: input.title, instructions: input.instructions || null, timeLimitMin: input.timeLimitMin === "" || input.timeLimitMin === undefined ? null : input.timeLimitMin, maxAttempts: input.maxAttempts });
-    await academyRepository.replaceQuestions(tx, exam.id, input.questions.map((q) => ({ prompt: q.prompt, options: q.options, correctIndex: q.correctIndex, points: q.points, explanation: q.explanation || null })));
+    await academyRepository.syncQuestions(tx, exam.id, input.questions.map((q) => ({ id: q.id, prompt: q.prompt, options: q.options, correctIndex: q.correctIndex, points: q.points, explanation: q.explanation || null })));
     await audit(tx, { actor, action: "COURSE_UPDATED", entityType: "Exam", entityId: exam.id, newValue: { questions: input.questions.length, maxAttempts: input.maxAttempts } });
   });
+}
+
+
+// ---------------------------------------------------------------------------
+// Coach: curriculum (modules and lessons). Editable at any status, including PUBLISHED.
+// ---------------------------------------------------------------------------
+
+export const LESSON_CONTENT_TYPES = ["VIDEO", "AUDIO", "LINK", "DOCUMENT", "TEXT"] as const;
+export type LessonContentType = (typeof LESSON_CONTENT_TYPES)[number];
+
+/** Upload categories for lesson files: MIME allowlist and size caps (Section 12, security baseline). */
+export const LESSON_UPLOAD_RULES = {
+  VIDEO: { maxBytes: 500 * 1024 * 1024, mimes: { "video/mp4": "mp4", "video/webm": "webm", "video/quicktime": "mov" } },
+  AUDIO: { maxBytes: 100 * 1024 * 1024, mimes: { "audio/mpeg": "mp3", "audio/mp3": "mp3", "audio/wav": "wav", "audio/x-wav": "wav", "audio/mp4": "m4a", "audio/x-m4a": "m4a", "audio/webm": "webm", "audio/ogg": "ogg" } },
+  DOCUMENT: { maxBytes: 50 * 1024 * 1024, mimes: { "application/pdf": "pdf", "application/msword": "doc", "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "docx", "application/vnd.ms-powerpoint": "ppt", "application/vnd.openxmlformats-officedocument.presentationml.presentation": "pptx", "application/vnd.ms-excel": "xls", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": "xlsx", "text/plain": "txt", "text/csv": "csv" } },
+} as const;
+export type LessonUploadKind = keyof typeof LESSON_UPLOAD_RULES;
+
+export const lessonUploadRequestSchema = z.object({
+  kind: z.enum(["VIDEO", "AUDIO", "DOCUMENT"]),
+  contentType: z.string().min(1),
+  sizeBytes: z.coerce.number().int().positive(),
+  fileName: z.string().trim().max(200).optional(),
+});
+
+export const moduleSchema = z.object({
+  id: z.string().trim().min(1).optional(),
+  title: z.string().trim().min(2, "Give the module a title.").max(120),
+  description: optionalText(1000),
+});
+export type ModuleInput = z.infer<typeof moduleSchema>;
+
+const optionalInt = z.coerce.number().int().nonnegative().optional().or(z.literal(""));
+
+export const lessonSchema = z
+  .object({
+    id: z.string().trim().min(1).optional(),
+    moduleId: z.string().trim().min(1, "Pick a module."),
+    title: z.string().trim().min(2, "Give the lesson a title.").max(160),
+    contentType: z.enum(LESSON_CONTENT_TYPES),
+    /** Markdown for TEXT lessons; optional notes shown under other lesson types. */
+    body: optionalText(50000),
+    url: z.string().trim().url("Enter a full URL, including https://").optional().or(z.literal("")),
+    storageKey: z.string().trim().max(300).optional().or(z.literal("")),
+    fileName: optionalText(200),
+    contentMime: optionalText(120),
+    sizeBytes: optionalInt,
+    durationSec: optionalInt,
+  })
+  .superRefine((v, ctx) => {
+    const has = (x: string | number | undefined) => x !== undefined && x !== "";
+    if (v.contentType === "TEXT" && !has(v.body)) ctx.addIssue({ code: "custom", path: ["body"], message: "Write the lesson content." });
+    if (v.contentType === "LINK" && !has(v.url)) ctx.addIssue({ code: "custom", path: ["url"], message: "Enter the link." });
+    if (v.contentType === "VIDEO" && !has(v.url) && !has(v.storageKey)) ctx.addIssue({ code: "custom", path: ["url"], message: "Upload a video file or paste a video URL." });
+    if ((v.contentType === "AUDIO" || v.contentType === "DOCUMENT") && !has(v.storageKey)) ctx.addIssue({ code: "custom", path: ["storageKey"], message: v.contentType === "AUDIO" ? "Upload an audio file." : "Upload a document." });
+  });
+export type LessonInput = z.infer<typeof lessonSchema>;
+
+function lessonKeyPrefix(courseId: string) {
+  return `courses/${courseId}/lessons/`;
+}
+
+/** Step 1 of a lesson file upload: a presigned PUT scoped to the course. Nothing is recorded until saveLesson. */
+export async function createLessonUploadUrl(db: PrismaClient, actor: Actor, courseId: string, raw: z.infer<typeof lessonUploadRequestSchema>) {
+  const c = await loadEditable(db, actor, courseId);
+  const input = lessonUploadRequestSchema.parse(raw);
+  rateLimit(`lesson-upload:${actor.userId}`, 60, 60 * 60_000);
+  const rule = LESSON_UPLOAD_RULES[input.kind];
+  const ext = (rule.mimes as Record<string, string>)[input.contentType];
+  if (!ext) throw new Error(`Unsupported file type for a ${input.kind.toLowerCase()} lesson: ${input.contentType}`);
+  if (input.sizeBytes > rule.maxBytes) throw new Error(`File is too large. Maximum for ${input.kind.toLowerCase()} is ${Math.round(rule.maxBytes / 1024 / 1024)} MB.`);
+  const key = newStorageKey(`${lessonKeyPrefix(c.id)}${input.kind.toLowerCase()}`, ext);
+  const upload = await getStorage().createUploadUrl(key, input.contentType);
+  return { key, ...upload };
+}
+
+async function moduleOf(db: PrismaClient, courseId: string, moduleId: string) {
+  const m = await academyRepository.findModule(db, moduleId);
+  if (!m || m.courseId !== courseId) throw new NotFoundError();
+  return m;
+}
+
+export async function saveModule(db: PrismaClient, actor: Actor, courseId: string, raw: ModuleInput) {
+  const c = await loadEditable(db, actor, courseId);
+  const input = moduleSchema.parse(raw);
+  const data = { title: input.title, description: input.description || null };
+  return db.$transaction(async (tx) => {
+    let id: string;
+    if (input.id) {
+      await moduleOf(db, c.id, input.id);
+      id = (await academyRepository.updateModule(tx, input.id, data)).id;
+    } else {
+      id = (await academyRepository.createModule(tx, c.id, data)).id;
+    }
+    await audit(tx, { actor, action: "COURSE_UPDATED", entityType: "CourseModule", entityId: id, newValue: { courseId: c.id, title: input.title, op: input.id ? "update" : "create" } });
+    return id;
+  });
+}
+
+export async function deleteModule(db: PrismaClient, actor: Actor, courseId: string, moduleId: string) {
+  const c = await loadEditable(db, actor, courseId);
+  const m = await moduleOf(db, c.id, moduleId);
+  await db.$transaction(async (tx) => {
+    await academyRepository.deleteModule(tx, m.id);
+    await audit(tx, { actor, action: "COURSE_UPDATED", entityType: "CourseModule", entityId: m.id, previousValue: { title: m.title, lessons: m.lessons.length }, newValue: { courseId: c.id, op: "delete" } });
+  });
+}
+
+export async function moveModule(db: PrismaClient, actor: Actor, courseId: string, moduleId: string, direction: -1 | 1) {
+  const c = await loadEditable(db, actor, courseId);
+  const modules = await academyRepository.listModules(db, c.id);
+  const i = modules.findIndex((m) => m.id === moduleId);
+  if (i < 0) throw new NotFoundError();
+  const j = i + direction;
+  if (j < 0 || j >= modules.length) return;
+  await db.$transaction((tx) => academyRepository.swapModuleOrder(tx, modules[i], modules[j]));
+}
+
+/** Clears the fields that do not apply to the chosen content type so a lesson has exactly one source. */
+function normaliseLesson(input: LessonInput): LessonWrite {
+  const num = (x: number | "" | undefined) => (x === undefined || x === "" ? null : x);
+  const file = input.contentType === "AUDIO" || input.contentType === "DOCUMENT" || (input.contentType === "VIDEO" && !!input.storageKey);
+  return {
+    title: input.title,
+    contentType: input.contentType,
+    body: input.body || null,
+    url: input.contentType === "LINK" || (input.contentType === "VIDEO" && !file) ? input.url || null : null,
+    storageKey: file ? input.storageKey || null : null,
+    fileName: file ? input.fileName || null : null,
+    contentMime: file ? input.contentMime || null : null,
+    sizeBytes: file ? num(input.sizeBytes) : null,
+    durationSec: input.contentType === "VIDEO" || input.contentType === "AUDIO" ? num(input.durationSec) : null,
+  };
+}
+
+/** Sentinel the editor posts to keep the currently stored file when a lesson is edited without a new upload. */
+export const KEEP_FILE = "__keep__";
+
+export async function saveLesson(db: PrismaClient, actor: Actor, courseId: string, raw: LessonInput) {
+  const c = await loadEditable(db, actor, courseId);
+  let input = lessonSchema.parse(raw);
+  await moduleOf(db, c.id, input.moduleId);
+  if (input.storageKey === KEEP_FILE) {
+    const prev = input.id ? await academyRepository.findLesson(db, input.id) : null;
+    if (!prev || prev.module.courseId !== c.id) throw new NotFoundError();
+    input = { ...input, storageKey: prev.storageKey ?? "", fileName: prev.fileName ?? "", contentMime: prev.contentMime ?? "", sizeBytes: prev.sizeBytes ?? "", durationSec: input.durationSec || (prev.durationSec ?? "") };
+  }
+  const data = normaliseLesson(input);
+  if (data.storageKey) {
+    if (!data.storageKey.startsWith(lessonKeyPrefix(c.id))) throw new ForbiddenError("Storage key does not belong to this course");
+    const existing = input.id ? await academyRepository.findLesson(db, input.id) : null;
+    if (existing?.storageKey !== data.storageKey && !(await getStorage().exists(data.storageKey))) throw new Error("The file was not uploaded. Try again.");
+  }
+  return db.$transaction(async (tx) => {
+    let id: string;
+    if (input.id) {
+      const l = await academyRepository.findLesson(db, input.id);
+      if (!l || l.module.courseId !== c.id) throw new NotFoundError();
+      id = (await academyRepository.updateLesson(tx, l.id, input.moduleId, data)).id;
+    } else {
+      id = (await academyRepository.createLesson(tx, input.moduleId, data)).id;
+    }
+    await audit(tx, { actor, action: "COURSE_UPDATED", entityType: "CourseLesson", entityId: id, newValue: { courseId: c.id, moduleId: input.moduleId, title: data.title, contentType: data.contentType, op: input.id ? "update" : "create" } });
+    return id;
+  });
+}
+
+export async function deleteLesson(db: PrismaClient, actor: Actor, courseId: string, lessonId: string) {
+  const c = await loadEditable(db, actor, courseId);
+  const l = await academyRepository.findLesson(db, lessonId);
+  if (!l || l.module.courseId !== c.id) throw new NotFoundError();
+  await db.$transaction(async (tx) => {
+    await academyRepository.deleteLesson(tx, l.id);
+    await audit(tx, { actor, action: "COURSE_UPDATED", entityType: "CourseLesson", entityId: l.id, previousValue: { title: l.title, contentType: l.contentType }, newValue: { courseId: c.id, op: "delete" } });
+  });
+}
+
+export async function moveLesson(db: PrismaClient, actor: Actor, courseId: string, lessonId: string, direction: -1 | 1) {
+  const c = await loadEditable(db, actor, courseId);
+  const l = await academyRepository.findLesson(db, lessonId);
+  if (!l || l.module.courseId !== c.id) throw new NotFoundError();
+  const m = await moduleOf(db, c.id, l.moduleId);
+  const i = m.lessons.findIndex((x) => x.id === lessonId);
+  const j = i + direction;
+  if (j < 0 || j >= m.lessons.length) return;
+  await db.$transaction((tx) => academyRepository.swapLessonOrder(tx, m.lessons[i], m.lessons[j]));
+}
+
+/**
+ * Signed URL for an uploaded lesson file. Coaches and admins who can edit the course, or an enrolled agent
+ * whose enrollment is unlocked (free, paid, or waived). Anyone else gets NotFound: no existence leak.
+ */
+export async function lessonDownloadUrl(db: PrismaClient, actor: Actor, lessonId: string): Promise<string> {
+  const l = await academyRepository.findLesson(db, lessonId);
+  if (!l?.storageKey) throw new NotFoundError();
+  if (actor.role === "AGENT") {
+    const profileId = ownProfileId(actor);
+    const e = await academyRepository.findEnrollment(db, l.module.courseId, profileId);
+    if (!e || e.paymentStatus === "PENDING") throw new NotFoundError();
+  } else {
+    await loadEditable(db, actor, l.module.courseId);
+  }
+  return getStorage().createDownloadUrl(l.storageKey);
 }
 
 // ---------------------------------------------------------------------------

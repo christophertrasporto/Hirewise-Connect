@@ -4,6 +4,18 @@ import type { courseInclude } from "@/server/repositories/academy.repository";
 type CourseRecord = Prisma.AcademyCourseGetPayload<{ include: ReturnType<typeof courseInclude> }>;
 type EnrollmentRecord = { id: string; status: string; paymentStatus: string; priceCents: number; paidCents: number | null; paymentReference: string | null; paidAt: Date | null; enrolledAt: Date; completion: { completedAt: Date; examScore: number | null } | null; attempts: Array<{ id: string; status: string; scorePercent: number | null; passed: boolean | null; submittedAt: Date | null }> };
 
+type LessonRecord = CourseRecord["modules"][number]["lessons"][number];
+
+/** Lesson as an enrolled agent sees it: never the storage key (files are streamed through a signed URL after an enrollment check). */
+function lessonAgentView(l: LessonRecord) {
+  return { id: l.id, order: l.order, title: l.title, contentType: l.contentType, body: l.body, url: l.url, hasFile: !!l.storageKey, fileName: l.fileName, contentMime: l.contentMime, sizeBytes: l.sizeBytes, durationSec: l.durationSec };
+}
+
+/** Curriculum outline (titles and types only) for the catalog and locked enrolments. */
+export function curriculumOutline(c: CourseRecord) {
+  return c.modules.map((m) => ({ id: m.id, order: m.order, title: m.title, description: m.description, lessons: m.lessons.map((l) => ({ id: l.id, order: l.order, title: l.title, contentType: l.contentType, durationSec: l.durationSec })) }));
+}
+
 export function priceLabel(cents: number) {
   return cents === 0 ? "Free" : `USD ${(cents / 100).toFixed(2)}`;
 }
@@ -25,6 +37,9 @@ export function toCourseAgentView(c: CourseRecord, unlocked = false) {
     questionCount: c.exam?.questions.length ?? 0,
     syllabus: unlocked ? c.syllabus : null,
     contentUrl: unlocked ? c.contentUrl : null,
+    lessonCount: c.modules.reduce((n, m) => n + m.lessons.length, 0),
+    outline: curriculumOutline(c),
+    modules: unlocked ? c.modules.map((m) => ({ id: m.id, order: m.order, title: m.title, description: m.description, lessons: m.lessons.map(lessonAgentView) })) : null,
     enrolledCount: c._count.enrollments,
   };
 }
@@ -64,6 +79,8 @@ export function toCourseCoachView(c: CourseRecord) {
     coaches: c.coaches.map((x) => x.coach),
     certificationTemplate: c.certificationTemplate,
     enrolledCount: c._count.enrollments,
+    modules: c.modules.map((m) => ({ id: m.id, order: m.order, title: m.title, description: m.description, lessons: m.lessons.map((l) => ({ id: l.id, order: l.order, title: l.title, contentType: l.contentType, body: l.body, url: l.url, storageKey: l.storageKey, fileName: l.fileName, contentMime: l.contentMime, sizeBytes: l.sizeBytes, durationSec: l.durationSec })) })),
+    lessonCount: c.modules.reduce((n, m) => n + m.lessons.length, 0),
     exam: c.exam ? { id: c.exam.id, title: c.exam.title, instructions: c.exam.instructions, timeLimitMin: c.exam.timeLimitMin, maxAttempts: c.exam.maxAttempts, status: c.exam.status, questions: c.exam.questions.map((q) => ({ id: q.id, order: q.order, prompt: q.prompt, options: q.options, correctIndex: q.correctIndex, points: q.points, explanation: q.explanation })) } : null,
     createdAt: c.createdAt,
   };

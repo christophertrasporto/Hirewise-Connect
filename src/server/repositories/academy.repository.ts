@@ -1,4 +1,4 @@
-import type { CourseStatus, EnrollmentStatus, Prisma } from "@prisma/client";
+import type { CourseStatus, EnrollmentStatus, LessonContentType, Prisma } from "@prisma/client";
 import type { Db } from "@/server/db/types";
 
 export function courseInclude() {
@@ -7,9 +7,12 @@ export function courseInclude() {
     coaches: { include: { coach: { select: { id: true, email: true } } } },
     certificationTemplate: { select: { id: true, name: true } },
     exam: { include: { questions: { orderBy: { order: "asc" } } } },
+    modules: { orderBy: { order: "asc" }, include: { lessons: { orderBy: { order: "asc" } } } },
     _count: { select: { enrollments: true } },
   } satisfies Prisma.AcademyCourseInclude;
 }
+
+export type LessonWrite = { title: string; contentType: LessonContentType; body: string | null; url: string | null; storageKey: string | null; fileName: string | null; contentMime: string | null; sizeBytes: number | null; durationSec: number | null };
 
 export type CourseCreate = { code: string; title: string; category: string; description: string; syllabus: string | null; contentUrl: string | null; ownerCoachUserId: string; priceCents: number; passingScore: number; requiresCoachReview: boolean };
 
@@ -93,9 +96,19 @@ export const academyRepository = {
     return db.exam.findUnique({ where: { courseId }, include: { questions: { orderBy: { order: "asc" } } } });
   },
 
-  async replaceQuestions(db: Db, examId: string, questions: Array<{ prompt: string; options: string[]; correctIndex: number; points: number; explanation: string | null }>) {
-    await db.examQuestion.deleteMany({ where: { examId } });
-    if (questions.length) await db.examQuestion.createMany({ data: questions.map((q, i) => ({ examId, order: i + 1, prompt: q.prompt, options: q.options, correctIndex: q.correctIndex, points: q.points, explanation: q.explanation ?? undefined })) });
+  /**
+   * Save the question list while keeping the ids of questions that still exist, so in-progress
+   * attempts (answers keyed by question id) and past results stay consistent when a published exam is edited.
+   */
+  async syncQuestions(db: Db, examId: string, questions: Array<{ id?: string; prompt: string; options: string[]; correctIndex: number; points: number; explanation: string | null }>) {
+    const existing = new Set((await db.examQuestion.findMany({ where: { examId }, select: { id: true } })).map((q) => q.id));
+    const keep = questions.filter((q) => q.id && existing.has(q.id)).map((q) => q.id!);
+    await db.examQuestion.deleteMany({ where: { examId, id: { notIn: keep } } });
+    for (const [i, q] of questions.entries()) {
+      const data = { order: i + 1, prompt: q.prompt, options: q.options, correctIndex: q.correctIndex, points: q.points, explanation: q.explanation };
+      if (q.id && existing.has(q.id)) await db.examQuestion.update({ where: { id: q.id }, data });
+      else await db.examQuestion.create({ data: { examId, ...data, explanation: q.explanation ?? undefined } });
+    }
   },
 
   setExamStatus(db: Db, examId: string, status: "DRAFT" | "PUBLISHED") {
@@ -120,5 +133,77 @@ export const academyRepository = {
 
   openAttempt(db: Db, enrollmentId: string) {
     return db.examAttempt.findFirst({ where: { enrollmentId, status: "IN_PROGRESS" } });
+  },
+
+  // Curriculum: modules and lessons
+  listModules(db: Db, courseId: string) {
+    return db.courseModule.findMany({ where: { courseId }, orderBy: { order: "asc" }, include: { lessons: { orderBy: { order: "asc" } } } });
+  },
+
+  findModule(db: Db, id: string) {
+    return db.courseModule.findUnique({ where: { id }, include: { lessons: { orderBy: { order: "asc" } } } });
+  },
+
+  async createModule(db: Db, courseId: string, d: { title: string; description: string | null }) {
+    const order = (await db.courseModule.count({ where: { courseId } })) + 1;
+    return db.courseModule.create({ data: { courseId, order, title: d.title, description: d.description ?? undefined } });
+  },
+
+  updateModule(db: Db, id: string, d: { title: string; description: string | null }) {
+    return db.courseModule.update({ where: { id }, data: d });
+  },
+
+  async deleteModule(db: Db, id: string) {
+    const m = await db.courseModule.delete({ where: { id } });
+    await this.renumberModules(db, m.courseId);
+    return m;
+  },
+
+  async renumberModules(db: Db, courseId: string) {
+    const rows = await db.courseModule.findMany({ where: { courseId }, orderBy: { order: "asc" }, select: { id: true } });
+    for (const [i, r] of rows.entries()) await db.courseModule.update({ where: { id: r.id }, data: { order: i + 1 } });
+  },
+
+  async swapModuleOrder(db: Db, a: { id: string; order: number }, b: { id: string; order: number }) {
+    await db.courseModule.update({ where: { id: a.id }, data: { order: -1 } });
+    await db.courseModule.update({ where: { id: b.id }, data: { order: a.order } });
+    await db.courseModule.update({ where: { id: a.id }, data: { order: b.order } });
+  },
+
+  findLesson(db: Db, id: string) {
+    return db.courseLesson.findUnique({ where: { id }, include: { module: { select: { id: true, courseId: true, order: true } } } });
+  },
+
+  async createLesson(db: Db, moduleId: string, d: LessonWrite) {
+    const order = (await db.courseLesson.count({ where: { moduleId } })) + 1;
+    return db.courseLesson.create({ data: { moduleId, order, ...d } });
+  },
+
+  async updateLesson(db: Db, id: string, moduleId: string, d: LessonWrite) {
+    const current = await db.courseLesson.findUniqueOrThrow({ where: { id }, select: { moduleId: true } });
+    if (current.moduleId !== moduleId) {
+      const order = (await db.courseLesson.count({ where: { moduleId } })) + 1;
+      const row = await db.courseLesson.update({ where: { id }, data: { ...d, moduleId, order } });
+      await this.renumberLessons(db, current.moduleId);
+      return row;
+    }
+    return db.courseLesson.update({ where: { id }, data: d });
+  },
+
+  async deleteLesson(db: Db, id: string) {
+    const l = await db.courseLesson.delete({ where: { id } });
+    await this.renumberLessons(db, l.moduleId);
+    return l;
+  },
+
+  async renumberLessons(db: Db, moduleId: string) {
+    const rows = await db.courseLesson.findMany({ where: { moduleId }, orderBy: { order: "asc" }, select: { id: true } });
+    for (const [i, r] of rows.entries()) await db.courseLesson.update({ where: { id: r.id }, data: { order: i + 1 } });
+  },
+
+  async swapLessonOrder(db: Db, a: { id: string; order: number }, b: { id: string; order: number }) {
+    await db.courseLesson.update({ where: { id: a.id }, data: { order: -1 } });
+    await db.courseLesson.update({ where: { id: b.id }, data: { order: a.order } });
+    await db.courseLesson.update({ where: { id: a.id }, data: { order: b.order } });
   },
 };
