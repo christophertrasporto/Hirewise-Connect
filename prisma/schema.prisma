@@ -1247,9 +1247,59 @@ model AcademyCourse {
   enrollments CourseEnrollment[]
   exam        Exam?
   assessments Assessment[]
+  modules     CourseModule[]
 
   @@index([status, category])
   @@index([ownerCoachUserId])
+}
+
+enum LessonContentType {
+  VIDEO
+  AUDIO
+  LINK
+  DOCUMENT
+  TEXT
+}
+
+/// Curriculum: ordered modules of ordered lessons. Editable at any status, including PUBLISHED,
+/// by the owner coach, assigned coaches, and Admin (course.manage).
+model CourseModule {
+  id          String        @id @default(cuid())
+  courseId    String
+  course      AcademyCourse @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  order       Int
+  title       String
+  description String?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  lessons CourseLesson[]
+
+  @@index([courseId, order])
+}
+
+/// One piece of learning content. Exactly one source is used per contentType:
+/// TEXT → body (markdown); LINK → url; VIDEO → url (hosted) or storageKey (uploaded); AUDIO/DOCUMENT → storageKey.
+/// storageKey is never exposed to agents; files are streamed through a signed URL after an enrollment check.
+model CourseLesson {
+  id          String            @id @default(cuid())
+  moduleId    String
+  module      CourseModule      @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  order       Int
+  title       String
+  contentType LessonContentType
+  /// Markdown body for TEXT lessons; optional notes for other types.
+  body        String?
+  url         String?
+  storageKey  String?
+  fileName    String?
+  contentMime String?
+  sizeBytes   Int?
+  durationSec Int?
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  @@index([moduleId, order])
 }
 
 model CourseCoach {

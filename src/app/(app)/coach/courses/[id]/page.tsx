@@ -11,6 +11,7 @@ import { PageHeader, Card, StatusBadge, EmptyState, Banner, fmtDate } from "@/co
 import { CourseForm } from "@/components/academy/CourseForm";
 import { ExamBuilder } from "@/components/academy/ExamBuilder";
 import { CourseWorkflowButton, AssessmentForm } from "@/components/academy/CourseActions";
+import { CurriculumEditor } from "@/components/academy/CurriculumEditor";
 
 export const metadata: Metadata = { title: "Course" };
 
@@ -27,7 +28,6 @@ export default async function CoachCoursePage({ params }: { params: Promise<{ id
   const { course, enrollments } = data;
   const isAdmin = actor.permissions.has("course.manage");
   const [labels, templates] = await Promise.all([listLabels(prisma), isAdmin ? listTemplatesForAdmin(prisma, actor) : Promise.resolve([])]);
-  const examLocked = course.exam?.status === "PUBLISHED" && course.status === "PUBLISHED";
   const assessed = new Set((await prisma.assessment.findMany({ where: { courseId: course.id, status: "FINAL" }, select: { agentProfileId: true } })).map((a) => a.agentProfileId));
 
   return (
@@ -36,13 +36,17 @@ export default async function CoachCoursePage({ params }: { params: Promise<{ id
       <PageHeader eyebrow={course.category} title={course.title} description={`${course.priceLabel} · passing score ${course.passingScore}% · ${course.enrolledCount} enrolled${course.publishedAt ? ` · published ${fmtDate(course.publishedAt)}` : ""}`} actions={<><StatusBadge status={course.status} />{course.certificationTemplate && <span className="rounded-full bg-gold-50 px-2.5 py-1 text-[11.5px] font-semibold text-gold-700 ring-1 ring-inset ring-gold-200">{course.certificationTemplate.name}</span>}</>} />
 
       {course.status === "DRAFT" && <div className="mb-6"><Banner tone="info" title="Draft">Finish the exam below, then submit the course for publishing. Admin links a certification template and publishes it to the catalog.</Banner></div>}
-      {course.status === "PENDING_APPROVAL" && <div className="mb-6"><Banner tone="warn" title="Waiting for Admin">Admin has been notified. You can still edit the description and syllabus.</Banner></div>}
+      {course.status === "PENDING_APPROVAL" && <div className="mb-6"><Banner tone="warn" title="Waiting for Admin">Admin has been notified. You can keep editing the details, curriculum, and exam in the meantime.</Banner></div>}
+      {course.status === "PUBLISHED" && <div className="mb-6"><Banner tone="success" title="Live in the catalog">Everything on this page stays editable. Saved changes to the details, modules, lessons, and exam reach enrolled students immediately; no need to archive or republish.</Banner></div>}
 
       <div className="grid gap-5 lg:grid-cols-[1fr_320px]">
         <div className="space-y-5">
           <Card title="Course details"><CourseForm course={{ id: course.id, title: course.title, category: course.category, description: course.description, syllabus: course.syllabus, contentUrl: course.contentUrl, priceCents: course.priceCents, passingScore: course.passingScore, requiresCoachReview: course.requiresCoachReview }} /></Card>
+          <Card title="Curriculum" description={`${course.modules.length} module${course.modules.length === 1 ? "" : "s"} · ${course.lessonCount} lesson${course.lessonCount === 1 ? "" : "s"}. Video, audio, links, documents, and text lessons. Editable at any time, including after publishing.`}>
+            <CurriculumEditor courseId={course.id} modules={course.modules.map((m) => ({ id: m.id, title: m.title, description: m.description, lessons: m.lessons.map((l) => ({ id: l.id, title: l.title, contentType: l.contentType, body: l.body, url: l.url, fileName: l.fileName, contentMime: l.contentMime, sizeBytes: l.sizeBytes, durationSec: l.durationSec, hasFile: !!l.storageKey })) }))} />
+          </Card>
           <Card title="Exam" description="Single-answer multiple choice. Talent never sees which option is correct.">
-            <ExamBuilder courseId={course.id} exam={course.exam ? { title: course.exam.title, instructions: course.exam.instructions, timeLimitMin: course.exam.timeLimitMin, maxAttempts: course.exam.maxAttempts, status: course.exam.status, questions: course.exam.questions.map((q) => ({ prompt: q.prompt, options: q.options, correctIndex: q.correctIndex, points: q.points, explanation: q.explanation ?? "" })) } : null} locked={examLocked} />
+            <ExamBuilder courseId={course.id} exam={course.exam ? { title: course.exam.title, instructions: course.exam.instructions, timeLimitMin: course.exam.timeLimitMin, maxAttempts: course.exam.maxAttempts, status: course.exam.status, questions: course.exam.questions.map((q) => ({ id: q.id, prompt: q.prompt, options: q.options, correctIndex: q.correctIndex, points: q.points, explanation: q.explanation ?? "" })) } : null} published={course.exam?.status === "PUBLISHED"} />
           </Card>
           <Card title="Students" description="Enrolments in this course. Assess students who completed the exam.">
             {enrollments.length === 0 ? <EmptyState title="No students yet" /> : (
@@ -75,7 +79,7 @@ export default async function CoachCoursePage({ params }: { params: Promise<{ id
               {course.status === "DRAFT" && <CourseWorkflowButton courseId={course.id} op="SUBMIT" label="Submit for publishing" variant="primary" />}
               {isAdmin && (course.status === "PENDING_APPROVAL" || course.status === "DRAFT") && <CourseWorkflowButton courseId={course.id} op="PUBLISH" label="Publish to catalog" variant="dark" templates={templates.map((t) => ({ id: t.id, name: t.name }))} />}
               {isAdmin && course.status === "PUBLISHED" && <CourseWorkflowButton courseId={course.id} op="ARCHIVE" label="Archive course" variant="outline" confirm="Archive this course? Enrolled students keep their progress but new enrolments stop." />}
-              {course.status === "PUBLISHED" && !isAdmin && <p className="text-[13.5px] text-ink-500">Live in the catalog. Contact Admin to archive.</p>}
+              {course.status === "PUBLISHED" && !isAdmin && <p className="text-[13.5px] text-ink-500">Live in the catalog. Keep improving it here; contact Admin only to archive.</p>}
               {course.status === "ARCHIVED" && <p className="text-[13.5px] text-ink-500">Archived.</p>}
             </div>
           </Card>

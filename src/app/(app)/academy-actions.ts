@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { prisma } from "@/server/db/client";
 import { requireActor } from "@/server/auth/require-actor";
 import { toActionError, formList, formString, type ActionResult } from "@/server/http/action-result";
-import { courseSchema, examSchema, createCourse, updateCourse, submitCourseForApproval, publishCourse, archiveCourse, saveExam, enrol, startExamAttempt, submitExamAttempt, recordCoursePayment, addCoachToCourse } from "@/server/services/academy.service";
+import { courseSchema, examSchema, createCourse, updateCourse, submitCourseForApproval, publishCourse, archiveCourse, saveExam, enrol, startExamAttempt, submitExamAttempt, recordCoursePayment, addCoachToCourse, moduleSchema, lessonSchema, lessonUploadRequestSchema, saveModule, deleteModule, moveModule, saveLesson, deleteLesson, moveLesson, createLessonUploadUrl } from "@/server/services/academy.service";
 import { assessmentSchema, evaluationSchema, labelSchema, recordAssessment, recordEvaluation, saveLabel } from "@/server/services/assessment.service";
 import { templateSchema, saveTemplate, issueCertification, reviewCertification, revokeCertification } from "@/server/services/certification.service";
 import { LEVELS, rulesSchema, setVerificationManually, updateRequirement, type Level } from "@/server/services/verification.service";
@@ -67,6 +67,112 @@ export async function saveExamAction(_prev: ActionResult, fd: FormData): Promise
     await saveExam(prisma, actor, courseId, input);
     revalidatePath(`/coach/courses/${courseId}`);
     return { ok: true };
+  } catch (e) {
+    return toActionError(e);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Coach: curriculum (modules and lessons), editable at any status including PUBLISHED
+// ---------------------------------------------------------------------------
+
+function revalidateCourse(courseId: string) {
+  revalidatePath(`/coach/courses/${courseId}`);
+  revalidatePath(`/courses/${courseId}`);
+  revalidatePath("/courses");
+}
+
+export async function saveModuleAction(_prev: ActionResult, fd: FormData): Promise<ActionResult> {
+  try {
+    const actor = await requireActor();
+    const courseId = formString(fd, "courseId");
+    await saveModule(prisma, actor, courseId, moduleSchema.parse({ id: formString(fd, "id") || undefined, title: formString(fd, "title"), description: formString(fd, "description") }));
+    revalidateCourse(courseId);
+    return { ok: true };
+  } catch (e) {
+    return toActionError(e);
+  }
+}
+
+export async function deleteModuleAction(_prev: ActionResult, fd: FormData): Promise<ActionResult> {
+  try {
+    const actor = await requireActor();
+    const courseId = formString(fd, "courseId");
+    await deleteModule(prisma, actor, courseId, formString(fd, "moduleId"));
+    revalidateCourse(courseId);
+    return { ok: true };
+  } catch (e) {
+    return toActionError(e);
+  }
+}
+
+export async function moveModuleAction(_prev: ActionResult, fd: FormData): Promise<ActionResult> {
+  try {
+    const actor = await requireActor();
+    const courseId = formString(fd, "courseId");
+    await moveModule(prisma, actor, courseId, formString(fd, "moduleId"), formString(fd, "direction") === "up" ? -1 : 1);
+    revalidateCourse(courseId);
+    return { ok: true };
+  } catch (e) {
+    return toActionError(e);
+  }
+}
+
+export async function saveLessonAction(_prev: ActionResult, fd: FormData): Promise<ActionResult> {
+  try {
+    const actor = await requireActor();
+    const courseId = formString(fd, "courseId");
+    const input = lessonSchema.parse({
+      id: formString(fd, "id") || undefined,
+      moduleId: formString(fd, "moduleId"),
+      title: formString(fd, "title"),
+      contentType: formString(fd, "contentType"),
+      body: formString(fd, "body"),
+      url: formString(fd, "url"),
+      storageKey: formString(fd, "storageKey"),
+      fileName: formString(fd, "fileName"),
+      contentMime: formString(fd, "contentMime"),
+      sizeBytes: formString(fd, "sizeBytes"),
+      durationSec: formString(fd, "durationSec"),
+    });
+    await saveLesson(prisma, actor, courseId, input);
+    revalidateCourse(courseId);
+    return { ok: true };
+  } catch (e) {
+    return toActionError(e);
+  }
+}
+
+export async function deleteLessonAction(_prev: ActionResult, fd: FormData): Promise<ActionResult> {
+  try {
+    const actor = await requireActor();
+    const courseId = formString(fd, "courseId");
+    await deleteLesson(prisma, actor, courseId, formString(fd, "lessonId"));
+    revalidateCourse(courseId);
+    return { ok: true };
+  } catch (e) {
+    return toActionError(e);
+  }
+}
+
+export async function moveLessonAction(_prev: ActionResult, fd: FormData): Promise<ActionResult> {
+  try {
+    const actor = await requireActor();
+    const courseId = formString(fd, "courseId");
+    await moveLesson(prisma, actor, courseId, formString(fd, "lessonId"), formString(fd, "direction") === "up" ? -1 : 1);
+    revalidateCourse(courseId);
+    return { ok: true };
+  } catch (e) {
+    return toActionError(e);
+  }
+}
+
+/** Presigned PUT for a lesson file. The browser uploads, then saveLessonAction records the key. */
+export async function requestLessonUploadAction(input: { courseId: string; kind: string; contentType: string; sizeBytes: number; fileName?: string }): Promise<ActionResult<{ key: string; url: string; method: "PUT"; headers: Record<string, string> }>> {
+  try {
+    const actor = await requireActor();
+    const r = await createLessonUploadUrl(prisma, actor, input.courseId, lessonUploadRequestSchema.parse(input));
+    return { ok: true, data: r };
   } catch (e) {
     return toActionError(e);
   }

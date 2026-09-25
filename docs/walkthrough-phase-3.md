@@ -46,7 +46,17 @@ Date: 2026-09-23. Implements MASTER_PROMPT.md Phase 3 (courses, assessments, coa
 ## Known limits carried forward
 
 - Course payments are recorded offline; Stripe is Phase 5 (Q8).
-- Editing a published exam is blocked to keep live attempts consistent; Admin archives and the coach republishes a new version.
+- Courses stay editable after publishing (added 2026-09-24): details, curriculum, and exam. Exam edits keep the ids of retained questions so open attempts and recorded answers stay consistent; removed questions simply stop counting.
 - Retakes beyond `maxAttempts` need a coach to ask Admin; no self-service reset yet.
 - The external LMS completion route (HMAC) is not exposed until an LMS is selected (Q1).
 - `publishedBillingRate` in the ladder is always false until Phase 4 wires `ClientBillingRate`.
+
+## Curriculum: modules and lessons (added 2026-09-24)
+
+| Piece | Where | Notes |
+| --- | --- | --- |
+| Schema | `CourseModule`, `CourseLesson`, `LessonContentType` (`VIDEO | AUDIO | LINK | DOCUMENT | TEXT`) | Ordered modules of ordered lessons under `AcademyCourse`. Exactly one source per lesson: `body` for TEXT, `url` for LINK or hosted video, `storageKey` for uploaded video, audio, and documents. |
+| Service | `academy.service.ts`: `saveModule`, `deleteModule`, `moveModule`, `saveLesson`, `deleteLesson`, `moveLesson`, `createLessonUploadUrl`, `lessonDownloadUrl` | Same authorization as course editing (`course.manage`, or `course.create_own` on an owned or assigned course; INV-P5). Works at every status, including PUBLISHED. Lesson files use the presigned upload flow with per-kind MIME and size caps; keys are scoped to `courses/<courseId>/lessons/`. |
+| Projections | `toCourseAgentView` | `outline` (titles and types) is always present; `modules` with content only when the enrolment is unlocked. `storageKey` never reaches agents; files stream through `GET /api/academy/lessons/[lessonId]`, which re-checks enrolment and redirects to a short-lived signed URL. |
+| UI | `components/academy/CurriculumEditor.tsx` (coach), `components/academy/LessonContent.tsx` (student) | Add, edit, reorder, and delete modules and lessons inline; upload with progress; YouTube, Vimeo, and Loom links embed as players. |
+| Tests | `tests/integration/academy-curriculum.test.ts` | CRUD and ordering, ownership (NotFound for the other coach), upload rules and key scoping, KEEP_FILE edits, post-publish editing with an open attempt, agent projections. |
