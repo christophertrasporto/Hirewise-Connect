@@ -30,6 +30,15 @@ export const templates = {
       html: layout("Verify your email", `<p>Confirm this address to continue setting up your account. The link expires in 24 hours.</p>${button(url, "Verify email")}`),
     };
   },
+  staffInvite(url: string, roleName: string) {
+    return {
+      subject: "You have been added to Hirewise Connect",
+      text: `You have been added to Hirewise Connect as ${roleName}. Set your password to get started: ${url}
+
+This link expires in 7 days. If it has expired, use "Forgot password" on the sign-in page.`,
+      html: layout("Welcome to Hirewise Connect", `<p>You have been added as <strong>${roleName}</strong>. Set your password to get started. The link expires in 7 days; after that, use "Forgot password" on the sign-in page.</p>${button(url, "Set my password")}`),
+    };
+  },
   passwordReset(url: string) {
     return {
       subject: "Reset your Hirewise Connect password",
