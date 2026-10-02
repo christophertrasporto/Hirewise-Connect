@@ -32,6 +32,8 @@ const schema = z.object({
   SMTP_SECURE: z.coerce.boolean().default(false),
 
   WORKER_POLL_MS: z.coerce.number().int().positive().default(2000),
+  /** Shared secret for GET /api/jobs/tick (Vercel Cron sends it as a Bearer token). Unset disables the route. */
+  CRON_SECRET: z.string().min(16).optional(),
 
   // Phase 5 integrations, each behind an adapter with a local fake.
   PAYMENT_PROVIDER: z.enum(["manual", "fake", "stripe"]).default("manual"),

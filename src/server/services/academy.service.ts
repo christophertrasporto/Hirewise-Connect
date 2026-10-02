@@ -8,6 +8,7 @@ import { audit } from "@/server/audit/audit";
 import { publishEvent } from "@/server/events/outbox";
 import { evaluateCertification } from "./certification.service";
 import { toCourseAgentView, toCourseCoachView, toEnrollmentAgentView } from "@/server/views/academy.views";
+import { coursesLockedFor } from "./onboarding.service";
 
 const optionalText = (max: number) => z.string().trim().max(max).optional().or(z.literal(""));
 
@@ -160,11 +161,20 @@ function ownProfileId(actor: Actor) {
   return actor.agentProfileId;
 }
 
+/** Catalog with enrolment state. While the onboarding welcome video is outstanding, un-enrolled courses are marked locked. */
 export async function catalogForAgent(db: PrismaClient, actor: Actor) {
   const profileId = ownProfileId(actor);
-  const [courses, enrollments] = await Promise.all([academyRepository.listCourses(db, { status: ["PUBLISHED"] }), academyRepository.listEnrollmentsForAgent(db, profileId)]);
+  const [courses, enrollments, lock] = await Promise.all([academyRepository.listCourses(db, { status: ["PUBLISHED"] }), academyRepository.listEnrollmentsForAgent(db, profileId), coursesLockedFor(db, actor)]);
   const byCourse = new Map(enrollments.map((e) => [e.courseId, e]));
-  return courses.map((c) => ({ ...toCourseAgentView(c), enrollment: byCourse.has(c.id) ? toEnrollmentAgentView(byCourse.get(c.id)!) : null }));
+  return courses.map((c) => {
+    const enrollment = byCourse.has(c.id) ? toEnrollmentAgentView(byCourse.get(c.id)!) : null;
+    return { ...toCourseAgentView(c), enrollment, locked: lock.locked && !enrollment, lockReason: lock.locked && !enrollment ? lock.reason : null };
+  });
+}
+
+/** The onboarding lock as a banner payload for Academy pages. */
+export function academyLockFor(db: PrismaClient, actor: Actor) {
+  return coursesLockedFor(db, actor);
 }
 
 export async function enrol(db: PrismaClient, actor: Actor, courseId: string) {
@@ -172,6 +182,8 @@ export async function enrol(db: PrismaClient, actor: Actor, courseId: string) {
   const c = await academyRepository.findCourse(db, courseId);
   if (!c || c.status !== "PUBLISHED") throw new NotFoundError();
   if (await academyRepository.findEnrollment(db, courseId, profileId)) return;
+  const lock = await coursesLockedFor(db, actor);
+  if (lock.locked) throw new ForbiddenError(lock.reason ?? "Finish your onboarding checklist before enrolling.");
   await db.$transaction(async (tx) => {
     const e = await academyRepository.enroll(tx, { courseId, agentProfileId: profileId, priceCents: c.priceCents });
     await audit(tx, { actor, action: "COURSE_ENROLLED", entityType: "CourseEnrollment", entityId: e.id, newValue: { courseId, priceCents: c.priceCents, paymentStatus: e.paymentStatus } });
@@ -185,11 +197,13 @@ export async function getEnrollmentForAgent(db: PrismaClient, actor: Actor, cour
   if (!e) {
     const c = await academyRepository.findCourse(db, courseId);
     if (!c || c.status !== "PUBLISHED") throw new NotFoundError();
-    return { course: toCourseAgentView(c), enrollment: null, exam: null };
+    const lock = await coursesLockedFor(db, actor);
+    return { course: toCourseAgentView(c), enrollment: null, exam: null, locked: lock.locked ? { reason: lock.reason ?? "Finish your onboarding checklist first.", href: "/onboarding/welcome-video" } : null };
   }
   const unlocked = e.paymentStatus === "NOT_REQUIRED" || e.paymentStatus === "PAID" || e.paymentStatus === "WAIVED";
   const exam = e.course.exam;
   return {
+    locked: null as null | { reason: string; href: string },
     course: toCourseAgentView(e.course, unlocked),
     enrollment: toEnrollmentAgentView(e),
     exam: exam && exam.status === "PUBLISHED" && unlocked ? { id: exam.id, title: exam.title, instructions: exam.instructions, timeLimitMin: exam.timeLimitMin, maxAttempts: exam.maxAttempts, questionCount: exam.questions.length, attemptsUsed: e.attempts.filter((a) => a.status !== "IN_PROGRESS").length, openAttemptId: e.attempts.find((a) => a.status === "IN_PROGRESS")?.id ?? null } : null,

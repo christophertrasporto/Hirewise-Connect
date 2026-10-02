@@ -372,23 +372,24 @@ model User {
   incidentsReported         Incident[]          @relation("IncidentReporter")
   incidentsResolved         Incident[]          @relation("IncidentResolver")
 
-  permissionOverrides  UserPermissionOverride[] @relation("OverrideSubject")
-  grantedOverrides     UserPermissionOverride[] @relation("OverrideGrantor")
-  clientContact        ClientContact?
-  agentProfile         AgentProfile?
-  agreementAcceptances AgreementAcceptance[]
-  notifications        Notification[]
-  notificationPrefs    NotificationPreference[]
-  managedClients       Client[]                 @relation("AccountManager")
-  assignedRequirements ClientRequirement[]      @relation("RequirementSales")
-  reservationsMade     Reservation[]            @relation("ReservedBy")
-  availabilityChanges  AgentAvailability[]      @relation("AvailabilitySetBy")
-  documentsUploaded    Document[]               @relation("DocumentUploader")
-  profilesApproved     AgentProfile[]           @relation("ProfileApprover")
-  videosReviewed       Video[]                  @relation("VideoReviewer")
-  recordingsReviewed   Recording[]              @relation("RecordingReviewer")
-  portfoliosReviewed   Portfolio[]              @relation("PortfolioReviewer")
-  settingsUpdated      Setting[]                @relation("SettingUpdater")
+  permissionOverrides     UserPermissionOverride[]  @relation("OverrideSubject")
+  onboardingVideoProgress OnboardingVideoProgress[]
+  grantedOverrides        UserPermissionOverride[]  @relation("OverrideGrantor")
+  clientContact           ClientContact?
+  agentProfile            AgentProfile?
+  agreementAcceptances    AgreementAcceptance[]
+  notifications           Notification[]
+  notificationPrefs       NotificationPreference[]
+  managedClients          Client[]                  @relation("AccountManager")
+  assignedRequirements    ClientRequirement[]       @relation("RequirementSales")
+  reservationsMade        Reservation[]             @relation("ReservedBy")
+  availabilityChanges     AgentAvailability[]       @relation("AvailabilitySetBy")
+  documentsUploaded       Document[]                @relation("DocumentUploader")
+  profilesApproved        AgentProfile[]            @relation("ProfileApprover")
+  videosReviewed          Video[]                   @relation("VideoReviewer")
+  recordingsReviewed      Recording[]               @relation("RecordingReviewer")
+  portfoliosReviewed      Portfolio[]               @relation("PortfolioReviewer")
+  settingsUpdated         Setting[]                 @relation("SettingUpdater")
 
   @@index([roleId])
   @@index([status])
@@ -893,6 +894,25 @@ model Job {
   updatedAt DateTime  @updatedAt
 
   @@index([status, runAt])
+}
+
+/// Welcome-video progress for the onboarding checklist. One row per user per video version (videoKey changes when
+/// Admin replaces the video). watchedSeconds counts actually played time, so seeking to the end does not complete it.
+model OnboardingVideoProgress {
+  id              String    @id @default(cuid())
+  userId          String
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  videoKey        String
+  watchedSeconds  Float     @default(0)
+  lastPositionSec Float     @default(0)
+  durationSec     Float?
+  percent         Int       @default(0)
+  completedAt     DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@unique([userId, videoKey])
+  @@index([videoKey, completedAt])
 }
 
 model Setting {

@@ -22,6 +22,7 @@ export default async function CoursePage({ params }: { params: Promise<{ courseI
     throw e;
   }
   const { course, enrollment, exam } = data;
+  const onboardingLock = "locked" in data ? data.locked : null;
   const locked = enrollment?.paymentStatus === "PENDING";
   const completed = enrollment?.status === "COMPLETED";
 
@@ -30,6 +31,7 @@ export default async function CoursePage({ params }: { params: Promise<{ courseI
       <Link href="/courses" className="mb-4 inline-flex items-center gap-1.5 text-[13.5px] font-medium text-ink-500 hover:text-ink-900"><ArrowLeft className="h-4 w-4" /> Academy</Link>
       <PageHeader eyebrow={course.category} title={course.title} description={course.description} actions={<span className={course.priceCents === 0 ? "rounded-full bg-brand-50 px-4 py-1.5 text-[14px] font-bold text-brand-700" : "rounded-full bg-ink-900 px-4 py-1.5 text-[14px] font-bold text-white"}>{course.priceLabel}</span>} />
 
+      {onboardingLock && <div className="mb-6"><Banner tone="warn" title="Locked until you finish onboarding">{onboardingLock.reason} <Link href={onboardingLock.href} className="font-semibold underline underline-offset-2">Watch the welcome video</Link>.</Banner></div>}
       {locked && <div className="mb-6"><Banner tone="warn" title={`Payment of ${enrollment!.priceLabel} pending`}>Send the course fee to Hirewise (bank transfer or GCash) and share the reference with your coach or account manager. The syllabus and exam unlock as soon as the payment is recorded.</Banner></div>}
       {completed && <div className="mb-6"><Banner tone="success" title={`Completed ${fmtDate(enrollment!.completedAt)}`}>Exam score {enrollment!.examScore}%.{course.certification ? ` Certification: ${course.certification.name}.` : ""}</Banner></div>}
 
@@ -52,7 +54,7 @@ export default async function CoursePage({ params }: { params: Promise<{ courseI
             {!enrollment ? (
               <div className="space-y-3">
                 <p className="text-[13.5px] text-ink-600">{course.priceCents === 0 ? "This course is free." : `This course costs ${course.priceLabel}. Enrol now and pay Hirewise offline; the content unlocks once the payment is recorded.`}</p>
-                <EnrolButton courseId={course.id} priceLabel={course.priceLabel} />
+                {onboardingLock ? <Link href={onboardingLock.href} className="inline-flex h-11 items-center gap-2 rounded-full bg-ink-900 px-5 text-[14.5px] font-semibold text-white hover:bg-ink-800"><Lock className="h-4 w-4" /> Finish onboarding to enrol</Link> : <EnrolButton courseId={course.id} priceLabel={course.priceLabel} />}
               </div>
             ) : (
               <div className="space-y-3">

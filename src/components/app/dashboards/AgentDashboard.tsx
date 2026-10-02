@@ -4,6 +4,8 @@ import { PageHeader, Card, StatusBadge, Banner, EmptyState, fmtDate } from "@/co
 import { NotificationList } from "@/components/app/NotificationList";
 import type { AgentSelfView } from "@/server/views/agent.views";
 import type { computeCompletion } from "@/server/services/agent.service";
+import type { OnboardingView } from "@/server/services/onboarding.service";
+import { OnboardingChecklist } from "@/components/onboarding/OnboardingChecklist";
 import { labelFor } from "@/lib/options";
 
 type Props = {
@@ -12,9 +14,10 @@ type Props = {
   notifications: Array<{ id: string; title: string; body: string; readAt: Date | null; createdAt: Date }>;
   requests: Array<{ id: string; role: string; status: string; companyName: string | null; myStatus: string; next: { scheduledAt: Date; timezone: string } | null }>;
   placements: Array<{ id: string; status: string; positionTitle: string; companyName: string }>;
+  onboarding?: OnboardingView;
 };
 
-export function AgentDashboard({ profile, completion, notifications, requests, placements }: Props) {
+export function AgentDashboard({ profile, completion, notifications, requests, placements, onboarding }: Props) {
   const next = completion.parts.find((p) => !p.done);
   const latestFeedback = [...profile.videos, ...profile.recordings].filter((m) => m.reviewFeedback && (m.status === "REVISION_REQUIRED" || m.status === "REJECTED"));
 
@@ -25,6 +28,8 @@ export function AgentDashboard({ profile, completion, notifications, requests, p
       {profile.status === "REVISION_REQUIRED" && <div className="mb-6"><Banner tone="warn" title="Hirewise asked for changes">Check your notifications for the reviewer&apos;s feedback, update your profile, and submit again.</Banner></div>}
       {profile.status === "APPROVED" && <div className="mb-6"><Banner tone="success" title="Your profile is live">Vetted clients can now discover you. Keep your availability current.</Banner></div>}
       {(profile.status === "SUBMITTED" || profile.status === "UNDER_REVIEW") && <div className="mb-6"><Banner tone="info" title="Under Hirewise review">Submitted {fmtDate(profile.submittedAt)}. You will be notified when the review is complete.</Banner></div>}
+
+      {onboarding?.applies && !onboarding.done && <div className="mb-6"><OnboardingChecklist onboarding={onboarding} /></div>}
 
       <div className="grid gap-5 lg:grid-cols-3">
         <Card title="Profile completion" className="lg:col-span-2">

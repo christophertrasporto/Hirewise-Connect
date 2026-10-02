@@ -48,3 +48,27 @@
 - Restart `npm run dev` after every migration; stop it before `prisma generate` on Windows.
 - Never run `npm run build` while `npm run dev` is running: both write `.next`.
 - `PAYMENT_PROVIDER=fake` and `MEETING_PROVIDER=fake` give a working pay button and meeting links without accounts.
+
+## Verification emails are not arriving
+
+Follow the chain in order; each step has a visible signal.
+
+1. **Account created.** Staff → Academy → Onboarding lists every talent sign-up with its verification status.
+2. **Token generated.** The `AuthToken` table has an `EMAIL_VERIFY` row per request (the app logs `verification: token generated`).
+3. **Provider called in the request.** Since 2026-10 the verification email is sent synchronously through the same `SEND_EMAIL` job the worker uses; the job row is the delivery log. `GET /api/health` reports `failedEmails` and whether the environment validated (`env`, `envError`).
+4. **Provider accepted it.** A `COMPLETED` job with a provider message id in the log line `email: provider accepted the message`. A `FAILED` job keeps the real reason in `lastError` and is shown to the user on the verify-email page and after "Resend verification email".
+5. **Delivered.** Beyond our control: check the provider dashboard for bounces and spam complaints; the sender domain needs SPF and DKIM.
+6. **Link clicked.** `GET /api/auth/verify-email/<token>` logs `verification: completed` and redirects to the dashboard with a success banner.
+
+Common reasons and fixes:
+
+| Reason shown | Fix |
+| --- | --- |
+| Email service configuration missing: EMAIL_DRIVER is 'console' in production | Set `EMAIL_DRIVER=smtp`, `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_SECURE`, `EMAIL_FROM` in Vercel and redeploy. |
+| Email service configuration missing: the server environment failed validation (…) | The message names the variable; fix it in Vercel. Every link-building flow fails until it validates. |
+| Authentication with the email provider failed | Wrong SMTP credentials, or the provider requires an app password. |
+| Email provider unavailable | Wrong host or port, or the provider blocks the connection. Port 587 with `SMTP_SECURE=false` (STARTTLS) is the usual choice. |
+| The sender address is not verified | Verify `EMAIL_FROM` (or its domain) with the provider. |
+| The email provider is rate limiting us | Wait, or raise the provider's sending quota. |
+
+Resend is limited to one request per 60 seconds, five per hour per user, and twenty per hour per IP address. Other transactional email (notifications, reminders, invitations) still goes through the worker; on Vercel there is no long-running worker, so `vercel.json` schedules `GET /api/jobs/tick` every five minutes with `CRON_SECRET` as a Bearer token. Until `CRON_SECRET` is set, that route returns 401 and only the synchronously sent emails go out.

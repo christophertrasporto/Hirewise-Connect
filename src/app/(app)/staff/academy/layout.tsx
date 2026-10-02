@@ -8,6 +8,7 @@ export default async function StaffAcademyLayout({ children }: { children: React
   const tabs = [
     can(actor, "course.manage") ? { href: "/staff/academy", label: "Courses" } : null,
     can(actor, "course.payment.record") ? { href: "/staff/academy/payments", label: "Payments" } : null,
+    can(actor, "course.manage") ? { href: "/staff/academy/onboarding", label: "Onboarding" } : null,
     can(actor, "certification.review") ? { href: "/staff/academy/certifications", label: "Certifications" } : null,
     can(actor, "verification.manage") ? { href: "/staff/academy/settings", label: "Templates & verification" } : null,
   ].filter((t): t is { href: string; label: string } => !!t);

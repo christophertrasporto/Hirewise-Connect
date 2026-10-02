@@ -14,5 +14,5 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ token: stri
     return NextResponse.redirect(new URL(`/login?error=${encodeURIComponent(message)}`, req.url));
   }
   const auth = await getCurrentAuth();
-  return NextResponse.redirect(new URL(auth ? HOME_PATH : "/login?verified=1", req.url));
+  return NextResponse.redirect(new URL(auth ? `${HOME_PATH}?verified=1` : "/login?verified=1", req.url));
 }
