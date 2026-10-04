@@ -146,7 +146,7 @@ describe("verification email delivery (sign-up flow steps 3 to 6)", () => {
 
   it("a production deployment on the console driver is reported as a configuration problem instead of pretending to send", async () => {
     const saved = { NODE_ENV: process.env.NODE_ENV, EMAIL_DRIVER: process.env.EMAIL_DRIVER, PAYMENT_PROVIDER: process.env.PAYMENT_PROVIDER, MEETING_PROVIDER: process.env.MEETING_PROVIDER };
-    process.env.NODE_ENV = "production";
+    Object.assign(process.env, { NODE_ENV: "production" });
     process.env.EMAIL_DRIVER = "console";
     process.env.PAYMENT_PROVIDER = "manual";
     process.env.MEETING_PROVIDER = "none";
