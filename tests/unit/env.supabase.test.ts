@@ -41,6 +41,16 @@ describe("Supabase connection validation (ADR 006)", () => {
     });
   });
 
+  it("treats blank variables as unset so defaults apply (Vercel saves empty rows)", () => {
+    withEnv({ DATABASE_URL: "postgresql://hirewise:hirewise@localhost:5433/hirewise_dev", STORAGE_DRIVER: "", SIGNED_URL_TTL_SECONDS: "", WORKER_POLL_MS: "  ", EMAIL_DRIVER: "" }, () => {
+      const env = getEnv();
+      expect(env.STORAGE_DRIVER).toBe("local");
+      expect(env.SIGNED_URL_TTL_SECONDS).toBe(600);
+      expect(env.WORKER_POLL_MS).toBe(2000);
+      expect(env.EMAIL_DRIVER).toBe("console");
+    });
+  });
+
   it("leaves local and direct connections alone", () => {
     withEnv({ DATABASE_URL: "postgresql://hirewise:hirewise@localhost:5433/hirewise_dev" }, () => {
       expect(getEnv().DATABASE_URL).toContain("localhost");
