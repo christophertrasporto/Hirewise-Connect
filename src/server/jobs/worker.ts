@@ -32,7 +32,9 @@ export async function runWorkerOnce(prisma: PrismaClient): Promise<{ events: num
       }
     }
     return batch.length;
-  });
+  // Handlers do several queries per event; over a remote pooler each round trip costs 100 to 300 ms,
+  // so the default 5 s interactive-transaction budget is not enough for a full batch.
+  }, { timeout: 60_000, maxWait: 10_000 });
 
   const due = await jobRepository.claimDue(prisma);
   for (const job of due) {
