@@ -71,4 +71,6 @@ Common reasons and fixes:
 | The sender address is not verified | Verify `EMAIL_FROM` (or its domain) with the provider. |
 | The email provider is rate limiting us | Wait, or raise the provider's sending quota. |
 
+To check SMTP settings from a developer machine without the app, put the same `EMAIL_DRIVER=smtp` and `SMTP_*` values in the local `.env` and run `npm run email:test -- --to you@yourdomain.com`; it connects, authenticates, sends one message, and prints the provider response or the classified reason, never the values.
+
 Resend is limited to one request per 60 seconds, five per hour per user, and twenty per hour per IP address. Other transactional email (notifications, reminders, invitations) still goes through the worker; on Vercel there is no long-running worker, so `vercel.json` schedules `GET /api/jobs/tick` every five minutes with `CRON_SECRET` as a Bearer token. Until `CRON_SECRET` is set, that route returns 401 and only the synchronously sent emails go out.
