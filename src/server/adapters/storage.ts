@@ -32,6 +32,11 @@ export class S3Storage implements StorageAdapter {
       region: opts.region,
       credentials: { accessKeyId: opts.accessKeyId, secretAccessKey: opts.secretAccessKey },
       forcePathStyle: opts.forcePathStyle,
+      // Browsers PUT straight to presigned URLs. With the SDK default ("WHEN_SUPPORTED") every presigned PutObject
+      // carries x-amz-checksum-crc32 / x-amz-sdk-checksum-algorithm, which the browser cannot satisfy and which
+      // Cloudflare R2 (and other S3-compatible stores) then reject. Only add checksums where the operation requires them.
+      requestChecksumCalculation: "WHEN_REQUIRED",
+      responseChecksumValidation: "WHEN_REQUIRED",
     });
   }
   async createUploadUrl(key: string, contentType: string, ttlSeconds = getEnv().SIGNED_URL_TTL_SECONDS) {
