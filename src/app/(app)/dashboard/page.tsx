@@ -11,6 +11,7 @@ import { staffDashboard, listNotifications } from "@/server/services/dashboard.s
 import { recommendedForClient, recentlyViewedForClient } from "@/server/services/search.service";
 import { getOwnShortlist } from "@/server/services/shortlist.service";
 import { onboardingFor } from "@/server/services/onboarding.service";
+import { myCourses } from "@/server/services/learner.service";
 import { listRequestsForClient, listRequestsForAgent } from "@/server/services/interview.service";
 import { listPlacementsForClient, listPlacementsForAgent } from "@/server/services/placement.service";
 
@@ -25,8 +26,8 @@ export default async function DashboardPage({ searchParams }: { searchParams?: P
   if (actor.role === "AGENT") {
     const profile = await getOwnProfile(prisma, actor);
     const completion = computeCompletion(profile);
-    const [requests, placements, onboarding] = await Promise.all([listRequestsForAgent(prisma, actor), listPlacementsForAgent(prisma, actor), onboardingFor(prisma, actor, { liveProfilePercent: completion.total })]);
-    return <>{justVerified && <div className="mb-6"><Banner tone="success" title="Email verified successfully">Continue your onboarding below.</Banner></div>}<AgentDashboard profile={profile} completion={completion} onboarding={onboarding} notifications={notifications} requests={requests.map((r) => ({ id: r.id, role: r.role, status: r.status, companyName: r.companyName, myStatus: r.myStatus, next: r.interviews.find((i) => i.status === "SCHEDULED") ? { scheduledAt: r.interviews.find((i) => i.status === "SCHEDULED")!.scheduledAt, timezone: r.interviews.find((i) => i.status === "SCHEDULED")!.timezone } : null }))} placements={placements.map((p) => ({ id: p.id, status: p.status, positionTitle: p.positionTitle, companyName: p.client.companyName }))} /></>;
+    const [requests, placements, onboarding, courses] = await Promise.all([listRequestsForAgent(prisma, actor), listPlacementsForAgent(prisma, actor), onboardingFor(prisma, actor, { liveProfilePercent: completion.total }), myCourses(prisma, actor)]);
+    return <>{justVerified && <div className="mb-6"><Banner tone="success" title="Email verified successfully">Continue your onboarding below.</Banner></div>}<AgentDashboard profile={profile} completion={completion} onboarding={onboarding} notifications={notifications} courses={courses} requests={requests.map((r) => ({ id: r.id, role: r.role, status: r.status, companyName: r.companyName, myStatus: r.myStatus, next: r.interviews.find((i) => i.status === "SCHEDULED") ? { scheduledAt: r.interviews.find((i) => i.status === "SCHEDULED")!.scheduledAt, timezone: r.interviews.find((i) => i.status === "SCHEDULED")!.timezone } : null }))} placements={placements.map((p) => ({ id: p.id, status: p.status, positionTitle: p.positionTitle, companyName: p.client.companyName }))} /></>;
   }
   if (actor.role === "CLIENT") {
     const client = await getOwnClient(prisma, actor);

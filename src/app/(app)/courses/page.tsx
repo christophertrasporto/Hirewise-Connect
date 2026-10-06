@@ -1,11 +1,13 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Award, BookOpen, CheckCircle2, Lock } from "lucide-react";
+import { Award, Lock } from "lucide-react";
 import { prisma } from "@/server/db/client";
 import { requireActor } from "@/server/auth/require-actor";
 import { catalogForAgent, academyLockFor, listCoursesForCoach } from "@/server/services/academy.service";
+import { myCourses } from "@/server/services/learner.service";
+import { CourseCards } from "@/components/academy/CourseCards";
 import { getOwnProfile } from "@/server/services/agent.service";
-import { PageHeader, Card, StatusBadge, EmptyState, Banner, fmtDate } from "@/components/app/ui";
+import { PageHeader, Card, EmptyState, Banner, fmtDate } from "@/components/app/ui";
 import { cn } from "@/lib/cn";
 import { can } from "@/server/policies/authorize";
 import { BuilderHome } from "@/components/academy/BuilderHome";
@@ -21,7 +23,7 @@ export default async function AcademyPage() {
     }
     return <Banner tone="warn" title="No course access">Courses are for talent, coaches, and Academy administrators.</Banner>;
   }
-  const [courses, profile, lock] = await Promise.all([catalogForAgent(prisma, actor), getOwnProfile(prisma, actor), academyLockFor(prisma, actor)]);
+  const [courses, profile, lock, mineCards] = await Promise.all([catalogForAgent(prisma, actor), getOwnProfile(prisma, actor), academyLockFor(prisma, actor), myCourses(prisma, actor)]);
   const mine = courses.filter((c) => c.enrollment);
   const available = courses.filter((c) => !c.enrollment);
 
@@ -47,31 +49,11 @@ export default async function AcademyPage() {
 
       {mine.length > 0 && (
         <section className="mb-8">
-          <h2 className="mb-3 text-[12px] font-semibold uppercase tracking-[0.16em] text-ink-400">My courses</h2>
-          <div className="grid gap-4 md:grid-cols-2">
-            {mine.map((c) => {
-              const e = c.enrollment!;
-              const locked = e.paymentStatus === "PENDING";
-              return (
-                <Link key={c.id} href={`/courses/${c.id}`} className="group rounded-3xl border border-ink-100 bg-white p-5 shadow-soft transition hover:-translate-y-0.5 hover:shadow-lift">
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <p className="text-[12px] font-semibold uppercase tracking-[0.12em] text-brand-600">{c.category}</p>
-                      <h3 className="mt-1 text-[17px] font-bold text-ink-900 group-hover:text-brand-700">{c.title}</h3>
-                    </div>
-                    {e.status === "COMPLETED" ? <CheckCircle2 className="h-6 w-6 shrink-0 text-brand-500" /> : locked ? <Lock className="h-5 w-5 shrink-0 text-gold-500" /> : <BookOpen className="h-5 w-5 shrink-0 text-ink-300" />}
-                  </div>
-                  <div className="mt-3 flex flex-wrap items-center gap-2 text-[12.5px] text-ink-500">
-                    <StatusBadge status={e.status} />
-                    {e.priceCents > 0 && <StatusBadge status={e.paymentStatus} />}
-                    {e.examScore !== null && <span>Exam {e.examScore}%</span>}
-                    {e.completedAt && <span>Completed {fmtDate(e.completedAt)}</span>}
-                  </div>
-                  {locked && <p className="mt-3 rounded-xl bg-gold-50 px-3 py-2 text-[12.5px] text-gold-700">Pay {e.priceLabel} to Hirewise to unlock. Your coach or account manager will confirm the payment.</p>}
-                </Link>
-              );
-            })}
+          <div className="mb-3 flex flex-wrap items-end justify-between gap-2">
+            <h2 className="text-[12px] font-semibold uppercase tracking-[0.16em] text-ink-400">My courses</h2>
+            <p className="text-[12.5px] text-ink-400">{mineCards.inProgress} in progress · {mineCards.completed} completed · {mineCards.certifications} certification{mineCards.certifications === 1 ? "" : "s"}</p>
           </div>
+          <CourseCards cards={mineCards.cards} />
         </section>
       )}
 

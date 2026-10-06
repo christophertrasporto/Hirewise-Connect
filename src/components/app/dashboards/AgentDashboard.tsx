@@ -6,6 +6,8 @@ import type { AgentSelfView } from "@/server/views/agent.views";
 import type { computeCompletion } from "@/server/services/agent.service";
 import type { OnboardingView } from "@/server/services/onboarding.service";
 import { OnboardingChecklist } from "@/components/onboarding/OnboardingChecklist";
+import { CourseCards } from "@/components/academy/CourseCards";
+import type { myCourses } from "@/server/services/learner.service";
 import { labelFor } from "@/lib/options";
 
 type Props = {
@@ -17,7 +19,7 @@ type Props = {
   onboarding?: OnboardingView;
 };
 
-export function AgentDashboard({ profile, completion, notifications, requests, placements, onboarding }: Props) {
+export function AgentDashboard({ profile, completion, notifications, requests, placements, onboarding, courses }: Props & { courses: Awaited<ReturnType<typeof myCourses>> }) {
   const next = completion.parts.find((p) => !p.done);
   const latestFeedback = [...profile.videos, ...profile.recordings].filter((m) => m.reviewFeedback && (m.status === "REVISION_REQUIRED" || m.status === "REJECTED"));
 
@@ -100,6 +102,9 @@ export function AgentDashboard({ profile, completion, notifications, requests, p
                 ))}
               </ul>
             )}
+          </Card>
+          <Card title="My courses" description={courses.cards.length ? `${courses.inProgress} in progress · ${courses.completed} completed` : "Courses you enrol in show here with your progress and next step."} actions={<Link href="/courses" className="text-[13px] font-semibold text-brand-600 hover:text-brand-700">All courses</Link>}>
+            {courses.cards.length === 0 ? <EmptyState title="No courses yet" description="Browse the catalog to start a course." /> : <CourseCards cards={courses.cards.filter((c) => c.status !== "COMPLETED").slice(0, 3)} compact />}
           </Card>
           <Card title="Certifications" description="Issued by the Hirewise VA Academy. Each certificate carries a number and a public verification link.">
             {profile.certifications.length === 0 ? <EmptyState title="No certifications yet" description="Complete a course with a certification to earn one." /> : (

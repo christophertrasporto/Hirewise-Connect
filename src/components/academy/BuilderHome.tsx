@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Plus, Tags, Users, Wallet, Award, PlayCircle, LayoutList } from "lucide-react";
+import { Plus, Tags, Users, Wallet, Award, PlayCircle, LayoutList, BarChart3 } from "lucide-react";
 import type { Actor } from "@/server/auth/actor";
 import { can } from "@/server/policies/authorize";
 import type { listCoursesForCoach } from "@/server/services/academy.service";
@@ -16,6 +16,7 @@ export function BuilderHome({ actor, courses }: { actor: Actor; courses: Builder
   const builds = manages || can(actor, "course.create_own");
   const pending = courses.filter((c) => c.status === "PENDING_APPROVAL").length;
   const links = [
+    manages || can(actor, "learner.progress.read") ? { href: "/courses/manage/tracking", label: "Learner progress", icon: BarChart3 } : null,
     builds ? { href: "/coach", label: "Learners & assessments", icon: Users } : null,
     manages ? { href: "/staff/academy", label: pending ? `Approvals (${pending})` : "Approvals", icon: PlayCircle } : null,
     manages ? { href: "/courses/manage/categories", label: "Categories", icon: Tags } : null,

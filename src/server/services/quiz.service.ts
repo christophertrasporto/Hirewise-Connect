@@ -5,6 +5,7 @@ import { authorize, ForbiddenError, NotFoundError } from "@/server/policies/auth
 import { quizRepository, type ChoiceWrite, type QuestionWrite } from "@/server/repositories/quiz.repository";
 import { academyRepository } from "@/server/repositories/academy.repository";
 import { audit } from "@/server/audit/audit";
+import { publishEvent } from "@/server/events/outbox";
 import { loadEditableCourse } from "./academy.service";
 import { recalculateCourseProgress, assertLessonUnlocked } from "./progress.service";
 
@@ -319,6 +320,10 @@ export async function submitAttempt(db: PrismaClient, actor: Actor, attemptId: s
       await quizRepository.upsertProgress(tx, lesson.id, profileId, { status: pending ? "PENDING_REVIEW" : attemptsLeft > 0 ? "RETAKE_REQUIRED" : "FAILED", lessonVersion: lesson.version });
     }
     await audit(tx, { actor, action: "COURSE_UPDATED", entityType: "QuizAttempt", entityId: a.id, newValue: { lessonId: lesson.id, scorePercent: grade.scorePercent, passed, expired, pendingReview: pending } });
+    if (pending) {
+      const enr = await academyRepository.findEnrollment(tx, lesson.module.courseId, profileId);
+      if (enr) await publishEvent(tx, "ATTEMPT_PENDING_REVIEW", { attemptId: a.id, lessonId: lesson.id, lessonTitle: lesson.title, courseId: lesson.module.courseId, courseTitle: enr.course.title, agentProfileId: profileId, displayName: enr.agentProfile.displayName, coachUserIds: [enr.course.ownerCoachUserId, ...enr.course.coaches.map((x) => x.coachUserId)] });
+    }
     const course = await recalculateCourseProgress(tx, lesson.module.courseId, profileId);
     return { scorePercent: grade.scorePercent, passed, expired, pendingReview: pending, attemptsLeft: attemptsLeft === Infinity ? null : Math.max(0, attemptsLeft), courseCompleted: course.completedNow, coursePercent: course.percent };
   });

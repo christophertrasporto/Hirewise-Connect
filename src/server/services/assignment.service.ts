@@ -6,6 +6,7 @@ import { assignmentRepository } from "@/server/repositories/assignment.repositor
 import { quizRepository } from "@/server/repositories/quiz.repository";
 import { academyRepository } from "@/server/repositories/academy.repository";
 import { audit } from "@/server/audit/audit";
+import { publishEvent } from "@/server/events/outbox";
 import { getStorage, newStorageKey } from "@/server/adapters/storage";
 import { rateLimit } from "@/server/auth/rate-limit";
 import { loadEditableCourse, LESSON_UPLOAD_RULES } from "./academy.service";
@@ -46,7 +47,7 @@ async function learnerAssignment(db: PrismaClient, actor: Actor, lessonId: strin
   if (!enrollment) throw new NotFoundError();
   if (enrollment.paymentStatus === "PENDING") throw new ForbiddenError("This course unlocks once Hirewise records your payment.");
   await assertLessonUnlocked(db, lesson, profileId);
-  return { profileId, lesson };
+  return { profileId, lesson, enrollment };
 }
 
 const submissionPrefix = (courseId: string, profileId: string) => `courses/${courseId}/submissions/${profileId}/`;
@@ -65,7 +66,7 @@ export async function createSubmissionUploadUrl(db: PrismaClient, actor: Actor, 
 }
 
 export async function submitAssignment(db: PrismaClient, actor: Actor, lessonId: string, raw: SubmissionInput) {
-  const { profileId, lesson } = await learnerAssignment(db, actor, lessonId);
+  const { profileId, lesson, enrollment } = await learnerAssignment(db, actor, lessonId);
   const input = submissionSchema.parse(raw);
   const type = lesson.submissionType ?? "OTHER";
   const has = (v: string | undefined) => !!v && v !== "";
@@ -86,6 +87,7 @@ export async function submitAssignment(db: PrismaClient, actor: Actor, lessonId:
     const progress = await quizRepository.progress(tx, lesson.id, profileId);
     if (!progress?.completedAt) await quizRepository.upsertProgress(tx, lesson.id, profileId, { status: "PENDING_REVIEW", lessonVersion: lesson.version });
     await audit(tx, { actor, action: "ASSIGNMENT_SUBMITTED", entityType: "AssignmentSubmission", entityId: s.id, newValue: { lessonId: lesson.id, courseId: lesson.module.courseId, submissionType: type, late, resubmission: !!latest } });
+    await publishEvent(tx, "ASSIGNMENT_SUBMITTED", { submissionId: s.id, lessonId: lesson.id, lessonTitle: lesson.title, courseId: lesson.module.courseId, courseTitle: enrollment.course.title, agentProfileId: profileId, displayName: enrollment.agentProfile.displayName, coachUserIds: [enrollment.course.ownerCoachUserId, ...enrollment.course.coaches.map((x) => x.coachUserId)], late, resubmission: !!latest });
     return { id: s.id, late };
   });
 }
@@ -137,6 +139,8 @@ export async function reviewSubmission(db: PrismaClient, actor: Actor, courseId:
       await quizRepository.upsertProgress(tx, s.lessonId, s.agentProfileId, { status: "RETAKE_REQUIRED" });
     }
     await audit(tx, { actor, action: "ASSIGNMENT_REVIEWED", entityType: "AssignmentSubmission", entityId: s.id, newValue: { lessonId: s.lessonId, courseId: course.id, decision: input.decision, grade, maxPoints: max }, reason: input.feedback || undefined });
+    const learner = await academyRepository.findEnrollment(tx, course.id, s.agentProfileId);
+    if (learner) await publishEvent(tx, "ASSIGNMENT_REVIEWED", { submissionId: s.id, lessonId: s.lessonId, lessonTitle: s.lesson.title, courseId: course.id, courseTitle: course.title, agentUserId: learner.agentProfile.userId, agentEmail: learner.agentProfile.user.email, decision: input.decision, grade, maxPoints: s.lesson.points, feedback: input.feedback || null });
     if (input.decision === "GRADED") {
       await audit(tx, { actor: { userId: s.agentProfile.userId, role: "AGENT", permissions: new Set(), agentProfileId: s.agentProfileId }, action: "LESSON_COMPLETED", entityType: "CourseLesson", entityId: s.lessonId, newValue: { courseId: course.id, contentType: "ASSIGNMENT", how: "graded", reviewedBy: actor.userId } });
       await recalculateCourseProgress(tx, course.id, s.agentProfileId);

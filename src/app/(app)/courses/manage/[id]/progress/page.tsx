@@ -1,37 +1,31 @@
 import type { Metadata } from "next";
-import { Card, StatusBadge, EmptyState, fmtDate, Banner } from "@/components/app/ui";
+import { prisma } from "@/server/db/client";
+import { learnerTracking, TRACKING_STATUSES, type TrackingStatus } from "@/server/services/tracking.service";
+import { ForbiddenError } from "@/server/policies/authorize";
+import { Card, Banner } from "@/components/app/ui";
+import { TrackingFilters, TrackingTable } from "@/components/academy/TrackingTable";
 import { loadBuilderCourse } from "../load";
 
 export const metadata: Metadata = { title: "Progress" };
 
-/** Per-learner progress. Phase 7 adds lesson-level progress, listening percentages, attempts, and filters. */
-export default async function ProgressPage({ params }: { params: Promise<{ id: string }> }) {
+/** This course's tracking table: the same columns as the cross-course page, filtered to one course. */
+export default async function ProgressPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ status?: string; q?: string }> }) {
   const { id } = await params;
-  const { course, enrollments } = await loadBuilderCourse(id);
+  const sp = await searchParams;
+  const { actor, course } = await loadBuilderCourse(id);
+  const status = (TRACKING_STATUSES as readonly string[]).includes(sp.status ?? "") ? (sp.status as TrackingStatus) : "";
   const required = course.modules.filter((m) => m.status === "PUBLISHED").flatMap((m) => m.lessons).filter((l) => l.status === "PUBLISHED" && l.isRequired).length;
+  let data: Awaited<ReturnType<typeof learnerTracking>>;
+  try {
+    data = await learnerTracking(prisma, actor, { courseId: course.id, status, q: sp.q || undefined });
+  } catch (e) {
+    if (e instanceof ForbiddenError) return <Banner tone="warn" title="No access">Learner progress needs the learner.progress.read permission.</Banner>;
+    throw e;
+  }
   return (
-    <>
-      <div className="mb-5"><Banner tone="info" title="Course progress is calculated from required lessons">{required} required lesson{required === 1 ? "" : "s"} are published. Lesson-level progress, listening percentages, and quiz attempts arrive with the quiz engine and progress tracking phases.</Banner></div>
-      <Card title="Learners">
-        {enrollments.length === 0 ? <EmptyState title="No learners yet" /> : (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[640px] text-left text-[13.5px]">
-              <thead><tr className="border-b border-ink-100 text-[11.5px] font-semibold uppercase tracking-[0.1em] text-ink-400"><th className="py-2 pr-3">Learner</th><th className="px-2 py-2">Status</th><th className="px-2 py-2">Enrolled</th><th className="px-2 py-2">Exam</th><th className="px-2 py-2">Completed</th></tr></thead>
-              <tbody>
-                {enrollments.map((e) => (
-                  <tr key={e.id} className="border-b border-ink-50">
-                    <td className="py-2.5 pr-3 font-semibold text-ink-900">{e.agent.displayName}</td>
-                    <td className="px-2 py-2.5"><StatusBadge status={e.status} /></td>
-                    <td className="px-2 py-2.5 text-ink-600">{fmtDate(e.enrolledAt)}</td>
-                    <td className="px-2 py-2.5 text-ink-600">{e.examScore !== null ? `${e.examScore}%` : "—"}</td>
-                    <td className="px-2 py-2.5 text-ink-600">{e.completedAt ? fmtDate(e.completedAt) : "—"}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </Card>
-    </>
+    <Card title="Learner progress" description={`Progress is ${required} required lesson${required === 1 ? "" : "s"}${course.completionRequiresFinalAssessment ? " plus the final assessment" : ""}. Listening is the average across audio lessons; quiz cells show the best score and attempt count.`}>
+      <TrackingFilters courses={[]} coaches={[]} values={{ status, q: sp.q }} fixedCourseId={course.id} action={`/courses/manage/${course.id}/progress`} />
+      <TrackingTable rows={data.rows} showCourse={false} />
+    </Card>
   );
 }

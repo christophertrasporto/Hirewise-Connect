@@ -221,6 +221,15 @@ export const EVENT_HANDLERS: { [T in DomainEventType]: EventHandler<T> } = {
     await notifyUser(db, { userId: p.agentUserId, type: "COURSE_PAYMENT_RECORDED", title: `${p.courseTitle} is unlocked`, body: p.waived ? "Hirewise waived the course fee. You can start the course now." : "Your payment was recorded. You can start the course and take the exam.", email: { to: p.agentEmail }, dedupeKey: `CPAID:${p.enrollmentId}` });
   },
 
+  ASSIGNMENT_SUBMITTED: async (db, p) => {
+    for (const id of new Set(p.coachUserIds)) await notifyUser(db, { userId: id, type: "ASSIGNMENT_SUBMITTED", title: `${p.displayName} submitted ${p.lessonTitle}`, body: `${p.courseTitle}${p.resubmission ? " · new version" : ""}${p.late ? " · late" : ""}. Review it under Courses → Learners.`, dedupeKey: `ASUB:${p.submissionId}:${id}` });
+  },
+  ASSIGNMENT_REVIEWED: async (db, p) => {
+    await notifyUser(db, { userId: p.agentUserId, type: "ASSIGNMENT_REVIEWED", title: p.decision === "GRADED" ? `${p.lessonTitle} marked complete` : `${p.lessonTitle} returned for changes`, body: `${p.courseTitle}.${p.grade !== null ? ` Grade: ${p.grade}${p.maxPoints ? ` / ${p.maxPoints}` : ""}.` : ""}${p.feedback ? ` Feedback: ${p.feedback}` : ""}`, email: { to: p.agentEmail }, dedupeKey: `AREV:${p.submissionId}` });
+  },
+  ATTEMPT_PENDING_REVIEW: async (db, p) => {
+    for (const id of new Set(p.coachUserIds)) await notifyUser(db, { userId: id, type: "ATTEMPT_PENDING_REVIEW", title: `${p.displayName} needs a mark on ${p.lessonTitle}`, body: `${p.courseTitle}. Written answers are waiting for your review under Courses → Learners.`, dedupeKey: `AREVQ:${p.attemptId}:${id}` });
+  },
   COURSE_COMPLETED: async (db, p) => {
     await notifyUser(db, { userId: p.agentUserId, type: "COURSE_COMPLETED", title: `You completed ${p.title}`, body: p.examScore !== null ? `Exam score: ${p.examScore}%. ${p.coachReviewRequired ? "Your coach will review your work before any certification is issued." : "Any linked certification is being processed."}` : "Your completion was recorded.", email: { to: p.agentEmail }, dedupeKey: `CCOMP:${p.courseId}:${p.agentProfileId}` });
     for (const id of new Set(p.coachUserIds)) await notifyUser(db, { userId: id, type: "STUDENT_COMPLETED", title: `${p.displayName} completed ${p.title}`, body: p.coachReviewRequired ? "Record an assessment to decide on certification." : `Exam score: ${p.examScore ?? "n/a"}%.`, dedupeKey: `SCOMP:${p.courseId}:${p.agentProfileId}:${id}` });

@@ -99,9 +99,17 @@ Tests: `tests/integration/lesson-types.test.ts` (self-marking rules and refusals
 | Profile | talent dashboard → Certifications | Lists every certificate with its number, dates, and status, linking to the certificate page. |
 | Tests | `tests/integration/completion-rules.test.ts` | Pure locking rule, every learner entry point refused while locked, unlock on quiz pass, final-assessment rule, curriculum edits after completion, sequential numbering for Academy and admin-issued certificates, certificate access, public verification states. |
 
+## Phase 7: learner dashboard and tracking table (done)
+
+| Piece | Where | Notes |
+| --- | --- | --- |
+| Tracking table | `/courses/manage/tracking` (all courses, from the Courses home) and each course's **Progress** tab; `server/services/tracking.service.ts`, `components/academy/TrackingTable.tsx` | One row per enrolment: learner, course and coach, status (Completed, In progress, Failed, Not started), progress percent and required-lesson count, current module and lesson with its state, audiobook listening share (average across audio lessons), best score and attempt count per quiz, assignment counts (graded, awaiting review, returned), completion date or last activity, certification with number. Filters: course, coach (Admin), status, learner name or email. Coaches see the courses they own or are assigned to; needs `learner.progress.read` or `course.manage`. |
+| Learner dashboard | talent dashboard → **My courses**, and the top of `/courses`; `server/services/learner.service.ts`, `components/academy/CourseCards.tsx` | One card per enrolment: progress bar and percent, status, **Next:** the current lesson with where the learner is on it ("Audiobook, listening, 45%", "Quiz, retake required", "Assignment, awaiting review"), the actions waiting on them (retake a quiz, resubmit an assignment, pay to unlock), completion date, and the certificate number once issued. Counts of in-progress, completed, and certifications. |
+| Notifications | events `ASSIGNMENT_SUBMITTED`, `ATTEMPT_PENDING_REVIEW` (to the course coaches, in-app) and `ASSIGNMENT_REVIEWED` (to the learner, in-app and email) | Published inside the same transactions as the submission, the quiz submission, and the review; delivered by the worker. |
+| Tests | `tests/integration/tracking.test.ts` | Role scoping (agent refused, coach limited to own courses, Admin filters by coach, course, status, learner), row contents through a full learner journey, notifications, learner cards with next lesson, actions, and certification. |
+
 ## Next phases
 
-7. Learner dashboard and Admin/Coach tracking table.
 8. Safe editing of published courses and version history.
 9. Welcome video on lesson infrastructure.
 10. Question bank and random draws.
