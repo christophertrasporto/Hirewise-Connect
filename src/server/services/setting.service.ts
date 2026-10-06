@@ -25,6 +25,27 @@ export const SETTING_SCHEMAS = {
   /** Section 8.8 thresholds. */
   profileViewBurstPerHour: z.number().int().positive().default(60),
   shortlistChurnPerDay: z.number().int().positive().default(12),
+  /** Sign-up onboarding: the required welcome video and whether it locks the Academy (edited under Staff → Academy → Onboarding). */
+  onboardingWelcomeVideo: z
+    .object({
+      enabled: z.boolean().default(false),
+      title: z.string().trim().min(1).max(160).default("Welcome to Hirewise"),
+      instructions: z.string().trim().max(4000).default(""),
+      /** Direct URL to a video file (mp4/webm). Used when no file was uploaded. */
+      videoUrl: z.string().trim().url().nullable().default(null),
+      /** Uploaded file under onboarding/welcome/. Takes precedence over videoUrl. */
+      storageKey: z.string().trim().nullable().default(null),
+      fileName: z.string().trim().nullable().default(null),
+      durationSec: z.number().positive().nullable().default(null),
+      requiredPercent: z.number().int().min(1).max(100).default(90),
+      lockCourses: z.boolean().default(true),
+      appliesTo: z.enum(["NEW", "ALL"]).default("NEW"),
+      /** Users created at or after this instant are "new". Set when the requirement is first enabled. */
+      effectiveFrom: z.string().datetime().nullable().default(null),
+      /** Changes whenever the video source changes; progress is tracked per key. */
+      videoKey: z.string().default("v1"),
+    })
+    .default(() => ({ enabled: false, title: "Welcome to Hirewise", instructions: "", videoUrl: null, storageKey: null, fileName: null, durationSec: null, requiredPercent: 90, lockCourses: true, appliesTo: "NEW" as const, effectiveFrom: null, videoKey: "v1" })),
 } as const;
 
 export type SettingKey = keyof typeof SETTING_SCHEMAS;

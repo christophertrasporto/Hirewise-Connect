@@ -77,6 +77,12 @@ Then seed the foundation data only with `npm run db:seed:foundation` (roles, per
 | `LOG_LEVEL` | `info` |
 | `WORKER_POLL_MS` | `2000` |
 
+### Email and background work (required before real sign-ups)
+
+- `EMAIL_DRIVER=smtp` plus `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_SECURE`, and a verified `EMAIL_FROM`. With the console driver in production, sign-ups see "Email service configuration missing" on the verify-email page and no mail leaves.
+- `CRON_SECRET` (16+ random characters). Vercel Cron then calls `/api/jobs/tick` every five minutes to deliver notifications, reminders, and retries; verification emails are sent in the request regardless.
+- Check `GET /api/health`: `env: "ok"` and `email: "smtp"`. Blank variables are ignored (treated as unset); `APP_URL` must be the full `https://` production URL because every emailed link is built from it.
+
 ## 4. Go-live sequence
 
 1. Provision the Supabase projects (Section 2a); run `npm run db:deploy` with the environment's `DIRECT_URL`.

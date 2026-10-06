@@ -3,6 +3,8 @@ import { logger } from "@/server/logger";
 
 /** Shape returned by every server action so forms can render errors uniformly. */
 export type ActionResult<T = undefined> = {
+  /** Seconds until the action may be retried, when a rate limit refused it. */
+  retryAfterSeconds?: number;
   ok: boolean;
   error?: string;
   fieldErrors?: Record<string, string>;
@@ -37,8 +39,12 @@ export function toActionError<T = undefined>(err: unknown): ActionResult<T> {
       return { ok: false, error: e.message, fieldErrors: e.field ? { [e.field]: e.message } : undefined };
     case "SubmissionBlockedError":
       return { ok: false, error: `Not ready to submit: ${e.missing?.join("; ")}.` };
-    case "RateLimitedError":
-      return { ok: false, error: `Too many attempts. Try again in ${Math.ceil((e.retryAfterSeconds ?? 60) / 60)} minute(s).` };
+    case "RateLimitedError": {
+      const s = e.retryAfterSeconds ?? 60;
+      return { ok: false, error: s < 120 ? `Too many attempts. You can try again in ${s} second${s === 1 ? "" : "s"}.` : `Too many attempts. Try again in ${Math.ceil(s / 60)} minutes.`, retryAfterSeconds: s };
+    }
+    case "EmailDeliveryError":
+      return { ok: false, error: e.message };
     case "ForbiddenError":
       return { ok: false, error: "You do not have permission to do that." };
     case "NotFoundError":

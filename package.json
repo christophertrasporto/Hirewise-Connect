@@ -19,6 +19,7 @@
     "db:studio": "prisma studio",
     "db:generate": "prisma generate",
     "worker": "tsx scripts/worker.ts",
+    "email:test": "tsx scripts/email-test.ts",
     "postinstall": "prisma generate",
     "test:e2e": "playwright test",
     "hooks:install": "git config core.hooksPath scripts/git-hooks"

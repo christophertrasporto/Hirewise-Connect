@@ -32,6 +32,8 @@ const schema = z.object({
   SMTP_SECURE: z.coerce.boolean().default(false),
 
   WORKER_POLL_MS: z.coerce.number().int().positive().default(2000),
+  /** Shared secret for GET /api/jobs/tick (Vercel Cron sends it as a Bearer token). Unset disables the route. */
+  CRON_SECRET: z.string().min(16).optional(),
 
   // Phase 5 integrations, each behind an adapter with a local fake.
   PAYMENT_PROVIDER: z.enum(["manual", "fake", "stripe"]).default("manual"),
@@ -53,7 +55,10 @@ let cached: Env | null = null;
 
 export function getEnv(): Env {
   if (cached) return cached;
-  const parsed = schema.safeParse(process.env);
+  // Hosting dashboards make it easy to save a variable with an empty value. Treat blanks as unset so the
+  // defaults apply, instead of failing every flow that builds a link or talks to a provider.
+  const raw = Object.fromEntries(Object.entries(process.env).filter(([, v]) => v !== undefined && v.trim() !== ""));
+  const parsed = schema.safeParse(raw);
   if (!parsed.success) {
     const issues = parsed.error.issues.map((i) => `  ${i.path.join(".")}: ${i.message}`).join("\n");
     throw new Error(`Invalid environment:\n${issues}`);

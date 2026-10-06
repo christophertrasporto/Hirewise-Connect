@@ -100,6 +100,9 @@ export const AUDIT_ACTIONS = [
   // User administration
   "USER_ROLE_CHANGED",
   "PERMISSION_OVERRIDE_REVOKED",
+  // Onboarding
+  "ONBOARDING_VIDEO_COMPLETED",
+  "ONBOARDING_SETTINGS_CHANGED",
 ] as const;
 
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];

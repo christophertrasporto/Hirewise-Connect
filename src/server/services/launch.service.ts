@@ -144,6 +144,7 @@ export const SETTING_META: Record<SettingKey, { label: string; help: string; kin
   autoAssignAccountManager: { label: "Auto-assign account managers", help: "Round-robin instead of manual (Q14).", kind: "boolean" },
   marketplaceAccess: { label: "Marketplace access", help: "GATED: only active, agreement-accepted clients (Q2).", kind: "enum", options: ["GATED", "PUBLIC"] },
   matchWeights: { label: "Match weights", help: "Points per soft rule for requirement matching (Section 10).", kind: "json" },
+  onboardingWelcomeVideo: { label: "Welcome video (onboarding)", help: "Configured under Staff → Academy → Onboarding; shown here read-only.", kind: "json" },
   retentionDays: { label: "Retention period (days)", help: "Inactive accounts are anonymised by the retention job after this many days (Q18).", kind: "number" },
   profileViewBurstPerHour: { label: "Profile-view burst threshold", help: "Views per hour by one client before a scraping flag is raised (Section 8.8).", kind: "number" },
   shortlistChurnPerDay: { label: "Shortlist churn threshold", help: "Adds plus removals per day before a churn flag is raised.", kind: "number" },

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { logger } from "@/server/logger";
 import type { PrismaClient } from "@/server/db/types";
 import type { Actor } from "@/server/auth/actor";
 import type { RequestMeta } from "@/server/auth/session";
@@ -88,7 +89,13 @@ export async function registerClient(db: PrismaClient, input: ClientRegistration
     return { userId: user.id, clientId: client.id };
   });
 
-  await requestEmailVerification(db, { userId, email: input.email, ...meta });
+  // The account exists from here on. A mail-provider problem must not leave the user half registered:
+  // they get a session, land on the verify-email gate, see the real delivery error there, and can resend.
+  try {
+    await requestEmailVerification(db, { userId, email: input.email, ...meta });
+  } catch (err) {
+    logger.error({ userId, err: err instanceof Error ? { name: err.name, message: err.message } : err }, "registration: verification email could not be delivered");
+  }
   const session = await createSession(db, { userId, mfaPassed: true, remember: true, ...meta });
   return { userId, clientId, ...session };
 }

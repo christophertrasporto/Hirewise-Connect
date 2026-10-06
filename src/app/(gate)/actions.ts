@@ -21,13 +21,15 @@ export async function acceptAgreementAction(_prev: ActionResult, fd: FormData): 
   return { ok: true };
 }
 
-export async function resendVerificationAction(): Promise<ActionResult<{ devUrl?: string }>> {
+export async function resendVerificationAction(): Promise<ActionResult<{ devUrl?: string; alreadyVerified?: boolean }>> {
   try {
     const auth = await requireAuth("mfa");
     const r = await requestEmailVerification(prisma, { userId: auth.actor.userId, email: auth.email, ...(await requestMeta()) });
-    return { ok: true, data: { devUrl: r.devUrl } };
+    return { ok: true, data: { devUrl: r.devUrl, alreadyVerified: r.alreadyVerified } };
   } catch (e) {
-    return toActionError(e);
+    const res = toActionError<{ devUrl?: string; alreadyVerified?: boolean }>(e);
+    if (res.retryAfterSeconds && res.retryAfterSeconds < 120) res.error = `You can resend another verification email in ${res.retryAfterSeconds} seconds.`;
+    return res;
   }
 }
 

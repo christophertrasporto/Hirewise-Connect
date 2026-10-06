@@ -1,9 +1,10 @@
 import { z } from "zod";
+import { sendEmailNow, sendEmailQuietly, latestDelivery, maskEmail } from "@/server/jobs/mailer";
+import { logger } from "@/server/logger";
 import type { PrismaClient } from "@/server/db/types";
 import type { Actor } from "@/server/auth/actor";
 import { userRepository } from "@/server/repositories/user.repository";
 import { tokenRepository } from "@/server/repositories/token.repository";
-import { jobRepository } from "@/server/repositories/job.repository";
 import { sessionRepository } from "@/server/repositories/session.repository";
 import { hashPassword, verifyPassword, passwordSchema } from "@/server/auth/password";
 import { randomToken, sha256 } from "@/server/auth/crypto";
@@ -41,16 +42,32 @@ const INVITE_TTL = 7 * 24 * 60 * 60_000;
 /**
  * Staff invitation: a set-password link that reuses the password-reset flow with a 7-day expiry.
  * Called by user-admin.service after the account row exists; the caller has already been authorized.
+ * Delivered in the request so the inviter sees the provider's real reason if it fails.
  */
 export async function issueInviteLink(db: PrismaClient, email: string, userId: string, roleName: string): Promise<{ devUrl?: string }> {
   const raw = await issueToken(db, "PASSWORD_RESET", email, userId, INVITE_TTL);
-  const url = `${getEnv().APP_URL}/reset-password/${raw}`;
-  await enqueueEmail(db, email, templates.staffInvite(url, roleName));
+  const url = `${appUrl()}/reset-password/${raw}`;
+  await sendEmailNow(db, { kind: "staff_invite", to: email, ...templates.staffInvite(url, roleName) });
   return { devUrl: devLink(url) };
 }
 
-async function enqueueEmail(db: PrismaClient, to: string, t: { subject: string; text: string; html: string }) {
-  await jobRepository.enqueue(db, "SEND_EMAIL", { to, subject: t.subject, text: t.text, html: t.html });
+/**
+ * APP_URL for links in emails. Uses the validated environment when it loads; otherwise falls back to the raw
+ * variable so a configuration problem surfaces as a delivery error (with its real reason) instead of a crash
+ * between "token issued" and "email sent".
+ */
+function appUrl(): string {
+  try {
+    return getEnv().APP_URL.replace(/\/$/, "");
+  } catch (err) {
+    logger.error({ err: err instanceof Error ? err.message.split("\n")[0] : err }, "auth: environment failed validation while building a link");
+    return (process.env.APP_URL ?? "http://localhost:3000").replace(/\/$/, "");
+  }
+}
+
+/** Anti-enumeration flows (magic link, password reset): deliver now, never reveal failure to the caller. */
+async function sendQuietly(db: PrismaClient, kind: string, to: string, t: { subject: string; text: string; html: string }) {
+  await sendEmailQuietly(db, { kind, to, subject: t.subject, text: t.text, html: t.html });
 }
 
 /**
@@ -98,8 +115,8 @@ export async function requestMagicLink(db: PrismaClient, p: { email: string } & 
   // Always behave the same whether or not the account exists.
   if (!user || user.status !== "ACTIVE") return {};
   const raw = await issueToken(db, "MAGIC_LINK", email, user.id);
-  const url = `${getEnv().APP_URL}/api/auth/magic/${raw}`;
-  await enqueueEmail(db, email, templates.magicLink(url));
+  const url = `${appUrl()}/api/auth/magic/${raw}`;
+  await sendQuietly(db, "magic_link", email, templates.magicLink(url));
   return { devUrl: devLink(url) };
 }
 
@@ -123,12 +140,44 @@ export async function consumeMagicLink(db: PrismaClient, p: { token: string } & 
 // Email verification
 // ---------------------------------------------------------------------------
 
-export async function requestEmailVerification(db: PrismaClient, p: { userId: string; email: string } & RequestMeta): Promise<{ devUrl?: string }> {
-  rateLimit(`verify:${p.userId}`, 5, 60 * 60_000);
-  const raw = await issueToken(db, "EMAIL_VERIFY", p.email, p.userId);
-  const url = `${getEnv().APP_URL}/api/auth/verify-email/${raw}`;
-  await enqueueEmail(db, p.email, templates.verifyEmail(url));
-  return { devUrl: devLink(url) };
+export const VERIFICATION_RESEND_COOLDOWN_SECONDS = 60;
+
+export type VerificationSendResult = { sent: boolean; alreadyVerified?: boolean; providerId?: string | null; devUrl?: string };
+
+/**
+ * Issue a fresh verification token and deliver the email now (Section 8: sign-up flow).
+ * Steps are logged without the token: requested → token generated → provider response. Failures throw
+ * EmailDeliveryError with the provider's actual reason, or RateLimitedError for the 60-second cooldown
+ * (5 per hour per user, 20 per hour per IP).
+ */
+export async function requestEmailVerification(db: PrismaClient, p: { userId: string; email: string } & RequestMeta): Promise<VerificationSendResult> {
+  const log = logger.child({ userId: p.userId, to: maskEmail(p.email) });
+  const flags = await userRepository.authFlags(db, p.userId);
+  if (!flags) throw new AuthError("Account not found.");
+  if (flags.emailVerifiedAt) {
+    log.info("verification: already verified, nothing sent");
+    return { sent: false, alreadyVerified: true };
+  }
+  try {
+    rateLimit(`verify-cooldown:${p.userId}`, 1, VERIFICATION_RESEND_COOLDOWN_SECONDS * 1000);
+    rateLimit(`verify:${p.userId}`, 5, 60 * 60_000);
+    if (p.ipAddress) rateLimit(`verify-ip:${p.ipAddress}`, 20, 60 * 60_000);
+  } catch (err) {
+    log.warn({ retryAfterSeconds: (err as { retryAfterSeconds?: number }).retryAfterSeconds }, "verification: rate limited");
+    throw err;
+  }
+  log.info("verification: requested");
+  const raw = await issueToken(db, "EMAIL_VERIFY", flags.email, p.userId);
+  log.info("verification: token generated (24h)");
+  const url = `${appUrl()}/api/auth/verify-email/${raw}`;
+  const r = await sendEmailNow(db, { kind: "verify_email", to: flags.email, ...templates.verifyEmail(url) });
+  log.info({ providerId: r.providerId }, "verification: email handed to the provider");
+  return { sent: true, providerId: r.providerId, devUrl: devLink(url) };
+}
+
+/** What happened to the most recent verification email for this address (for the verify-email page). */
+export function latestVerificationDelivery(db: PrismaClient, email: string) {
+  return latestDelivery(db, email, "verify_email");
 }
 
 export async function verifyEmail(db: PrismaClient, token: string): Promise<{ userId: string }> {
@@ -137,6 +186,7 @@ export async function verifyEmail(db: PrismaClient, token: string): Promise<{ us
   const { count } = await tokenRepository.consume(db, t.id);
   if (count === 0) throw new AuthError("This verification link was already used.");
   await userRepository.setEmailVerified(db, t.userId);
+  logger.info({ userId: t.userId }, "verification: completed");
   return { userId: t.userId };
 }
 
@@ -151,8 +201,8 @@ export async function requestPasswordReset(db: PrismaClient, p: { email: string 
   const user = await userRepository.findByEmail(db, email);
   if (!user || user.status !== "ACTIVE") return {};
   const raw = await issueToken(db, "PASSWORD_RESET", email, user.id);
-  const url = `${getEnv().APP_URL}/reset-password/${raw}`;
-  await enqueueEmail(db, email, templates.passwordReset(url));
+  const url = `${appUrl()}/reset-password/${raw}`;
+  await sendQuietly(db, "password_reset", email, templates.passwordReset(url));
   return { devUrl: devLink(url) };
 }
 
