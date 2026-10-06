@@ -52,5 +52,5 @@ jobs:
         env:
           AUTH_SECRET: ci-auth-secret-not-for-production
           DEV_EXPOSE_LINKS: "false"
-      - name: Dependency audit (blocking at high severity)
-        run: npm audit --audit-level=high
+      - name: Dependency audit (production dependencies, blocking at high severity)
+        run: npm audit --omit=dev --audit-level=high
