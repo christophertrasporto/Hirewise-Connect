@@ -34,6 +34,8 @@ export async function saveQuestionAction(_prev: ActionResult, fd: FormData): Pro
       isRequired: fd.getAll("isRequired").includes("on"),
       state: formString(fd, "state") || "PUBLISHED",
       keywords: formString(fd, "keywords").split(",").map((k) => k.trim()).filter(Boolean),
+      topic: formString(fd, "topic"),
+      difficulty: formString(fd, "difficulty"),
       choices,
     });
     await saveQuestion(prisma, actor, courseId, lessonId, input);

@@ -67,7 +67,10 @@ export default async function LessonPage({ params, searchParams }: { params: Pro
       {tab === "questions" && (
         <Card title="Questions" description={hasQuestions ? "Multiple choice, multiple correct answers, true/false, or short answer. Add as many as you need. Editing a question that learners have already answered starts a new version; their attempts keep the old one." : undefined}>
           {hasQuestions ? (
-            <QuestionBuilder courseId={course.id} lessonId={lesson.id} questions={lesson.questions.map((q) => ({ id: q.id, type: q.type, prompt: q.prompt, explanation: q.explanation, points: q.points, isRequired: q.isRequired, state: q.state === "SUGGESTED" ? "DRAFT" : q.state, keywords: q.keywords, version: q.version, choices: q.choices.map((c) => ({ id: c.id, text: c.text, isCorrect: c.isCorrect })) }))} />
+            <>
+              <p className="mb-3 text-[13px] text-ink-500">Reuse questions from other lessons or the bank: <Link href={`/courses/manage/${course.id}/questions?location=ALL`} className="font-semibold text-brand-600 hover:text-brand-700">open the question bank</Link>.</p>
+              <QuestionBuilder courseId={course.id} lessonId={lesson.id} questions={lesson.questions.map((q) => ({ id: q.id, type: q.type, prompt: q.prompt, explanation: q.explanation, points: q.points, isRequired: q.isRequired, state: q.state === "SUGGESTED" ? "DRAFT" : q.state, keywords: q.keywords, topic: q.topic, difficulty: q.difficulty, version: q.version, choices: q.choices.map((c) => ({ id: c.id, text: c.text, isCorrect: c.isCorrect })) }))} />
+            </>
           ) : (
             <p className="text-[14px] text-ink-500">{meta.label} lessons have no questions. Change the lesson type to Quiz, Assessment, or Audio to add some.</p>
           )}

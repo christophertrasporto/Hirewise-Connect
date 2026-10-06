@@ -16,9 +16,22 @@ export const quizRepository = {
     return db.question.findUnique({ where: { id }, include: { ...questionInclude, lesson: { select: { id: true, moduleId: true, module: { select: { courseId: true } } } } } });
   },
 
-  async createQuestion(db: Db, lessonId: string, courseId: string, createdById: string, q: QuestionWrite, choices: ChoiceWrite[]) {
-    const order = (await db.question.count({ where: { lessonId } })) + 1;
+  /** lessonId null = bank-only question (phase 10), kept on the course. */
+  async createQuestion(db: Db, lessonId: string | null, courseId: string, createdById: string, q: QuestionWrite, choices: ChoiceWrite[]) {
+    const order = lessonId ? (await db.question.count({ where: { lessonId } })) + 1 : 0;
     return db.question.create({ data: { lessonId, courseId, createdById, order, ...q, choices: { create: choices.map((c, i) => ({ text: c.text, isCorrect: c.isCorrect, order: i + 1 })) } }, include: questionInclude });
+  },
+
+  /** Every question on a course: attached to lessons or bank-only, with where it lives. */
+  listForCourse(db: Db, courseId: string) {
+    return db.question.findMany({ where: { OR: [{ courseId }, { lesson: { module: { courseId } } }] }, include: { ...questionInclude, lesson: { select: { id: true, title: true, module: { select: { id: true, title: true, order: true } } } } }, orderBy: [{ updatedAt: "desc" }] });
+  },
+
+  /** Copy a question (new ids) into a lesson, or into the bank (lessonId null). Published state is kept. */
+  async copyQuestion(db: Db, id: string, target: { lessonId: string | null; courseId: string; createdById: string | null }) {
+    const q = await db.question.findUniqueOrThrow({ where: { id }, include: questionInclude });
+    const order = target.lessonId ? (await db.question.count({ where: { lessonId: target.lessonId } })) + 1 : 0;
+    return db.question.create({ data: { lessonId: target.lessonId, courseId: target.courseId, topic: q.topic, difficulty: q.difficulty, type: q.type, prompt: q.prompt, explanation: q.explanation, points: q.points, isRequired: q.isRequired, order, state: q.state === "SUGGESTED" ? "DRAFT" : q.state, keywords: q.keywords, source: q.source, createdById: target.createdById ?? q.createdById, choices: { create: q.choices.map((c) => ({ text: c.text, isCorrect: c.isCorrect, order: c.order })) } }, include: questionInclude });
   },
 
   /** Update in place, keeping the ids of choices that still exist (answers reference choice ids). */

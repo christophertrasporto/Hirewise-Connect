@@ -3,13 +3,14 @@
 import { useActionState, useEffect, useState, type ReactNode } from "react";
 import { ArrowDown, ArrowUp, CheckCircle2, Circle, Copy, Pencil, Plus, Trash2 } from "lucide-react";
 import { deleteQuestionAction, duplicateQuestionAction, moveQuestionAction, saveQuestionAction } from "@/app/(app)/quiz-actions";
+import { saveBankQuestionAction } from "@/app/(app)/bank-actions";
 import { idle, type ActionResult } from "@/server/http/action-result";
 import { Checkbox, Field, FormAlert, Input, Select, SubmitButton, Textarea, inputBase, inputOk } from "@/components/ui/Form";
 import { cn } from "@/lib/cn";
 
 export type QuestionType = "MULTIPLE_CHOICE" | "MULTIPLE_SELECT" | "TRUE_FALSE" | "SHORT_ANSWER";
 export type ChoiceValue = { id?: string; text: string; isCorrect: boolean };
-export type QuestionValue = { id: string; type: QuestionType; prompt: string; explanation: string | null; points: number; isRequired: boolean; state: "DRAFT" | "PUBLISHED"; keywords: string[]; version: number; choices: ChoiceValue[] };
+export type QuestionValue = { id: string; type: QuestionType; prompt: string; explanation: string | null; points: number; isRequired: boolean; state: "DRAFT" | "PUBLISHED"; keywords: string[]; topic?: string | null; difficulty?: string | null; version: number; choices: ChoiceValue[] };
 
 const TYPE_LABELS: Record<QuestionType, string> = { MULTIPLE_CHOICE: "Multiple choice (one correct)", MULTIPLE_SELECT: "Multiple correct answers", TRUE_FALSE: "True / False", SHORT_ANSWER: "Short answer" };
 const iconBtn = "rounded-full p-1.5 text-ink-400 hover:bg-white hover:text-ink-800 disabled:opacity-40";
@@ -28,8 +29,8 @@ function IconAction({ action, fields, label, confirm, children, danger }: { acti
 
 const blankChoices = (type: QuestionType): ChoiceValue[] => (type === "TRUE_FALSE" ? [{ text: "True", isCorrect: true }, { text: "False", isCorrect: false }] : type === "SHORT_ANSWER" ? [] : [{ text: "", isCorrect: true }, { text: "", isCorrect: false }, { text: "", isCorrect: false }, { text: "", isCorrect: false }]);
 
-export function QuestionForm({ courseId, lessonId, question, onDone }: { courseId: string; lessonId: string; question?: QuestionValue; onDone?: () => void }) {
-  const [state, action] = useActionState(saveQuestionAction, idle);
+export function QuestionForm({ courseId, lessonId, question, onDone, bank = false }: { courseId: string; lessonId: string; question?: QuestionValue; onDone?: () => void; /** Bank-only question (no lesson). */ bank?: boolean }) {
+  const [state, action] = useActionState(bank ? saveBankQuestionAction : saveQuestionAction, idle);
   const [type, setType] = useState<QuestionType>(question?.type ?? "MULTIPLE_CHOICE");
   const [choices, setChoices] = useState<ChoiceValue[]>(question?.choices.length ? question.choices : blankChoices(question?.type ?? "MULTIPLE_CHOICE"));
   const fe = state.fieldErrors ?? {};
@@ -104,6 +105,19 @@ export function QuestionForm({ courseId, lessonId, question, onDone }: { courseI
           <Select id={`q-state-${uid}`} name="state" defaultValue={question?.state ?? "PUBLISHED"}>
             <option value="PUBLISHED">Published</option>
             <option value="DRAFT">Draft (not asked)</option>
+          </Select>
+        </Field>
+      </div>
+      <div className="grid gap-4 sm:grid-cols-[1fr_200px]">
+        <Field label="Topic (optional)" htmlFor={`q-topic-${uid}`} hint="Groups questions in the course question bank, e.g. Openers, Objections.">
+          <Input id={`q-topic-${uid}`} name="topic" defaultValue={question?.topic ?? ""} placeholder="e.g. Objections" />
+        </Field>
+        <Field label="Difficulty (optional)" htmlFor={`q-diff-${uid}`}>
+          <Select id={`q-diff-${uid}`} name="difficulty" defaultValue={question?.difficulty ?? ""}>
+            <option value="">Not set</option>
+            <option value="BEGINNER">Beginner</option>
+            <option value="INTERMEDIATE">Intermediate</option>
+            <option value="ADVANCED">Advanced</option>
           </Select>
         </Field>
       </div>

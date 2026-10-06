@@ -136,6 +136,15 @@ The onboarding gate (verify email → complete profile → watch the welcome vid
 
 Tests: `tests/unit/media-credit.test.ts`; the onboarding and audio integration suites cover both callers of the shared rule.
 
-## Next phases
+## Phase 10: question bank and random draws (done)
 
-10. Question bank and random draws.
+| Piece | Where | Notes |
+| --- | --- | --- |
+| Question bank | `/courses/manage/[id]/questions` (linked from Modules & Lessons and from every lesson's Questions tab); `server/services/question-bank.service.ts`, `components/academy/QuestionBank.tsx` | Every question on the course in one list, organised by module and lesson, topic, and difficulty; filter by location (everywhere, bank only, in lessons, one lesson), topic, difficulty, type; search prompts, choices, and topics. Same gate as the builder: assigned coach with `course.quiz.build`, or `course.manage`; other coaches get NotFound. |
+| Topic and difficulty | question form (lesson and bank), `Question.topic`, `Question.difficulty` | Optional on every question. |
+| Reuse | **Add to lesson…**, **To bank**, Duplicate, Edit, Delete | Adding copies the question with new question and choice ids into the target lesson (recorded as a lesson version), so edits never cross between lessons and past attempts keep their snapshots. Lesson questions can be kept in the bank as a copy; bank-only questions (no lesson) are edited and deleted in the bank. Cross-course copies are refused. |
+| Random draws | lesson Settings → "Draw N random questions" (`randomizeCount`), phase 3 engine | Each attempt draws N of the lesson's published questions; the quiz page shows N as the question count. Pools stay per lesson; use the bank to build a lesson's pool from reusable questions. |
+| Direct authoring | unchanged | Coaches still write questions straight on the lesson page. |
+| Tests | `tests/integration/question-bank.test.ts` | listing and filters, gating, copies with new ids and version records, cross-course refusal, bank-only edit / duplicate / delete without touching lesson copies, random draw per attempt. |
+
+All ten phases of the Course Builder are complete. Remaining follow-ups live in `docs/decisions.md` (AI question suggestions use `QuestionState.SUGGESTED` and `Question.source = "ai"`, both reserved and unused).

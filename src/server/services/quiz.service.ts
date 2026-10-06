@@ -30,6 +30,9 @@ export const questionSchema = z
     state: z.enum(["DRAFT", "PUBLISHED"]).default("PUBLISHED"),
     /** Short answer: accepted keywords (case-insensitive contains). Empty = coach reviews manually. */
     keywords: z.array(z.string().trim().min(1).max(100)).max(50).default([]),
+    /** Question bank organisation (phase 10): free-text topic and a difficulty band. */
+    topic: optionalText(80),
+    difficulty: z.enum(["", "BEGINNER", "INTERMEDIATE", "ADVANCED"]).default(""),
     choices: z.array(z.object({ id: z.string().trim().min(1).optional(), text: z.string().trim().min(1, "Write the choice.").max(500), isCorrect: z.boolean().default(false) })).max(20).default([]),
   })
   .superRefine((q, ctx) => {
@@ -48,10 +51,15 @@ export const questionSchema = z
     }
   });
 export type QuestionInput = z.input<typeof questionSchema>;
+
+/** A question is the course's when it sits in one of its lessons, or is a bank-only question kept on the course. */
+export function ownsQuestion(courseId: string, q: { lessonId: string | null; courseId: string | null; lesson?: { module: { courseId: string } } | null }) {
+  return q.lessonId ? q.lesson?.module.courseId === courseId : q.courseId === courseId;
+}
 type QuestionParsed = z.infer<typeof questionSchema>;
 
 /** Course-level gate for building questions: Admin, or an assigned coach who may build quizzes. */
-async function builder(db: PrismaClient, actor: Actor, courseId: string) {
+export async function questionBuilderGate(db: PrismaClient, actor: Actor, courseId: string) {
   const course = await loadEditableCourse(db, actor, courseId);
   if (!actor.permissions.has("course.manage")) authorize(actor, "course.quiz.build");
   return course;
@@ -66,11 +74,11 @@ async function questionLesson(db: PrismaClient, courseId: string, lessonId: stri
 
 function toWrite(q: QuestionParsed): { q: QuestionWrite; choices: ChoiceWrite[] } {
   const choices = q.type === "SHORT_ANSWER" ? [] : q.choices.map((c) => ({ id: c.id, text: c.text, isCorrect: c.isCorrect }));
-  return { q: { type: q.type, prompt: q.prompt, explanation: q.explanation || null, points: q.points, isRequired: q.isRequired, state: q.state, keywords: q.type === "SHORT_ANSWER" ? q.keywords : [] }, choices };
+  return { q: { type: q.type, prompt: q.prompt, explanation: q.explanation || null, points: q.points, isRequired: q.isRequired, state: q.state, keywords: q.type === "SHORT_ANSWER" ? q.keywords : [], topic: q.topic || null, difficulty: q.difficulty || null }, choices };
 }
 
 export async function saveQuestion(db: PrismaClient, actor: Actor, courseId: string, lessonId: string, raw: QuestionInput) {
-  const course = await builder(db, actor, courseId);
+  const course = await questionBuilderGate(db, actor, courseId);
   const lesson = await questionLesson(db, course.id, lessonId);
   const input = questionSchema.parse(raw);
   const { q, choices } = toWrite(input);
@@ -95,9 +103,9 @@ export async function saveQuestion(db: PrismaClient, actor: Actor, courseId: str
 }
 
 export async function deleteQuestion(db: PrismaClient, actor: Actor, courseId: string, questionId: string) {
-  const course = await builder(db, actor, courseId);
+  const course = await questionBuilderGate(db, actor, courseId);
   const q = await quizRepository.findQuestion(db, questionId);
-  if (!q || q.lesson?.module.courseId !== course.id) throw new NotFoundError();
+  if (!q || !ownsQuestion(course.id, q)) throw new NotFoundError();
   await db.$transaction(async (tx) => {
     if (q.lessonId) await recordLessonVersion(tx, q.lessonId, actor, `Removed question "${q.prompt.slice(0, 60)}"`);
     await quizRepository.deleteQuestion(tx, q.id);
@@ -106,7 +114,7 @@ export async function deleteQuestion(db: PrismaClient, actor: Actor, courseId: s
 }
 
 export async function moveQuestion(db: PrismaClient, actor: Actor, courseId: string, questionId: string, direction: -1 | 1) {
-  const course = await builder(db, actor, courseId);
+  const course = await questionBuilderGate(db, actor, courseId);
   const q = await quizRepository.findQuestion(db, questionId);
   if (!q || !q.lessonId || q.lesson?.module.courseId !== course.id) throw new NotFoundError();
   const all = await quizRepository.listForLesson(db, q.lessonId);
@@ -117,9 +125,9 @@ export async function moveQuestion(db: PrismaClient, actor: Actor, courseId: str
 }
 
 export async function duplicateQuestion(db: PrismaClient, actor: Actor, courseId: string, questionId: string) {
-  const course = await builder(db, actor, courseId);
+  const course = await questionBuilderGate(db, actor, courseId);
   const q = await quizRepository.findQuestion(db, questionId);
-  if (!q || q.lesson?.module.courseId !== course.id) throw new NotFoundError();
+  if (!q || !ownsQuestion(course.id, q)) throw new NotFoundError();
   return db.$transaction(async (tx) => {
     const copy = await quizRepository.duplicateQuestion(tx, q.id);
     await audit(tx, { actor, action: "COURSE_UPDATED", entityType: "Question", entityId: copy.id, newValue: { courseId: course.id, op: "duplicate", from: q.id } });
@@ -340,7 +348,7 @@ export async function submitAttempt(db: PrismaClient, actor: Actor, attemptId: s
 // ---------------------------------------------------------------------------
 
 export async function attemptsAwaitingReview(db: PrismaClient, actor: Actor, courseId: string) {
-  const course = await builder(db, actor, courseId);
+  const course = await questionBuilderGate(db, actor, courseId);
   const rows = await quizRepository.pendingReviewForCourse(db, course.id);
   return rows.map((a) => {
     const snapshot = a.questionSnapshot as unknown as SnapshotQuestion[];
@@ -368,7 +376,7 @@ export const reviewSchema = z.object({ scorePercent: z.coerce.number().int().min
 
 /** Coach sets the final score for an attempt that needed a human; learner history keeps the auto score in the audit row. */
 export async function reviewAttempt(db: PrismaClient, actor: Actor, courseId: string, attemptId: string, raw: z.input<typeof reviewSchema>) {
-  const course = await builder(db, actor, courseId);
+  const course = await questionBuilderGate(db, actor, courseId);
   const input = reviewSchema.parse(raw);
   const a = await quizRepository.findAttempt(db, attemptId);
   if (!a || a.lesson.module.courseId !== course.id) throw new NotFoundError();
