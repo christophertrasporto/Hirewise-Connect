@@ -29,11 +29,24 @@ export const emailSchema = z.string().trim().toLowerCase().email("Enter a valid 
 
 const GENERIC_LOGIN_ERROR = "Incorrect email or password.";
 
-async function issueToken(db: PrismaClient, kind: keyof typeof TTL, email: string, userId: string | null): Promise<string> {
+async function issueToken(db: PrismaClient, kind: keyof typeof TTL, email: string, userId: string | null, ttlMs: number = TTL[kind]): Promise<string> {
   await tokenRepository.invalidateAll(db, kind, email);
   const raw = randomToken(32);
-  await tokenRepository.create(db, { kind, tokenHash: sha256(raw), userId, email, expiresAt: new Date(Date.now() + TTL[kind]) });
+  await tokenRepository.create(db, { kind, tokenHash: sha256(raw), userId, email, expiresAt: new Date(Date.now() + ttlMs) });
   return raw;
+}
+
+const INVITE_TTL = 7 * 24 * 60 * 60_000;
+
+/**
+ * Staff invitation: a set-password link that reuses the password-reset flow with a 7-day expiry.
+ * Called by user-admin.service after the account row exists; the caller has already been authorized.
+ */
+export async function issueInviteLink(db: PrismaClient, email: string, userId: string, roleName: string): Promise<{ devUrl?: string }> {
+  const raw = await issueToken(db, "PASSWORD_RESET", email, userId, INVITE_TTL);
+  const url = `${getEnv().APP_URL}/reset-password/${raw}`;
+  await enqueueEmail(db, email, templates.staffInvite(url, roleName));
+  return { devUrl: devLink(url) };
 }
 
 async function enqueueEmail(db: PrismaClient, to: string, t: { subject: string; text: string; html: string }) {
