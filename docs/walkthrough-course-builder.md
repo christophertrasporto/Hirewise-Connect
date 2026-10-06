@@ -71,9 +71,23 @@ Kept from before: Admin approves the first publish; everything else is coach-edi
 | Audio statuses | `audioStatusOf`, `mediaStateForLearner` | Not started, Listening, Audio complete, Quiz pending (attempt open or awaiting review), Quiz failed (retake required or failed), Completed. The course page shows the listened share, the required mark, the unlock message, and the quiz link once unlocked. |
 | Tests | `tests/integration/audio-progress.test.ts` | Enrolment and role guards, seeking to the end credits nothing, inflated reports are capped, the client's duration never overrides the coach's, honest listening at 2× reaches the threshold once, quiz pending → failed → completed, plain audio completes the lesson and the course, resume position, the six statuses. |
 
+## Phase 5: the remaining lesson types (done)
+
+| Type | Completion path | Where |
+| --- | --- | --- |
+| Video, uploaded file | Real-watching tracking through the same tracker as audio (`VideoPlayer`, native controls); completes at the lesson's required percent (default 90). | `components/academy/VideoPlayer.tsx`, `use-media-progress.ts`, `lesson-media.service.ts` |
+| Video, YouTube | IFrame Player API on the privacy-enhanced host, polled twice a second into the shared tracker; seeks never count. Coach-side duration wins when set. | `components/academy/YouTubePlayer.tsx`, `lib/video-url.ts` |
+| Video, Vimeo / Loom / other | Embedded as before plus **Mark as watched** (the page cannot measure those players). | `LessonActions.tsx` → `markLessonComplete` |
+| Text, document, link | Opening a document or link records *In progress* (`startLesson`); **Mark as read / done** completes. Media and question lessons refuse manual marking. | `lesson-media.service.ts` (`isSelfMarked`) |
+| Assignment | Learner submits per the lesson's submission type (written answer, link, file upload scoped to `courses/<id>/submissions/<profile>/`, or any of the three). Progress goes to *Pending review*; the coach grades (capped at the lesson's points), writes feedback, and marks complete or returns it. Returned work is answered with a new submission; history is append-only. Late submissions are flagged against the due date, never blocked. | `assignment.service.ts`, `assignment.repository.ts`, `AssignmentPanel.tsx`, Learners tab → "Assignments awaiting your review", `/api/academy/submissions/[id]` |
+| Assessment, manual review | Review mode MANUAL holds every attempt; the review queue now shows every question with the learner's answer, the auto result, and the correct answer or keywords (AUTO mode still shows only the questions that need a human). | `attemptsAwaitingReview` |
+
+Permissions: reviewing assignments needs `assignment.review` (COACH default) or `course.manage`; the gate is the course assignment, as everywhere else. New audit actions: `LESSON_COMPLETED`, `ASSIGNMENT_SUBMITTED`, `ASSIGNMENT_REVIEWED`.
+
+Tests: `tests/integration/lesson-types.test.ts` (self-marking rules and refusals, uploaded and YouTube video completion, assignment validation per type, scoped uploads, review gates, return and resubmit, grading completes the course, manual-review assessment queue).
+
 ## Next phases
 
-5. Remaining lesson types: video, text, document, link, assignment with review, assessment with manual review.
 6. Progress, completion rules, sequential unlock, certificates with numbers on the profile.
 7. Learner dashboard and Admin/Coach tracking table.
 8. Safe editing of published courses and version history.

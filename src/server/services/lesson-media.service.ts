@@ -6,6 +6,7 @@ import { quizRepository } from "@/server/repositories/quiz.repository";
 import { academyRepository } from "@/server/repositories/academy.repository";
 import { audit } from "@/server/audit/audit";
 import { recalculateCourseProgress } from "./progress.service";
+import { youTubeId } from "@/lib/video-url";
 
 /**
  * Real-listening tracking for audio (and uploaded video) lessons (Course Builder phase 4).
@@ -127,4 +128,48 @@ export async function recordMediaProgress(db: PrismaClient, actor: Actor, lesson
     if (completesLesson) await recalculateCourseProgress(tx, lesson.module.courseId, profileId);
   });
   return buildState(db, lesson, profileId);
+}
+
+// ---------------------------------------------------------------------------
+// Lessons the learner completes by hand
+// ---------------------------------------------------------------------------
+
+/** Text, link, and document lessons, and hosted videos the player cannot measure (anything but YouTube). */
+export function isSelfMarked(lesson: { contentType: string; storageKey: string | null; url: string | null }) {
+  if (lesson.contentType === "TEXT" || lesson.contentType === "LINK" || lesson.contentType === "DOCUMENT") return true;
+  if (lesson.contentType === "VIDEO" && !lesson.storageKey) return !youTubeId(lesson.url);
+  return false;
+}
+
+async function learnerLesson(db: PrismaClient, actor: Actor, lessonId: string) {
+  const profileId = ownProfileId(actor);
+  const lesson = await quizRepository.findQuizLesson(db, lessonId);
+  if (!lesson || lesson.status !== "PUBLISHED" || lesson.module.status !== "PUBLISHED") throw new NotFoundError();
+  const enrollment = await academyRepository.findEnrollment(db, lesson.module.courseId, profileId);
+  if (!enrollment) throw new NotFoundError();
+  if (enrollment.paymentStatus === "PENDING") throw new ForbiddenError("This course unlocks once Hirewise records your payment.");
+  return { profileId, lesson, enrollment };
+}
+
+/** Opening a text, document, or link lesson: Not started → In progress. Never completes anything. */
+export async function startLesson(db: PrismaClient, actor: Actor, lessonId: string) {
+  const { profileId, lesson } = await learnerLesson(db, actor, lessonId);
+  const existing = await quizRepository.progress(db, lesson.id, profileId);
+  if (existing) return { status: existing.status };
+  const row = await quizRepository.upsertProgress(db, lesson.id, profileId, { status: "IN_PROGRESS", lessonVersion: lesson.version });
+  return { status: row.status };
+}
+
+/** The learner marks a self-marked lesson as done; media and question lessons refuse. */
+export async function markLessonComplete(db: PrismaClient, actor: Actor, lessonId: string) {
+  const { profileId, lesson } = await learnerLesson(db, actor, lessonId);
+  if (!isSelfMarked(lesson)) throw new Error("This lesson is completed by finishing its content, not by marking it.");
+  const existing = await quizRepository.progress(db, lesson.id, profileId);
+  if (existing?.completedAt) return { completed: true, coursePercent: null as number | null, courseCompleted: false };
+  return db.$transaction(async (tx) => {
+    await quizRepository.upsertProgress(tx, lesson.id, profileId, { status: "COMPLETED", completedAt: new Date(), lessonVersion: lesson.version });
+    await audit(tx, { actor, action: "LESSON_COMPLETED", entityType: "CourseLesson", entityId: lesson.id, newValue: { courseId: lesson.module.courseId, contentType: lesson.contentType, how: "self-marked" } });
+    const course = await recalculateCourseProgress(tx, lesson.module.courseId, profileId);
+    return { completed: true, coursePercent: course.percent as number | null, courseCompleted: course.completedNow };
+  });
 }

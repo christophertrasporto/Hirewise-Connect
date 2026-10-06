@@ -342,6 +342,13 @@ export async function attemptsAwaitingReview(db: PrismaClient, actor: Actor, cou
       autoScore: a.scorePercent,
       passingScore: a.lesson.passingScore ?? course.passingScore,
       shortAnswers: snapshot.filter((q) => q.type === "SHORT_ANSWER").map((q) => ({ questionId: q.questionId, prompt: q.prompt, points: q.points, answer: typeof answers[q.questionId] === "string" ? (answers[q.questionId] as string) : "", keywords: q.keywords })),
+      /** Every question with the learner's answer and the auto result (null = needs a human), for manual-review assessments. */
+      answers: snapshot.map((q) => {
+        const raw = answers[q.questionId];
+        const chosen = Array.isArray(raw) ? raw : typeof raw === "string" && q.type !== "SHORT_ANSWER" && raw ? [raw] : [];
+        return { questionId: q.questionId, type: q.type, prompt: q.prompt, points: q.points, answer: q.type === "SHORT_ANSWER" ? (typeof raw === "string" ? raw : "") : q.choices.filter((c) => chosen.includes(c.id)).map((c) => c.text).join(", "), correctAnswer: q.type === "SHORT_ANSWER" ? q.keywords.join(", ") : q.choices.filter((c) => q.correctChoiceIds.includes(c.id)).map((c) => c.text).join(", "), correct: gradeSnapshot([q], answers).perQuestion[0].correct };
+      }),
+      reviewMode: a.lesson.reviewMode,
     };
   });
 }

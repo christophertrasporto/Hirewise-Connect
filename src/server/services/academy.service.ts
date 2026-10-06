@@ -13,6 +13,8 @@ import { rateLimit } from "@/server/auth/rate-limit";
 import type { LessonWrite } from "@/server/repositories/academy.repository";
 import { coursesLockedFor } from "./onboarding.service";
 import { categoryRepository } from "@/server/repositories/category.repository";
+import { assignmentRepository } from "@/server/repositories/assignment.repository";
+import { toSubmissionLearnerView as toSubmissionView, type SubmissionLearnerView } from "@/server/views/academy.views";
 
 const optionalText = (max: number) => z.string().trim().max(max).optional().or(z.literal(""));
 
@@ -548,13 +550,16 @@ export async function getEnrollmentForAgent(db: PrismaClient, actor: Actor, cour
     const c = await academyRepository.findCourse(db, courseId);
     if (!c || c.status !== "PUBLISHED") throw new NotFoundError();
     const lock = await coursesLockedFor(db, actor);
-    return { course: toCourseAgentView(c), enrollment: null, lessonProgress: {} as LessonProgressMap, courseProgress: null, locked: lock.locked ? { reason: lock.reason ?? "Finish your onboarding checklist first.", href: "/onboarding/welcome-video" } : null };
+    return { course: toCourseAgentView(c), enrollment: null, lessonProgress: {} as LessonProgressMap, submissions: {} as Record<string, SubmissionLearnerView>, courseProgress: null, locked: lock.locked ? { reason: lock.reason ?? "Finish your onboarding checklist first.", href: "/onboarding/welcome-video" } : null };
   }
   const unlocked = e.paymentStatus === "NOT_REQUIRED" || e.paymentStatus === "PAID" || e.paymentStatus === "WAIVED";
   const lessonIds = e.course.modules.flatMap((m) => m.lessons.map((l) => l.id));
   const progressRows = unlocked && lessonIds.length ? await db.lessonProgress.findMany({ where: { agentProfileId: profileId, lessonId: { in: lessonIds } } }) : [];
   const courseProgress = await db.courseProgress.findUnique({ where: { courseId_agentProfileId: { courseId: e.courseId, agentProfileId: profileId } } });
+  const assignmentIds = unlocked ? e.course.modules.flatMap((m) => m.lessons.filter((l) => l.contentType === "ASSIGNMENT").map((l) => l.id)) : [];
+  const submissions = Object.fromEntries((await assignmentRepository.latestByLesson(db, assignmentIds, profileId)).map((s) => [s.lessonId, toSubmissionView(s)])) as Record<string, SubmissionLearnerView>;
   return {
+    submissions,
     locked: null as null | { reason: string; href: string },
     course: toCourseAgentView(e.course, unlocked),
     enrollment: toEnrollmentAgentView(e),

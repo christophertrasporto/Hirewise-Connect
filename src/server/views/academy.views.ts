@@ -13,7 +13,7 @@ function visibleModules(c: CourseRecord) {
 
 /** Lesson as an enrolled agent sees it: never the storage key (files are streamed through a signed URL after an enrollment check). */
 function lessonAgentView(l: LessonRecord) {
-  return { id: l.id, order: l.order, title: l.title, contentType: l.contentType, description: l.description, body: l.body, url: l.url, hasFile: !!l.storageKey, fileName: l.fileName, contentMime: l.contentMime, sizeBytes: l.sizeBytes, durationSec: l.durationSec, isRequired: l.isRequired, requiredPercent: l.requiredPercent, questionCount: l._count.questions };
+  return { id: l.id, order: l.order, title: l.title, contentType: l.contentType, description: l.description, body: l.body, url: l.url, hasFile: !!l.storageKey, fileName: l.fileName, contentMime: l.contentMime, sizeBytes: l.sizeBytes, durationSec: l.durationSec, isRequired: l.isRequired, requiredPercent: l.requiredPercent, questionCount: l._count.questions, dueAt: l.dueAt, points: l.points, submissionType: l.submissionType };
 }
 
 /** Curriculum outline (titles and types only) for the catalog and locked enrolments. */
@@ -109,3 +109,9 @@ export function toCourseCoachView(c: CourseRecord) {
     createdAt: c.createdAt,
   };
 }
+
+/** An assignment submission as its author sees it: never the storage key (files stream through /api/academy/submissions). */
+export function toSubmissionLearnerView(s: { id: string; status: string; submissionType: string; text: string | null; url: string | null; fileName: string | null; storageKey: string | null; grade: number | null; feedback: string | null; submittedAt: Date; reviewedAt: Date | null }) {
+  return { id: s.id, status: s.status, submissionType: s.submissionType, text: s.text, url: s.url, fileName: s.fileName, hasFile: !!s.storageKey, grade: s.grade, feedback: s.feedback, submittedAt: s.submittedAt, reviewedAt: s.reviewedAt };
+}
+export type SubmissionLearnerView = ReturnType<typeof toSubmissionLearnerView>;

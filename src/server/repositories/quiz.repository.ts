@@ -83,7 +83,7 @@ export const quizRepository = {
   },
 
   pendingReviewForCourse(db: Db, courseId: string) {
-    return db.quizAttempt.findMany({ where: { status: "PENDING_REVIEW", lesson: { module: { courseId } } }, include: { lesson: { select: { id: true, title: true, contentType: true, passingScore: true } }, agentProfile: { select: { id: true, displayName: true } } }, orderBy: { submittedAt: "asc" } });
+    return db.quizAttempt.findMany({ where: { status: "PENDING_REVIEW", lesson: { module: { courseId } } }, include: { lesson: { select: { id: true, title: true, contentType: true, passingScore: true, reviewMode: true } }, agentProfile: { select: { id: true, displayName: true } } }, orderBy: { submittedAt: "asc" } });
   },
 
   // Lesson progress
