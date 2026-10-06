@@ -91,11 +91,12 @@ export const quizRepository = {
     return db.lessonProgress.findUnique({ where: { lessonId_agentProfileId: { lessonId, agentProfileId } } });
   },
 
-  upsertProgress(db: Db, lessonId: string, agentProfileId: string, d: { status?: LessonProgressStatus; startedAt?: Date; completedAt?: Date | null; lessonVersion?: number }) {
+  upsertProgress(db: Db, lessonId: string, agentProfileId: string, d: { status?: LessonProgressStatus; startedAt?: Date; completedAt?: Date | null; lessonVersion?: number; mediaSeconds?: number; lastPositionSec?: number; mediaPercent?: number; mediaCompletedAt?: Date | null }) {
+    const media = { ...(d.mediaSeconds !== undefined ? { mediaSeconds: d.mediaSeconds } : {}), ...(d.lastPositionSec !== undefined ? { lastPositionSec: d.lastPositionSec } : {}), ...(d.mediaPercent !== undefined ? { mediaPercent: d.mediaPercent } : {}), ...(d.mediaCompletedAt !== undefined ? { mediaCompletedAt: d.mediaCompletedAt } : {}) };
     return db.lessonProgress.upsert({
       where: { lessonId_agentProfileId: { lessonId, agentProfileId } },
-      create: { lessonId, agentProfileId, status: d.status ?? "IN_PROGRESS", startedAt: d.startedAt ?? new Date(), completedAt: d.completedAt ?? undefined, lessonVersion: d.lessonVersion },
-      update: { ...(d.status ? { status: d.status } : {}), ...(d.completedAt !== undefined ? { completedAt: d.completedAt } : {}), ...(d.lessonVersion !== undefined ? { lessonVersion: d.lessonVersion } : {}) },
+      create: { lessonId, agentProfileId, status: d.status ?? "IN_PROGRESS", startedAt: d.startedAt ?? new Date(), completedAt: d.completedAt ?? undefined, lessonVersion: d.lessonVersion, ...media },
+      update: { ...(d.status ? { status: d.status } : {}), ...(d.completedAt !== undefined ? { completedAt: d.completedAt } : {}), ...(d.lessonVersion !== undefined ? { lessonVersion: d.lessonVersion } : {}), ...media },
     });
   },
 };

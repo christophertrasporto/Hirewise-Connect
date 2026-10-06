@@ -538,6 +538,9 @@ export async function enrol(db: PrismaClient, actor: Actor, courseId: string) {
   });
 }
 
+/** Per-lesson learner state shown on the course page; the audio player resumes from lastPositionSec. */
+export type LessonProgressMap = Record<string, { status: string; completedAt: Date | null; mediaPercent: number; lastPositionSec: number; mediaCompletedAt: Date | null }>;
+
 export async function getEnrollmentForAgent(db: PrismaClient, actor: Actor, courseId: string) {
   const profileId = ownProfileId(actor);
   const e = await academyRepository.findEnrollment(db, courseId, profileId);
@@ -545,7 +548,7 @@ export async function getEnrollmentForAgent(db: PrismaClient, actor: Actor, cour
     const c = await academyRepository.findCourse(db, courseId);
     if (!c || c.status !== "PUBLISHED") throw new NotFoundError();
     const lock = await coursesLockedFor(db, actor);
-    return { course: toCourseAgentView(c), enrollment: null, lessonProgress: {} as Record<string, { status: string; completedAt: Date | null; mediaPercent: number }>, courseProgress: null, locked: lock.locked ? { reason: lock.reason ?? "Finish your onboarding checklist first.", href: "/onboarding/welcome-video" } : null };
+    return { course: toCourseAgentView(c), enrollment: null, lessonProgress: {} as LessonProgressMap, courseProgress: null, locked: lock.locked ? { reason: lock.reason ?? "Finish your onboarding checklist first.", href: "/onboarding/welcome-video" } : null };
   }
   const unlocked = e.paymentStatus === "NOT_REQUIRED" || e.paymentStatus === "PAID" || e.paymentStatus === "WAIVED";
   const lessonIds = e.course.modules.flatMap((m) => m.lessons.map((l) => l.id));
@@ -555,7 +558,7 @@ export async function getEnrollmentForAgent(db: PrismaClient, actor: Actor, cour
     locked: null as null | { reason: string; href: string },
     course: toCourseAgentView(e.course, unlocked),
     enrollment: toEnrollmentAgentView(e),
-    lessonProgress: Object.fromEntries(progressRows.map((p) => [p.lessonId, { status: p.status, completedAt: p.completedAt, mediaPercent: p.mediaPercent }])),
+    lessonProgress: Object.fromEntries(progressRows.map((p) => [p.lessonId, { status: p.status, completedAt: p.completedAt, mediaPercent: p.mediaPercent, lastPositionSec: p.lastPositionSec, mediaCompletedAt: p.mediaCompletedAt }])) as LessonProgressMap,
     courseProgress: courseProgress ? { percent: courseProgress.percent, requiredDone: courseProgress.requiredDone, requiredTotal: courseProgress.requiredTotal } : null,
   };
 }

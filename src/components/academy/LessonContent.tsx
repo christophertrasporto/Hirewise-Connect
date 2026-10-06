@@ -2,15 +2,18 @@ import Link from "next/link";
 import { ArrowRight, CheckCircle2, ClipboardCheck, ClipboardList, Download, ExternalLink, FileText, Headphones, Link2, ListChecks, Lock, Type, Video } from "lucide-react";
 import { renderMarkdown } from "@/lib/markdown";
 import { fmtBytes, fmtDuration, LESSON_TYPE_META, type LessonContentType } from "@/components/academy/lesson-meta";
+import { AudioPlayer } from "@/components/academy/AudioPlayer";
 
 type OutlineLesson = { id: string; title: string; contentType: LessonContentType; durationSec: number | null };
 type OutlineModule = { id: string; title: string; description: string | null; lessons: OutlineLesson[] };
-type Lesson = OutlineLesson & { description?: string | null; body: string | null; url: string | null; hasFile: boolean; fileName: string | null; contentMime: string | null; sizeBytes: number | null; isRequired?: boolean; questionCount?: number };
+type Lesson = OutlineLesson & { description?: string | null; body: string | null; url: string | null; hasFile: boolean; fileName: string | null; contentMime: string | null; sizeBytes: number | null; isRequired?: boolean; questionCount?: number; requiredPercent?: number | null };
 type Module = Omit<OutlineModule, "lessons"> & { lessons: Lesson[] };
-export type LessonProgressMap = Record<string, { status: string; completedAt: Date | null; mediaPercent: number }>;
+export type LessonProgressMap = Record<string, { status: string; completedAt: Date | null; mediaPercent: number; lastPositionSec?: number; mediaCompletedAt?: Date | null }>;
 
 const ICONS: Record<LessonContentType, typeof Video> = { VIDEO: Video, AUDIO: Headphones, LINK: Link2, DOCUMENT: FileText, TEXT: Type, QUIZ: ListChecks, ASSIGNMENT: ClipboardList, ASSESSMENT: ClipboardCheck };
 const QUESTION_TYPES: LessonContentType[] = ["QUIZ", "ASSESSMENT", "AUDIO"];
+/** Audio lessons open their quiz from the player once the required share has been heard. */
+const QUIZ_LINK_TYPES: LessonContentType[] = ["QUIZ", "ASSESSMENT"];
 
 /** Uploaded lesson files are streamed through the app so access is re-checked on every play. */
 export const lessonFileUrl = (lessonId: string) => `/api/academy/lessons/${lessonId}`;
@@ -74,7 +77,7 @@ function StatusChip({ status }: { status: string | undefined }) {
   return <span className={`rounded-full px-2 py-0.5 text-[10.5px] font-semibold uppercase tracking-[0.08em] ring-1 ring-inset ${m.cls}`}>{m.label}</span>;
 }
 
-function LessonBody({ lesson, courseId }: { lesson: Lesson; courseId?: string }) {
+function LessonBody({ lesson, courseId, progress }: { lesson: Lesson; courseId?: string; progress?: LessonProgressMap[string] }) {
   const embed = lesson.contentType === "VIDEO" && lesson.url ? embedUrl(lesson.url) : null;
   const quizHref = courseId ? `/courses/${courseId}/quiz/${lesson.id}` : null;
   return (
@@ -83,7 +86,9 @@ function LessonBody({ lesson, courseId }: { lesson: Lesson; courseId?: string })
       {lesson.contentType === "VIDEO" && lesson.hasFile && <video controls preload="metadata" className="w-full rounded-2xl bg-ink-900" src={lessonFileUrl(lesson.id)} />}
       {lesson.contentType === "VIDEO" && !lesson.hasFile && embed && <div className="aspect-video overflow-hidden rounded-2xl bg-ink-900"><iframe src={embed} title={lesson.title} className="h-full w-full" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen" allowFullScreen referrerPolicy="strict-origin-when-cross-origin" /></div>}
       {lesson.contentType === "VIDEO" && !lesson.hasFile && !embed && lesson.url && <a href={lesson.url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 text-[14px] font-semibold text-brand-600 hover:text-brand-700">Watch the video <ExternalLink className="h-4 w-4" /></a>}
-      {lesson.contentType === "AUDIO" && lesson.hasFile && <audio controls preload="metadata" className="w-full" src={lessonFileUrl(lesson.id)} />}
+      {lesson.contentType === "AUDIO" && lesson.hasFile && (
+        <AudioPlayer lessonId={lesson.id} src={lessonFileUrl(lesson.id)} title={lesson.title} durationSec={lesson.durationSec} requiredPercent={lesson.requiredPercent ?? 90} questionCount={lesson.questionCount ?? 0} quizHref={quizHref} trackable={!!courseId} initial={{ percent: progress?.mediaPercent ?? 0, positionSec: progress?.lastPositionSec ?? 0, audioCompleted: !!progress?.mediaCompletedAt, status: progress?.status ?? "NOT_STARTED" }} />
+      )}
       {lesson.contentType === "DOCUMENT" && lesson.hasFile && (
         <a href={lessonFileUrl(lesson.id)} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 rounded-2xl border border-ink-200 bg-white px-4 py-3 text-[14px] font-semibold text-ink-800 hover:border-brand-300 hover:text-brand-700">
           <Download className="h-4 w-4 text-brand-600" /> {lesson.fileName ?? "Open document"}{lesson.sizeBytes ? <span className="font-normal text-ink-400">· {fmtBytes(lesson.sizeBytes)}</span> : null}
@@ -94,9 +99,9 @@ function LessonBody({ lesson, courseId }: { lesson: Lesson; courseId?: string })
       {lesson.contentType === "ASSIGNMENT" && lesson.body && <div className="space-y-3 text-[14.5px] leading-relaxed text-ink-700">{renderMarkdown(lesson.body)}</div>}
       {lesson.contentType === "ASSIGNMENT" && <p className="text-[12.5px] text-ink-400">Assignment submissions arrive in a later phase.</p>}
       {(lesson.contentType === "QUIZ" || lesson.contentType === "ASSESSMENT") && lesson.body && <p className="whitespace-pre-line text-[13.5px] leading-relaxed text-ink-600">{lesson.body}</p>}
-      {QUESTION_TYPES.includes(lesson.contentType) && quizHref && (
+      {QUIZ_LINK_TYPES.includes(lesson.contentType) && quizHref && (
         <Link href={quizHref} className="inline-flex h-10 items-center gap-1.5 rounded-full bg-ink-900 px-4 text-[13.5px] font-semibold text-white hover:bg-ink-800">
-          {lesson.contentType === "AUDIO" ? "Open the quiz" : lesson.contentType === "ASSESSMENT" ? "Open the assessment" : "Open the quiz"} <ArrowRight className="h-4 w-4" />
+          {lesson.contentType === "ASSESSMENT" ? "Open the assessment" : "Open the quiz"} <ArrowRight className="h-4 w-4" />
         </Link>
       )}
       {lesson.contentType !== "TEXT" && lesson.contentType !== "ASSIGNMENT" && lesson.contentType !== "QUIZ" && lesson.contentType !== "ASSESSMENT" && lesson.body && <p className="whitespace-pre-line text-[13.5px] leading-relaxed text-ink-600">{lesson.body}</p>}
@@ -130,7 +135,7 @@ export function LessonContent({ modules, courseId, progress = {} }: { modules: M
                       <StatusChip status={p?.status} />
                       {l.isRequired !== false && !done && <Lock className="h-3.5 w-3.5 text-ink-200" aria-hidden="true" />}
                     </summary>
-                    <LessonBody lesson={l} courseId={courseId} />
+                    <LessonBody lesson={l} courseId={courseId} progress={p} />
                   </details>
                 </li>
               );

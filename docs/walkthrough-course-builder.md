@@ -60,9 +60,19 @@ Kept from before: Admin approves the first publish; everything else is coach-edi
 | Removed | `Exam` service functions, `ExamBuilder`, `/courses/exam/[attemptId]`, exam fields in projections | The three legacy tables stay until a later cleanup migration; nothing reads them. Seeds create quizzes through the shared tables. |
 | Tests | `tests/integration/quiz-engine.test.ts`, `tests/unit/academy-grading.test.ts`, rewritten exam sections of `academy.test.ts` and `academy-curriculum.test.ts` | Builder validation and permissions; snapshot shuffle and random draw; choice-id grading, keyword matching, manual review; answer-key leakage; attempt limits, retake wait, score policy, expiry; editing a question after attempts leaves the old snapshot intact; completion and certification pipeline. |
 
+## Phase 4: audiobook lesson (done)
+
+| Piece | Where | Notes |
+| --- | --- | --- |
+| Player | `components/academy/AudioPlayer.tsx`, rendered by `LessonContent` for audio lessons | Play/pause, seek bar, current time and duration, volume and mute, speed 0.75× to 2×, resume from the stored position. Works at phone width. Coach previews use the same player without tracking. |
+| Real-listening tracking | `server/services/lesson-media.service.ts`, `POST /api/academy/lessons/[lessonId]/progress` | The player sums only forward motion at playback speed (seeks never count) and reports every 8 s, on pause, on end, and on page hide (`sendBeacon`). The server credits at most wall-clock × rate + 2 s per report, never more than 60 s, and uses the coach-side duration; the total is capped at 105 % of the duration. Stored in `LessonProgress` (`mediaSeconds`, `mediaPercent`, `lastPositionSec`, `mediaCompletedAt`, `startedAt`), so progress and the resume position follow the learner across devices. |
+| Completion | `recordMediaProgress` | When the listened share reaches the lesson's required percent (default 90) the audio part is complete and a `LESSON_MEDIA_COMPLETED` audit row is written once. An audio lesson with no published questions (and, from phase 5, an uploaded video) completes outright and course progress is recalculated. An audiobook with questions unlocks its quiz instead and completes only when the quiz is passed, through the phase 3 engine. |
+| Quiz gate | `quizStateForLearner` | Until `mediaCompletedAt` is set the quiz page says how much listening is still required and `startAttempt` refuses. |
+| Audio statuses | `audioStatusOf`, `mediaStateForLearner` | Not started, Listening, Audio complete, Quiz pending (attempt open or awaiting review), Quiz failed (retake required or failed), Completed. The course page shows the listened share, the required mark, the unlock message, and the quiz link once unlocked. |
+| Tests | `tests/integration/audio-progress.test.ts` | Enrolment and role guards, seeking to the end credits nothing, inflated reports are capped, the client's duration never overrides the coach's, honest listening at 2× reaches the threshold once, quiz pending → failed → completed, plain audio completes the lesson and the course, resume position, the six statuses. |
+
 ## Next phases
 
-4. Audiobook lesson: upload, player, real-listening tracking, resume, quiz gating, the six audio statuses.
 5. Remaining lesson types: video, text, document, link, assignment with review, assessment with manual review.
 6. Progress, completion rules, sequential unlock, certificates with numbers on the profile.
 7. Learner dashboard and Admin/Coach tracking table.
