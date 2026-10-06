@@ -30,7 +30,7 @@ export default async function StaffAcademyCoursesPage() {
             {pending.map((c) => (
               <li key={c.id} className="flex flex-col gap-3 py-4 md:flex-row md:items-center md:justify-between">
                 <div>
-                  <Link href={`/coach/courses/${c.id}`} className="text-[15px] font-semibold text-ink-900 hover:text-brand-700">{c.title}</Link>
+                  <Link href={`/courses/manage/${c.id}`} className="text-[15px] font-semibold text-ink-900 hover:text-brand-700">{c.title}</Link>
                   <p className="text-[12.5px] text-ink-400">{c.category} · {c.priceLabel} · by {c.ownerCoach.email} · {c.exam?.questions.length ?? 0} questions{c.requiresCoachReview ? " · coach review required" : ""}</p>
                 </div>
                 <div className="w-full md:w-[300px]"><CourseWorkflowButton courseId={c.id} op="PUBLISH" label="Publish" variant="primary" templates={templates.map((t) => ({ id: t.id, name: t.name }))} /></div>
@@ -46,7 +46,7 @@ export default async function StaffAcademyCoursesPage() {
             <tbody className="divide-y divide-ink-100">
               {others.map((c) => (
                 <tr key={c.id}>
-                  <td className="py-3"><Link href={`/coach/courses/${c.id}`} className="font-semibold text-brand-600">{c.title}</Link><span className="block text-[12px] text-ink-400">{c.category}{c.publishedAt ? ` · ${fmtDate(c.publishedAt)}` : ""}</span></td>
+                  <td className="py-3"><Link href={`/courses/manage/${c.id}`} className="font-semibold text-brand-600">{c.title}</Link><span className="block text-[12px] text-ink-400">{c.category}{c.publishedAt ? ` · ${fmtDate(c.publishedAt)}` : ""}</span></td>
                   <td className="py-3 text-ink-600">{c.ownerCoach.email}</td>
                   <td className="py-3 font-semibold text-ink-800">{c.priceLabel}</td>
                   <td className="py-3 text-ink-600">{c.enrolledCount}</td>

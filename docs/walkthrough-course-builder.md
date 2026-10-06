@@ -29,9 +29,24 @@ Tests: `tests/integration/course-builder-schema.test.ts` builds a legacy exam th
 
 Not in phase 1: any UI, navigation, service, or permission change. The app behaves exactly as before.
 
+## Phase 2: permissions and the Course Builder shell (done)
+
+| Piece | Where | Notes |
+| --- | --- | --- |
+| Navigation | `src/app/(app)/layout.tsx` | One **Courses** item for talent, coaches, and Academy administrators. "Academy", "Coach console", and "Academy admin" are gone from the main nav; their pages remain and are linked from the Courses home. `/coach/courses/*` redirects into the builder. |
+| Courses home | `/courses` → `components/academy/BuilderHome.tsx` for builders, the learner catalog for talent | Course list with status, module and lesson counts, enrolments; links to Learners & assessments, Approvals, Categories, Payments, Certifications, Onboarding (each by permission). |
+| Builder | `/courses/manage/[id]` with tabs Overview · Modules & Lessons · Learners · Progress · Certification · Settings (`BuilderTabs`, `load.ts` shares one course load per request) | Overview: course form (category from the admin table, difficulty, duration, price, intro video, welcome message), publishing, coaches. Modules & Lessons: `CurriculumEditor` with required/draft flags, duplicate, reorder, and a type-driven lesson form. Settings: completion rules, sequential unlock, display order, prerequisites, verification gate, archive. Certification: template link (Admin) and the completion rules in plain words. Progress: enrolment table until phase 7. |
+| Lesson page | `/courses/manage/[id]/lessons/[lessonId]` with Content · Questions · Settings · Preview | Questions tab is a placeholder until phase 3. Preview reuses the learner renderer. |
+| Lesson types | all eight selectable; the form shows only the fields the type uses (`normaliseLesson` clears the rest) | Quiz/assessment: passing score, attempts, time limit, random draw, shuffle, show answers/explanations, retake wait, score policy, review mode. Assignment: submission type, due date, points. Audio/video: required play percentage (default 90). |
+| Categories | `/courses/manage/categories`, `category.service.ts` | Admin CRUD with order and active flag; renaming keeps the legacy text column in sync; inactive categories cannot be chosen for new courses. |
+| Permissions | `course.audio.upload`, `course.quiz.build`, `assignment.review`, `learner.progress.read` | Included in the COACH role by default and grantable individually to any user through Super Admin overrides. Audio and video uploads now require `course.audio.upload` (Admin always may); course visibility stays enforced by course assignment. |
+| Learner projection | `academy.views.ts` | Learners only ever receive published modules and published lessons; the outline hides drafts too. |
+| Tests | `tests/integration/course-builder.test.ts` | categories and permission, builder fields and category sync, settings and prerequisites, template linking, per-type lesson storage, draft visibility, duplicates without learner data, upload permission. |
+
+Kept from before: Admin approves the first publish; everything else is coach-editable at any status.
+
 ## Next phases
 
-2. Builder shell: "Courses" navigation, course tabs, module and lesson editing with reordering, type-driven lesson forms, category admin.
 3. Question Builder and quiz engine (scoring by choice id, shuffle, retakes, attempt history); legacy exam code removed.
 4. Audiobook lesson: upload, player, real-listening tracking, resume, quiz gating, the six audio statuses.
 5. Remaining lesson types: video, text, document, link, assignment with review, assessment with manual review.

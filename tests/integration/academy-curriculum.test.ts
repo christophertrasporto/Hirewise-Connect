@@ -16,7 +16,8 @@ const db = testDb();
 let dir = "";
 const ids = { coach: "coach_c1", coach2: "coach_c2", admin: "admin_c1", agentUser: "", agentProfile: "", agent2User: "", agent2Profile: "", course: "", paid: "", m1: "", m2: "", text: "", link: "", video: "", doc: "" };
 
-const courseInput = (title: string, priceUsd: string) => ({ title, category: "Sales", description: "A course description long enough to satisfy validation rules.", syllabus: "", contentUrl: "", priceUsd, passingScore: 60, requiresCoachReview: false });
+let salesCategoryId = "";
+const courseInput = (title: string, priceUsd: string) => ({ title, categoryId: salesCategoryId, difficulty: "BEGINNER" as const, description: "A course description long enough to satisfy validation rules.", syllabus: "", contentUrl: "", priceUsd, passingScore: 60, requiresCoachReview: false });
 const examInput = { title: "Final exam", instructions: "", timeLimitMin: "" as const, maxAttempts: 2, questions: [
   { prompt: "Question one prompt", options: ["A", "B", "C"], correctIndex: 1, points: 1, explanation: "" },
   { prompt: "Question two prompt", options: ["A", "B"], correctIndex: 0, points: 1, explanation: "" },
@@ -31,6 +32,7 @@ beforeAll(async () => {
   resetStorageForTests();
   await resetDb(db);
   for (const key of Object.keys(ROLE_NAMES) as RoleKey[]) await db.role.create({ data: { key, name: ROLE_NAMES[key].name } });
+  salesCategoryId = (await db.courseCategory.create({ data: { name: "Sales", slug: "sales", order: 10 } })).id;
   const role = async (k: RoleKey) => (await db.role.findUniqueOrThrow({ where: { key: k } })).id;
   await db.user.create({ data: { id: ids.coach, email: "coach@hirewise.example", roleId: await role("COACH") } });
   await db.user.create({ data: { id: ids.coach2, email: "coach2@hirewise.example", roleId: await role("COACH") } });

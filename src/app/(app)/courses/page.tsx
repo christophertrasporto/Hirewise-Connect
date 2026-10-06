@@ -3,16 +3,24 @@ import Link from "next/link";
 import { Award, BookOpen, CheckCircle2, Lock } from "lucide-react";
 import { prisma } from "@/server/db/client";
 import { requireActor } from "@/server/auth/require-actor";
-import { catalogForAgent, academyLockFor } from "@/server/services/academy.service";
+import { catalogForAgent, academyLockFor, listCoursesForCoach } from "@/server/services/academy.service";
 import { getOwnProfile } from "@/server/services/agent.service";
 import { PageHeader, Card, StatusBadge, EmptyState, Banner, fmtDate } from "@/components/app/ui";
 import { cn } from "@/lib/cn";
+import { can } from "@/server/policies/authorize";
+import { BuilderHome } from "@/components/academy/BuilderHome";
 
-export const metadata: Metadata = { title: "Academy" };
+export const metadata: Metadata = { title: "Courses" };
 
 export default async function AcademyPage() {
   const actor = await requireActor();
-  if (actor.role !== "AGENT") return <Banner tone="warn" title="Talent only">The Academy catalog is for talent accounts. Coaches use the Coach console.</Banner>;
+  if (actor.role !== "AGENT") {
+    if (can(actor, "course.create_own") || can(actor, "course.manage") || can(actor, "course.payment.record") || can(actor, "certification.review")) {
+      const builderCourses = can(actor, "course.create_own") || can(actor, "course.manage") ? await listCoursesForCoach(prisma, actor) : [];
+      return <BuilderHome actor={actor} courses={builderCourses} />;
+    }
+    return <Banner tone="warn" title="No course access">Courses are for talent, coaches, and Academy administrators.</Banner>;
+  }
   const [courses, profile, lock] = await Promise.all([catalogForAgent(prisma, actor), getOwnProfile(prisma, actor), academyLockFor(prisma, actor)]);
   const mine = courses.filter((c) => c.enrollment);
   const available = courses.filter((c) => !c.enrollment);

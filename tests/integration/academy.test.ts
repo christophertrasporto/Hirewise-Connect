@@ -16,7 +16,8 @@ import { collectKeys, FORBIDDEN_FOR_CLIENT } from "@/server/views/forbidden-keys
 const db = testDb();
 const ids = { coach: "coach_1", coach2: "coach_2", admin: "admin_1", sales: "sales_1", agentUser: "", agentProfile: "", agent2User: "", agent2Profile: "", clientUser: "", clientId: "", templateSetter: "", templateCsr: "", labelGood: "", labelPoor: "", freeCourse: "", paidCourse: "" };
 
-const courseInput = (title: string, priceUsd: string, requiresCoachReview = false) => ({ title, category: "Sales", description: "A course description long enough to satisfy validation rules.", syllabus: "Module 1", contentUrl: "", priceUsd, passingScore: 70, requiresCoachReview });
+let salesCategoryId = "";
+const courseInput = (title: string, priceUsd: string, requiresCoachReview = false) => ({ title, categoryId: salesCategoryId, difficulty: "BEGINNER" as const, description: "A course description long enough to satisfy validation rules.", syllabus: "Module 1", contentUrl: "", priceUsd, passingScore: 70, requiresCoachReview });
 const examInput = { title: "Final exam", instructions: "", timeLimitMin: "" as const, maxAttempts: 2, questions: [
   { prompt: "Question one prompt", options: ["A", "B", "C"], correctIndex: 1, points: 1, explanation: "" },
   { prompt: "Question two prompt", options: ["A", "B"], correctIndex: 0, points: 1, explanation: "" },
@@ -28,6 +29,7 @@ beforeAll(async () => {
   setEmailChannelForTests(new ConsoleEmailChannel());
   await resetDb(db);
   for (const key of Object.keys(ROLE_NAMES) as RoleKey[]) await db.role.create({ data: { key, name: ROLE_NAMES[key].name } });
+  salesCategoryId = (await db.courseCategory.create({ data: { name: "Sales", slug: "sales", order: 10 } })).id;
   const role = async (k: RoleKey) => (await db.role.findUniqueOrThrow({ where: { key: k } })).id;
   await db.user.create({ data: { id: ids.coach, email: "coach@hirewise.example", roleId: await role("COACH") } });
   await db.user.create({ data: { id: ids.coach2, email: "coach2@hirewise.example", roleId: await role("COACH") } });

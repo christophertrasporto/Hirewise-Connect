@@ -12,13 +12,21 @@ import { getStorage, newStorageKey } from "@/server/adapters/storage";
 import { rateLimit } from "@/server/auth/rate-limit";
 import type { LessonWrite } from "@/server/repositories/academy.repository";
 import { coursesLockedFor } from "./onboarding.service";
+import { categoryRepository } from "@/server/repositories/category.repository";
 
 const optionalText = (max: number) => z.string().trim().max(max).optional().or(z.literal(""));
 
+export const COURSE_DIFFICULTIES = ["BEGINNER", "INTERMEDIATE", "ADVANCED"] as const;
+
 export const courseSchema = z.object({
   title: z.string().trim().min(3, "Give the course a title.").max(120),
-  category: z.string().trim().min(2).max(60),
+  /** Admin-managed CourseCategory id. The legacy `category` text column is kept in sync from the category name. */
+  categoryId: z.string().trim().min(1, "Choose a category."),
   description: z.string().trim().min(20, "Describe the course in at least 20 characters.").max(2000),
+  difficulty: z.enum(COURSE_DIFFICULTIES).default("BEGINNER"),
+  estimatedMinutes: z.coerce.number().int().min(1).max(100000).optional().or(z.literal("")),
+  introVideoUrl: z.string().trim().url("Enter a full URL, including https://").optional().or(z.literal("")),
+  welcomeMessage: z.string().trim().max(4000).optional().or(z.literal("")),
   syllabus: optionalText(20000),
   contentUrl: z.string().trim().url("Enter a full URL").optional().or(z.literal("")),
   /** USD, e.g. "49.00". Empty or 0 = free. */
@@ -26,7 +34,22 @@ export const courseSchema = z.object({
   passingScore: z.coerce.number().int().min(1).max(100).default(70),
   requiresCoachReview: z.coerce.boolean().default(false),
 });
-export type CourseInput = z.infer<typeof courseSchema>;
+export type CourseInput = z.input<typeof courseSchema>;
+type CourseParsed = z.infer<typeof courseSchema>;
+
+/** Settings tab: rules that change how learners move through the course. */
+export const courseSettingsSchema = z.object({
+  isRequired: z.boolean().default(false),
+  sequentialUnlock: z.boolean().default(false),
+  completionRequiresQuizPass: z.boolean().default(true),
+  completionRequiresFinalAssessment: z.boolean().default(false),
+  displayOrder: z.coerce.number().int().min(0).max(100000).default(0),
+  /** Course ids that must be completed first. */
+  prerequisiteIds: z.array(z.string().trim().min(1)).default([]),
+  /** Minimum verification level required to enrol, or empty for any talent. */
+  minVerificationLevel: z.enum(["", "BASIC", "VERIFIED", "CERTIFIED", "ELITE"]).default(""),
+});
+export type CourseSettingsInput = z.input<typeof courseSettingsSchema>;
 
 export function usdToCents(v: string | undefined): number {
   if (!v) return 0;
@@ -52,27 +75,103 @@ async function loadEditable(db: PrismaClient, actor: Actor, courseId: string) {
 // Coach: courses
 // ---------------------------------------------------------------------------
 
-export async function createCourse(db: PrismaClient, actor: Actor, input: CourseInput) {
+async function categoryOrThrow(db: PrismaClient, categoryId: string) {
+  const cat = await categoryRepository.findById(db, categoryId);
+  if (!cat || !cat.isActive) throw new Error("Choose an active category.");
+  return cat;
+}
+
+function builderFields(input: CourseParsed, categoryName: string) {
+  return {
+    category: categoryName,
+    categoryId: input.categoryId,
+    difficulty: input.difficulty,
+    estimatedMinutes: input.estimatedMinutes === "" || input.estimatedMinutes === undefined ? null : input.estimatedMinutes,
+    introVideoUrl: input.introVideoUrl || null,
+    welcomeMessage: input.welcomeMessage || null,
+  };
+}
+
+export async function createCourse(db: PrismaClient, actor: Actor, raw: CourseInput) {
   if (!actor.permissions.has("course.manage")) authorize(actor, "course.create_own");
+  const input = courseSchema.parse(raw);
+  const cat = await categoryOrThrow(db, input.categoryId);
   const priceCents = usdToCents(input.priceUsd || undefined);
   let code = slug(input.title) || `course-${Date.now()}`;
   if (await academyRepository.findCourseByCode(db, code)) code = `${code}-${Date.now().toString(36).slice(-4)}`;
   const course = await db.$transaction(async (tx) => {
-    const c = await academyRepository.createCourse(tx, { code, title: input.title, category: input.category, description: input.description, syllabus: input.syllabus || null, contentUrl: input.contentUrl || null, ownerCoachUserId: actor.userId, priceCents, passingScore: input.passingScore, requiresCoachReview: input.requiresCoachReview });
+    const c = await academyRepository.createCourse(tx, { code, title: input.title, ...builderFields(input, cat.name), description: input.description, syllabus: input.syllabus || null, contentUrl: input.contentUrl || null, ownerCoachUserId: actor.userId, priceCents, passingScore: input.passingScore, requiresCoachReview: input.requiresCoachReview });
     await audit(tx, { actor, action: "COURSE_CREATED", entityType: "AcademyCourse", entityId: c.id, newValue: { title: c.title, priceCents, currency: "USD" } });
     return c;
   });
   return course.id;
 }
 
-export async function updateCourse(db: PrismaClient, actor: Actor, courseId: string, input: CourseInput) {
+export async function updateCourse(db: PrismaClient, actor: Actor, courseId: string, raw: CourseInput) {
   const c = await loadEditable(db, actor, courseId);
+  const input = courseSchema.parse(raw);
+  const cat = await categoryOrThrow(db, input.categoryId);
   const priceCents = usdToCents(input.priceUsd || undefined);
   await db.$transaction(async (tx) => {
-    await academyRepository.updateCourse(tx, c.id, { title: input.title, category: input.category, description: input.description, syllabus: input.syllabus || null, contentUrl: input.contentUrl || null, priceCents, passingScore: input.passingScore, requiresCoachReview: input.requiresCoachReview });
+    await academyRepository.updateCourse(tx, c.id, { title: input.title, ...builderFields(input, cat.name), description: input.description, syllabus: input.syllabus || null, contentUrl: input.contentUrl || null, priceCents, passingScore: input.passingScore, requiresCoachReview: input.requiresCoachReview });
     await audit(tx, { actor, action: "COURSE_UPDATED", entityType: "AcademyCourse", entityId: c.id, newValue: { title: input.title, passingScore: input.passingScore } });
     if (priceCents !== c.priceCents) await audit(tx, { actor, action: "COURSE_PRICE_CHANGED", entityType: "AcademyCourse", entityId: c.id, previousValue: { priceCents: c.priceCents }, newValue: { priceCents, currency: "USD" } });
   });
+}
+
+/** Settings tab: completion rules, sequential unlock, prerequisites, access gate. Editable at any status. */
+export async function updateCourseSettings(db: PrismaClient, actor: Actor, courseId: string, raw: CourseSettingsInput) {
+  const c = await loadEditable(db, actor, courseId);
+  const input = courseSettingsSchema.parse(raw);
+  const prereqs = [...new Set(input.prerequisiteIds)].filter((id) => id !== c.id);
+  if (prereqs.length) {
+    const found = await db.academyCourse.count({ where: { id: { in: prereqs } } });
+    if (found !== prereqs.length) throw new NotFoundError();
+  }
+  await db.$transaction(async (tx) => {
+    await academyRepository.updateCourse(tx, c.id, {
+      isRequired: input.isRequired,
+      sequentialUnlock: input.sequentialUnlock,
+      completionRequiresQuizPass: input.completionRequiresQuizPass,
+      completionRequiresFinalAssessment: input.completionRequiresFinalAssessment,
+      displayOrder: input.displayOrder,
+    });
+    await tx.academyCourse.update({ where: { id: c.id }, data: { accessRules: input.minVerificationLevel ? { minVerificationLevel: input.minVerificationLevel } : undefined } });
+    if (!input.minVerificationLevel) await tx.academyCourse.update({ where: { id: c.id }, data: { accessRules: { set: null } as never } }).catch(() => tx.academyCourse.update({ where: { id: c.id }, data: { accessRules: undefined } }));
+    await tx.coursePrerequisite.deleteMany({ where: { courseId: c.id } });
+    if (prereqs.length) await tx.coursePrerequisite.createMany({ data: prereqs.map((requiresCourseId) => ({ courseId: c.id, requiresCourseId })), skipDuplicates: true });
+    await audit(tx, { actor, action: "COURSE_UPDATED", entityType: "AcademyCourse", entityId: c.id, newValue: { settings: { isRequired: input.isRequired, sequentialUnlock: input.sequentialUnlock, completionRequiresQuizPass: input.completionRequiresQuizPass, completionRequiresFinalAssessment: input.completionRequiresFinalAssessment, displayOrder: input.displayOrder, prerequisites: prereqs.length, minVerificationLevel: input.minVerificationLevel || null } } });
+  });
+}
+
+export async function duplicateModule(db: PrismaClient, actor: Actor, courseId: string, moduleId: string) {
+  const c = await loadEditable(db, actor, courseId);
+  const m = await academyRepository.findModule(db, moduleId);
+  if (!m || m.courseId !== c.id) throw new NotFoundError();
+  return db.$transaction(async (tx) => {
+    const copy = await academyRepository.duplicateModule(tx, m.id);
+    await audit(tx, { actor, action: "COURSE_UPDATED", entityType: "CourseModule", entityId: copy.id, newValue: { courseId: c.id, op: "duplicate", from: m.id } });
+    return copy.id;
+  });
+}
+
+export async function duplicateLesson(db: PrismaClient, actor: Actor, courseId: string, lessonId: string) {
+  const c = await loadEditable(db, actor, courseId);
+  const l = await academyRepository.findLesson(db, lessonId);
+  if (!l || l.module.courseId !== c.id) throw new NotFoundError();
+  return db.$transaction(async (tx) => {
+    const copy = await academyRepository.duplicateLesson(tx, l.id);
+    await audit(tx, { actor, action: "COURSE_UPDATED", entityType: "CourseLesson", entityId: copy.id, newValue: { courseId: c.id, op: "duplicate", from: l.id } });
+    return copy.id;
+  });
+}
+
+/** One lesson with its questions and learner-data counts, for the lesson page (Content / Questions / Settings / Preview). */
+export async function getLessonForCoach(db: PrismaClient, actor: Actor, courseId: string, lessonId: string) {
+  const c = await loadEditable(db, actor, courseId);
+  const l = await academyRepository.findLessonFull(db, lessonId);
+  if (!l || l.module.courseId !== c.id) throw new NotFoundError();
+  return { course: toCourseCoachView(c), lesson: l };
 }
 
 /**
@@ -102,6 +201,21 @@ export async function publishCourse(db: PrismaClient, actor: Actor, courseId: st
     await academyRepository.setCourseStatus(tx, c.id, "PUBLISHED", { publishedById: actor.userId, publishedAt: new Date() });
     await audit(tx, { actor, action: "COURSE_PUBLISHED", entityType: "AcademyCourse", entityId: c.id, newValue: { certificationTemplateId: opts.certificationTemplateId ?? c.certificationTemplateId, priceCents: c.priceCents } });
     await publishEvent(tx, "COURSE_PUBLISHED", { courseId: c.id, title: c.title, coachUserId: c.ownerCoachUserId });
+  });
+}
+
+/** Admin links (or clears) the certification template outside the publish step; same rule as publishing (Section 4.4). */
+export async function setCourseCertificationTemplate(db: PrismaClient, actor: Actor, courseId: string, certificationTemplateId: string | null) {
+  authorize(actor, "course.manage");
+  const c = await academyRepository.findCourse(db, courseId);
+  if (!c) throw new NotFoundError();
+  if (certificationTemplateId) {
+    const t = await db.certificationTemplate.findUnique({ where: { id: certificationTemplateId }, select: { id: true, isActive: true } });
+    if (!t || !t.isActive) throw new Error("Choose an active certification template.");
+  }
+  await db.$transaction(async (tx) => {
+    await academyRepository.updateCourse(tx, c.id, { certificationTemplateId });
+    await audit(tx, { actor, action: "COURSE_UPDATED", entityType: "AcademyCourse", entityId: c.id, previousValue: { certificationTemplateId: c.certificationTemplateId }, newValue: { certificationTemplateId } });
   });
 }
 
@@ -164,7 +278,7 @@ export async function saveExam(db: PrismaClient, actor: Actor, courseId: string,
 // Coach: curriculum (modules and lessons). Editable at any status, including PUBLISHED.
 // ---------------------------------------------------------------------------
 
-export const LESSON_CONTENT_TYPES = ["VIDEO", "AUDIO", "LINK", "DOCUMENT", "TEXT"] as const;
+export const LESSON_CONTENT_TYPES = ["VIDEO", "AUDIO", "LINK", "DOCUMENT", "TEXT", "QUIZ", "ASSIGNMENT", "ASSESSMENT"] as const;
 export type LessonContentType = (typeof LESSON_CONTENT_TYPES)[number];
 
 /** Upload categories for lesson files: MIME allowlist and size caps (Section 12, security baseline). */
@@ -186,8 +300,10 @@ export const moduleSchema = z.object({
   id: z.string().trim().min(1).optional(),
   title: z.string().trim().min(2, "Give the module a title.").max(120),
   description: optionalText(1000),
+  isRequired: z.boolean().default(true),
+  status: z.enum(["DRAFT", "PUBLISHED"]).default("PUBLISHED"),
 });
-export type ModuleInput = z.infer<typeof moduleSchema>;
+export type ModuleInput = z.input<typeof moduleSchema>;
 
 const optionalInt = z.coerce.number().int().nonnegative().optional().or(z.literal(""));
 
@@ -205,15 +321,39 @@ export const lessonSchema = z
     contentMime: optionalText(120),
     sizeBytes: optionalInt,
     durationSec: optionalInt,
+    description: optionalText(2000),
+    isRequired: z.boolean().default(true),
+    status: z.enum(["DRAFT", "PUBLISHED"]).default("PUBLISHED"),
+    /** Audio / video: share of the media that must actually be played. */
+    requiredPercent: z.coerce.number().int().min(1).max(100).optional().or(z.literal("")),
+    // Quiz, assessment, and audiobook-quiz settings
+    passingScore: z.coerce.number().int().min(1).max(100).optional().or(z.literal("")),
+    maxAttempts: z.coerce.number().int().min(1).max(100).optional().or(z.literal("")),
+    timeLimitMin: z.coerce.number().int().min(1).max(600).optional().or(z.literal("")),
+    randomizeCount: z.coerce.number().int().min(1).max(500).optional().or(z.literal("")),
+    shuffleAnswers: z.boolean().default(false),
+    showCorrectAnswers: z.boolean().default(true),
+    showExplanations: z.boolean().default(true),
+    retakeWaitMinutes: z.coerce.number().int().min(0).max(100000).optional().or(z.literal("")),
+    scorePolicy: z.enum(["HIGHEST", "LATEST"]).default("HIGHEST"),
+    reviewMode: z.enum(["AUTO", "MANUAL", "BOTH"]).default("AUTO"),
+    // Assignment settings
+    dueAt: z.string().trim().optional().or(z.literal("")),
+    points: z.coerce.number().int().min(0).max(10000).optional().or(z.literal("")),
+    submissionType: z.enum(["", "TEXT", "URL", "DOCUMENT", "OTHER"]).default(""),
   })
   .superRefine((v, ctx) => {
     const has = (x: string | number | undefined) => x !== undefined && x !== "";
+    if ((v.contentType === "QUIZ" || v.contentType === "ASSESSMENT") && !has(v.passingScore)) ctx.addIssue({ code: "custom", path: ["passingScore"], message: "Set a passing score." });
+    if (v.contentType === "ASSIGNMENT" && !v.submissionType) ctx.addIssue({ code: "custom", path: ["submissionType"], message: "Choose how learners submit." });
+    if (v.contentType === "ASSIGNMENT" && v.dueAt && Number.isNaN(new Date(v.dueAt).getTime())) ctx.addIssue({ code: "custom", path: ["dueAt"], message: "Enter the due date as YYYY-MM-DD." });
     if (v.contentType === "TEXT" && !has(v.body)) ctx.addIssue({ code: "custom", path: ["body"], message: "Write the lesson content." });
     if (v.contentType === "LINK" && !has(v.url)) ctx.addIssue({ code: "custom", path: ["url"], message: "Enter the link." });
     if (v.contentType === "VIDEO" && !has(v.url) && !has(v.storageKey)) ctx.addIssue({ code: "custom", path: ["url"], message: "Upload a video file or paste a video URL." });
     if ((v.contentType === "AUDIO" || v.contentType === "DOCUMENT") && !has(v.storageKey)) ctx.addIssue({ code: "custom", path: ["storageKey"], message: v.contentType === "AUDIO" ? "Upload an audio file." : "Upload a document." });
   });
-export type LessonInput = z.infer<typeof lessonSchema>;
+export type LessonInput = z.input<typeof lessonSchema>;
+type LessonParsed = z.infer<typeof lessonSchema>;
 
 function lessonKeyPrefix(courseId: string) {
   return `courses/${courseId}/lessons/`;
@@ -223,6 +363,7 @@ function lessonKeyPrefix(courseId: string) {
 export async function createLessonUploadUrl(db: PrismaClient, actor: Actor, courseId: string, raw: z.infer<typeof lessonUploadRequestSchema>) {
   const c = await loadEditable(db, actor, courseId);
   const input = lessonUploadRequestSchema.parse(raw);
+  if ((input.kind === "AUDIO" || input.kind === "VIDEO") && !actor.permissions.has("course.manage")) authorize(actor, "course.audio.upload");
   rateLimit(`lesson-upload:${actor.userId}`, 60, 60 * 60_000);
   const rule = LESSON_UPLOAD_RULES[input.kind];
   const ext = (rule.mimes as Record<string, string>)[input.contentType];
@@ -242,7 +383,7 @@ async function moduleOf(db: PrismaClient, courseId: string, moduleId: string) {
 export async function saveModule(db: PrismaClient, actor: Actor, courseId: string, raw: ModuleInput) {
   const c = await loadEditable(db, actor, courseId);
   const input = moduleSchema.parse(raw);
-  const data = { title: input.title, description: input.description || null };
+  const data = { title: input.title, description: input.description || null, isRequired: input.isRequired, status: input.status };
   return db.$transaction(async (tx) => {
     let id: string;
     if (input.id) {
@@ -276,19 +417,42 @@ export async function moveModule(db: PrismaClient, actor: Actor, courseId: strin
 }
 
 /** Clears the fields that do not apply to the chosen content type so a lesson has exactly one source. */
-function normaliseLesson(input: LessonInput): LessonWrite {
+const QUESTION_TYPES: ReadonlyArray<LessonContentType> = ["QUIZ", "ASSESSMENT", "AUDIO"];
+const MEDIA_TYPES: ReadonlyArray<LessonContentType> = ["VIDEO", "AUDIO"];
+
+/** Lesson type drives which fields are stored; everything irrelevant to the type is cleared. */
+function normaliseLesson(input: LessonParsed): LessonWrite {
   const num = (x: number | "" | undefined) => (x === undefined || x === "" ? null : x);
-  const file = input.contentType === "AUDIO" || input.contentType === "DOCUMENT" || (input.contentType === "VIDEO" && !!input.storageKey);
+  const t = input.contentType;
+  const file = t === "AUDIO" || t === "DOCUMENT" || (t === "VIDEO" && !!input.storageKey);
+  const quiz = QUESTION_TYPES.includes(t);
   return {
     title: input.title,
-    contentType: input.contentType,
+    contentType: t,
+    description: input.description || null,
     body: input.body || null,
-    url: input.contentType === "LINK" || (input.contentType === "VIDEO" && !file) ? input.url || null : null,
+    url: t === "LINK" || (t === "VIDEO" && !file) ? input.url || null : null,
     storageKey: file ? input.storageKey || null : null,
     fileName: file ? input.fileName || null : null,
     contentMime: file ? input.contentMime || null : null,
     sizeBytes: file ? num(input.sizeBytes) : null,
-    durationSec: input.contentType === "VIDEO" || input.contentType === "AUDIO" ? num(input.durationSec) : null,
+    durationSec: MEDIA_TYPES.includes(t) ? num(input.durationSec) : null,
+    isRequired: input.isRequired,
+    status: input.status,
+    requiredPercent: MEDIA_TYPES.includes(t) ? (num(input.requiredPercent) ?? 90) : null,
+    passingScore: quiz ? num(input.passingScore) : null,
+    maxAttempts: quiz ? num(input.maxAttempts) : null,
+    timeLimitMin: quiz ? num(input.timeLimitMin) : null,
+    randomizeCount: quiz ? num(input.randomizeCount) : null,
+    shuffleAnswers: quiz ? input.shuffleAnswers : false,
+    showCorrectAnswers: quiz ? input.showCorrectAnswers : true,
+    showExplanations: quiz ? input.showExplanations : true,
+    retakeWaitMinutes: quiz ? num(input.retakeWaitMinutes) : null,
+    scorePolicy: input.scorePolicy,
+    reviewMode: t === "ASSESSMENT" ? input.reviewMode : "AUTO",
+    dueAt: t === "ASSIGNMENT" && input.dueAt ? new Date(`${input.dueAt}T23:59:59.999Z`) : null,
+    points: t === "ASSIGNMENT" ? num(input.points) : null,
+    submissionType: t === "ASSIGNMENT" && input.submissionType ? input.submissionType : null,
   };
 }
 

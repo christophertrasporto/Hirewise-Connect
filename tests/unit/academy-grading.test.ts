@@ -39,7 +39,7 @@ describe("course pricing (USD, integer cents)", () => {
   });
 
   it("rejects malformed prices at the schema", () => {
-    const base = { title: "Course title", category: "Sales", description: "A description that is long enough to pass validation." };
+    const base = { title: "Course title", categoryId: "cat_sales", description: "A description that is long enough to pass validation." };
     expect(courseSchema.safeParse({ ...base, priceUsd: "49.999" }).success).toBe(false);
     expect(courseSchema.safeParse({ ...base, priceUsd: "-5" }).success).toBe(false);
     expect(courseSchema.safeParse({ ...base, priceUsd: "abc" }).success).toBe(false);
