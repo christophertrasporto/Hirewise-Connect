@@ -54,6 +54,11 @@ export const PERMISSIONS = {
   "course.payment.record": { group: "academy", description: "Record or waive an agent's payment for a paid course" },
   "verification.manage": { group: "academy", description: "Edit verification-level requirements and certification templates" },
   "course.read_assigned": { group: "academy", description: "Read courses and students assigned to the actor" },
+  // Course Builder capabilities, grantable individually (Super Admin override) on top of course.create_own
+  "course.audio.upload": { group: "academy", description: "Upload audio and video files to lessons of courses the actor coaches" },
+  "course.quiz.build": { group: "academy", description: "Create and edit questions, quizzes, and assessments in courses the actor coaches" },
+  "assignment.review": { group: "academy", description: "Review, grade, and give feedback on assignment submissions" },
+  "learner.progress.read": { group: "academy", description: "View learner progress, attempts, and completion across courses the actor coaches" },
   "assessment.write": { group: "academy", description: "Write assessments and coach evaluations" },
   "assessment.read_all": { group: "academy", description: "Read all assessments" },
   "certification.issue": { group: "academy", description: "Issue a certification directly (ADMIN_ISSUED)" },
@@ -132,7 +137,7 @@ export const ROLE_PERMISSIONS: Record<RoleKey, readonly PermissionKey[]> = {
     "note.internal.write",
     "report.talent",
   ],
-  COACH: ["agent.read_public", "course.read_assigned", "course.create_own", "assessment.write", "report.academy"],
+  COACH: ["agent.read_public", "course.read_assigned", "course.create_own", "course.audio.upload", "course.quiz.build", "assignment.review", "learner.progress.read", "assessment.write", "report.academy"],
   OPERATIONS: [
     "agent.read_public",
     "agent.read_private_contact",

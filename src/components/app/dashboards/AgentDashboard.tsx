@@ -4,6 +4,10 @@ import { PageHeader, Card, StatusBadge, Banner, EmptyState, fmtDate } from "@/co
 import { NotificationList } from "@/components/app/NotificationList";
 import type { AgentSelfView } from "@/server/views/agent.views";
 import type { computeCompletion } from "@/server/services/agent.service";
+import type { OnboardingView } from "@/server/services/onboarding.service";
+import { OnboardingChecklist } from "@/components/onboarding/OnboardingChecklist";
+import { CourseCards } from "@/components/academy/CourseCards";
+import type { myCourses } from "@/server/services/learner.service";
 import { labelFor } from "@/lib/options";
 
 type Props = {
@@ -12,9 +16,10 @@ type Props = {
   notifications: Array<{ id: string; title: string; body: string; readAt: Date | null; createdAt: Date }>;
   requests: Array<{ id: string; role: string; status: string; companyName: string | null; myStatus: string; next: { scheduledAt: Date; timezone: string } | null }>;
   placements: Array<{ id: string; status: string; positionTitle: string; companyName: string }>;
+  onboarding?: OnboardingView;
 };
 
-export function AgentDashboard({ profile, completion, notifications, requests, placements }: Props) {
+export function AgentDashboard({ profile, completion, notifications, requests, placements, onboarding, courses }: Props & { courses: Awaited<ReturnType<typeof myCourses>> }) {
   const next = completion.parts.find((p) => !p.done);
   const latestFeedback = [...profile.videos, ...profile.recordings].filter((m) => m.reviewFeedback && (m.status === "REVISION_REQUIRED" || m.status === "REJECTED"));
 
@@ -25,6 +30,8 @@ export function AgentDashboard({ profile, completion, notifications, requests, p
       {profile.status === "REVISION_REQUIRED" && <div className="mb-6"><Banner tone="warn" title="Hirewise asked for changes">Check your notifications for the reviewer&apos;s feedback, update your profile, and submit again.</Banner></div>}
       {profile.status === "APPROVED" && <div className="mb-6"><Banner tone="success" title="Your profile is live">Vetted clients can now discover you. Keep your availability current.</Banner></div>}
       {(profile.status === "SUBMITTED" || profile.status === "UNDER_REVIEW") && <div className="mb-6"><Banner tone="info" title="Under Hirewise review">Submitted {fmtDate(profile.submittedAt)}. You will be notified when the review is complete.</Banner></div>}
+
+      {onboarding?.applies && !onboarding.done && <div className="mb-6"><OnboardingChecklist onboarding={onboarding} /></div>}
 
       <div className="grid gap-5 lg:grid-cols-3">
         <Card title="Profile completion" className="lg:col-span-2">
@@ -96,8 +103,23 @@ export function AgentDashboard({ profile, completion, notifications, requests, p
               </ul>
             )}
           </Card>
-          <Card title="Certifications" description="Issued by the Hirewise VA Academy (Phase 3).">
-            <EmptyState title="No certifications yet" description="Academy courses and coach assessments arrive in Phase 3." />
+          <Card title="My courses" description={courses.cards.length ? `${courses.inProgress} in progress · ${courses.completed} completed` : "Courses you enrol in show here with your progress and next step."} actions={<Link href="/courses" className="text-[13px] font-semibold text-brand-600 hover:text-brand-700">All courses</Link>}>
+            {courses.cards.length === 0 ? <EmptyState title="No courses yet" description="Browse the catalog to start a course." /> : <CourseCards cards={courses.cards.filter((c) => c.status !== "COMPLETED").slice(0, 3)} compact />}
+          </Card>
+          <Card title="Certifications" description="Issued by the Hirewise VA Academy. Each certificate carries a number and a public verification link.">
+            {profile.certifications.length === 0 ? <EmptyState title="No certifications yet" description="Complete a course with a certification to earn one." /> : (
+              <ul className="divide-y divide-ink-100 text-[14px]">
+                {profile.certifications.map((c) => (
+                  <li key={c.id} className="flex flex-wrap items-center justify-between gap-2 py-2.5">
+                    <span>
+                      <Link href={`/certificates/${c.id}`} className="font-semibold text-ink-800 hover:text-brand-700">{c.name}</Link>
+                      <span className="block text-[12.5px] text-ink-400">{c.certificateNumber ?? "Pending number"}{c.issuedAt ? ` · issued ${fmtDate(c.issuedAt)}` : ""}{c.expiresAt ? ` · valid until ${fmtDate(c.expiresAt)}` : ""}</span>
+                    </span>
+                    <StatusBadge status={c.status} />
+                  </li>
+                ))}
+              </ul>
+            )}
           </Card>
         </div>
       </div>

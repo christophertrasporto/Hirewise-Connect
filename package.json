@@ -19,6 +19,7 @@
     "db:studio": "prisma studio",
     "db:generate": "prisma generate",
     "worker": "tsx scripts/worker.ts",
+    "email:test": "tsx scripts/email-test.ts",
     "postinstall": "prisma generate",
     "test:e2e": "playwright test",
     "hooks:install": "git config core.hooksPath scripts/git-hooks"
@@ -63,6 +64,7 @@
   },
   "overrides": {
     "postcss": "^8.5.28",
-    "deepmerge-ts": "^8.0.2"
+    "deepmerge-ts": "^8.0.2",
+    "source-map-js": "^1.2.2"
   }
 }

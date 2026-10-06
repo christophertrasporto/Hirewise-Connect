@@ -372,23 +372,24 @@ model User {
   incidentsReported         Incident[]          @relation("IncidentReporter")
   incidentsResolved         Incident[]          @relation("IncidentResolver")
 
-  permissionOverrides  UserPermissionOverride[] @relation("OverrideSubject")
-  grantedOverrides     UserPermissionOverride[] @relation("OverrideGrantor")
-  clientContact        ClientContact?
-  agentProfile         AgentProfile?
-  agreementAcceptances AgreementAcceptance[]
-  notifications        Notification[]
-  notificationPrefs    NotificationPreference[]
-  managedClients       Client[]                 @relation("AccountManager")
-  assignedRequirements ClientRequirement[]      @relation("RequirementSales")
-  reservationsMade     Reservation[]            @relation("ReservedBy")
-  availabilityChanges  AgentAvailability[]      @relation("AvailabilitySetBy")
-  documentsUploaded    Document[]               @relation("DocumentUploader")
-  profilesApproved     AgentProfile[]           @relation("ProfileApprover")
-  videosReviewed       Video[]                  @relation("VideoReviewer")
-  recordingsReviewed   Recording[]              @relation("RecordingReviewer")
-  portfoliosReviewed   Portfolio[]              @relation("PortfolioReviewer")
-  settingsUpdated      Setting[]                @relation("SettingUpdater")
+  permissionOverrides     UserPermissionOverride[]  @relation("OverrideSubject")
+  onboardingVideoProgress OnboardingVideoProgress[]
+  grantedOverrides        UserPermissionOverride[]  @relation("OverrideGrantor")
+  clientContact           ClientContact?
+  agentProfile            AgentProfile?
+  agreementAcceptances    AgreementAcceptance[]
+  notifications           Notification[]
+  notificationPrefs       NotificationPreference[]
+  managedClients          Client[]                  @relation("AccountManager")
+  assignedRequirements    ClientRequirement[]       @relation("RequirementSales")
+  reservationsMade        Reservation[]             @relation("ReservedBy")
+  availabilityChanges     AgentAvailability[]       @relation("AvailabilitySetBy")
+  documentsUploaded       Document[]                @relation("DocumentUploader")
+  profilesApproved        AgentProfile[]            @relation("ProfileApprover")
+  videosReviewed          Video[]                   @relation("VideoReviewer")
+  recordingsReviewed      Recording[]               @relation("RecordingReviewer")
+  portfoliosReviewed      Portfolio[]               @relation("PortfolioReviewer")
+  settingsUpdated         Setting[]                 @relation("SettingUpdater")
 
   @@index([roleId])
   @@index([status])
@@ -578,28 +579,32 @@ model AgentProfile {
   createdAt            DateTime           @default(now())
   updatedAt            DateTime           @updatedAt
 
-  privateContact       AgentPrivateContact?
-  skills               AgentSkill[]
-  experiences          Experience[]
-  industryExperiences  IndustryExperience[]
-  softwareExperiences  SoftwareExperience[]
-  availabilityHistory  AgentAvailability[]
-  reservations         Reservation[]
-  videos               Video[]
-  recordings           Recording[]
-  portfolioItems       Portfolio[]
-  shortlistEntries     ShortlistCandidate[]
-  candidateViews       CandidateView[]
-  introductions        Introduction[]
-  interviewCandidacies InterviewRequestCandidate[]
-  interviews           Interview[]
-  placements           Placement[]
-  billingRates         ClientBillingRate[]
-  compensations        AgentCompensation[]
-  enrollments          CourseEnrollment[]
-  assessments          Assessment[]
-  coachEvaluations     CoachEvaluation[]
-  certifications       Certification[]
+  privateContact        AgentPrivateContact?
+  skills                AgentSkill[]
+  experiences           Experience[]
+  industryExperiences   IndustryExperience[]
+  softwareExperiences   SoftwareExperience[]
+  availabilityHistory   AgentAvailability[]
+  reservations          Reservation[]
+  videos                Video[]
+  recordings            Recording[]
+  portfolioItems        Portfolio[]
+  shortlistEntries      ShortlistCandidate[]
+  candidateViews        CandidateView[]
+  introductions         Introduction[]
+  interviewCandidacies  InterviewRequestCandidate[]
+  interviews            Interview[]
+  placements            Placement[]
+  billingRates          ClientBillingRate[]
+  compensations         AgentCompensation[]
+  enrollments           CourseEnrollment[]
+  assessments           Assessment[]
+  coachEvaluations      CoachEvaluation[]
+  certifications        Certification[]
+  lessonProgress        LessonProgress[]
+  quizAttempts          QuizAttempt[]
+  assignmentSubmissions AssignmentSubmission[]
+  courseProgress        CourseProgress[]
 
   @@index([status])
   @@index([availabilityStatus])
@@ -893,6 +898,25 @@ model Job {
   updatedAt DateTime  @updatedAt
 
   @@index([status, runAt])
+}
+
+/// Welcome-video progress for the onboarding checklist. One row per user per video version (videoKey changes when
+/// Admin replaces the video). watchedSeconds counts actually played time, so seeking to the end does not complete it.
+model OnboardingVideoProgress {
+  id              String    @id @default(cuid())
+  userId          String
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  videoKey        String
+  watchedSeconds  Float     @default(0)
+  lastPositionSec Float     @default(0)
+  durationSec     Float?
+  percent         Int       @default(0)
+  completedAt     DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@unique([userId, videoKey])
+  @@index([videoKey, completedAt])
 }
 
 model Setting {
@@ -1218,38 +1242,380 @@ enum CertificationStatus {
 }
 
 model AcademyCourse {
-  id                      String                 @id @default(cuid())
-  code                    String                 @unique
-  title                   String
-  category                String
-  description             String
+  id                                String                 @id @default(cuid())
+  code                              String                 @unique
+  title                             String
+  /// Legacy free-text category; categoryId is the source of truth once the builder lands (phase 2 drops this column).
+  category                          String
+  categoryId                        String?
+  categoryRef                       CourseCategory?        @relation(fields: [categoryId], references: [id])
+  description                       String
+  thumbnailKey                      String?
+  difficulty                        CourseDifficulty       @default(BEGINNER)
+  estimatedMinutes                  Int?
+  /// Required courses count toward a talent's onboarding and show first in the catalog.
+  isRequired                        Boolean                @default(false)
+  /// Learners must finish modules in order; off unless the creator enables it.
+  sequentialUnlock                  Boolean                @default(false)
+  /// Completion rules: every required lesson is always needed; these add quiz passes and a final assessment pass.
+  completionRequiresQuizPass        Boolean                @default(true)
+  completionRequiresFinalAssessment Boolean                @default(false)
+  displayOrder                      Int                    @default(0)
+  introVideoUrl                     String?
+  welcomeMessage                    String?
+  /// Optional JSON gate: { minVerificationLevel?, roles? }. Null = any enrolled talent.
+  accessRules                       Json?
   /// Markdown syllabus / lesson content shown to enrolled agents.
-  syllabus                String?
+  syllabus                          String?
   /// Optional link to externally hosted lessons.
-  contentUrl              String?
-  ownerCoachUserId        String
-  ownerCoach              User                   @relation("CourseOwner", fields: [ownerCoachUserId], references: [id])
+  contentUrl                        String?
+  ownerCoachUserId                  String
+  ownerCoach                        User                   @relation("CourseOwner", fields: [ownerCoachUserId], references: [id])
   /// Price in USD cents; 0 = free (INV-I4).
-  priceCents              Int                    @default(0)
-  currency                String                 @default("USD") @db.Char(3)
-  passingScore            Int                    @default(70)
-  requiresCoachReview     Boolean                @default(false)
-  certificationTemplateId String?
-  certificationTemplate   CertificationTemplate? @relation(fields: [certificationTemplateId], references: [id])
-  status                  CourseStatus           @default(DRAFT)
-  publishedAt             DateTime?
-  publishedById           String?
-  externalId              String?                @unique
-  createdAt               DateTime               @default(now())
-  updatedAt               DateTime               @updatedAt
+  priceCents                        Int                    @default(0)
+  currency                          String                 @default("USD") @db.Char(3)
+  passingScore                      Int                    @default(70)
+  requiresCoachReview               Boolean                @default(false)
+  certificationTemplateId           String?
+  certificationTemplate             CertificationTemplate? @relation(fields: [certificationTemplateId], references: [id])
+  status                            CourseStatus           @default(DRAFT)
+  publishedAt                       DateTime?
+  publishedById                     String?
+  externalId                        String?                @unique
+  createdAt                         DateTime               @default(now())
+  updatedAt                         DateTime               @updatedAt
 
-  coaches     CourseCoach[]
-  enrollments CourseEnrollment[]
-  exam        Exam?
-  assessments Assessment[]
+  coaches         CourseCoach[]
+  enrollments     CourseEnrollment[]
+  exam            Exam?
+  assessments     Assessment[]
+  modules         CourseModule[]
+  prerequisites   CoursePrerequisite[] @relation("CoursePrerequisiteOf")
+  prerequisiteFor CoursePrerequisite[] @relation("CoursePrerequisiteRequires")
+  progress        CourseProgress[]
+  questions       Question[]
 
   @@index([status, category])
   @@index([ownerCoachUserId])
+}
+
+enum LessonContentType {
+  VIDEO
+  AUDIO
+  LINK
+  DOCUMENT
+  TEXT
+  QUIZ
+  ASSIGNMENT
+  /// Formal assessment lesson (skills, final, certification). Distinct from the coach-written Assessment record.
+  ASSESSMENT
+}
+
+enum CourseDifficulty {
+  BEGINNER
+  INTERMEDIATE
+  ADVANCED
+}
+
+/// Module and lesson visibility to learners. Courses keep CourseStatus with Admin approval of the first publish.
+enum PublishState {
+  DRAFT
+  PUBLISHED
+}
+
+enum QuestionType {
+  MULTIPLE_CHOICE
+  MULTIPLE_SELECT
+  TRUE_FALSE
+  SHORT_ANSWER
+}
+
+/// SUGGESTED is reserved for AI-generated drafts; nothing SUGGESTED is ever shown to learners.
+enum QuestionState {
+  DRAFT
+  PUBLISHED
+  SUGGESTED
+}
+
+enum ReviewMode {
+  AUTO
+  MANUAL
+  BOTH
+}
+
+enum ScorePolicy {
+  HIGHEST
+  LATEST
+}
+
+enum LessonProgressStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  COMPLETED
+  FAILED
+  RETAKE_REQUIRED
+  PENDING_REVIEW
+}
+
+enum QuizAttemptStatus {
+  IN_PROGRESS
+  SUBMITTED
+  EXPIRED
+  PENDING_REVIEW
+}
+
+enum SubmissionType {
+  TEXT
+  URL
+  DOCUMENT
+  OTHER
+}
+
+enum SubmissionStatus {
+  SUBMITTED
+  GRADED
+  RETURNED
+}
+
+/// Curriculum: ordered modules of ordered lessons. Editable at any status, including PUBLISHED,
+/// by the owner coach, assigned coaches, and Admin (course.manage).
+model CourseModule {
+  id          String        @id @default(cuid())
+  courseId    String
+  course      AcademyCourse @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  order       Int
+  title       String
+  description String?
+  isRequired  Boolean       @default(true)
+  status      PublishState  @default(PUBLISHED)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  lessons CourseLesson[]
+
+  @@index([courseId, order])
+}
+
+/// One piece of learning content. Exactly one source is used per contentType:
+/// TEXT → body (markdown); LINK → url; VIDEO → url (hosted) or storageKey (uploaded); AUDIO/DOCUMENT → storageKey.
+/// storageKey is never exposed to agents; files are streamed through a signed URL after an enrollment check.
+model CourseLesson {
+  id                 String            @id @default(cuid())
+  moduleId           String
+  module             CourseModule      @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  order              Int
+  title              String
+  contentType        LessonContentType
+  /// Markdown body for TEXT lessons; optional notes for other types.
+  body               String?
+  url                String?
+  storageKey         String?
+  fileName           String?
+  contentMime        String?
+  sizeBytes          Int?
+  durationSec        Int?
+  description        String?
+  isRequired         Boolean           @default(true)
+  status             PublishState      @default(PUBLISHED)
+  /// Bumped on significant edits; attempts and LessonVersion rows reference it.
+  version            Int               @default(1)
+  /// Audio / video: share of the media that must actually be played (not sought) before the lesson counts.
+  requiredPercent    Int?
+  /// Reserved for transcription and AI-generated questions.
+  transcript         String?
+  // Quiz, assessment, and audiobook-quiz settings
+  passingScore       Int?
+  /// Null = unlimited attempts.
+  maxAttempts        Int?
+  timeLimitMin       Int?
+  /// Draw this many questions at random from the lesson's published questions; null = all, in order.
+  randomizeCount     Int?
+  shuffleAnswers     Boolean           @default(false)
+  showCorrectAnswers Boolean           @default(true)
+  showExplanations   Boolean           @default(true)
+  retakeWaitMinutes  Int?
+  scorePolicy        ScorePolicy       @default(HIGHEST)
+  reviewMode         ReviewMode        @default(AUTO)
+  // Assignment settings
+  dueAt              DateTime?
+  points             Int?
+  submissionType     SubmissionType?
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+
+  questions   Question[]
+  attempts    QuizAttempt[]
+  progress    LessonProgress[]
+  submissions AssignmentSubmission[]
+  versions    LessonVersion[]
+
+  @@index([moduleId, order])
+}
+
+/// Admin-managed course categories (seeded, never hardcoded in the UI).
+model CourseCategory {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  slug      String   @unique
+  order     Int      @default(0)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  courses AcademyCourse[]
+}
+
+model CoursePrerequisite {
+  courseId         String
+  course           AcademyCourse @relation("CoursePrerequisiteOf", fields: [courseId], references: [id], onDelete: Cascade)
+  requiresCourseId String
+  requires         AcademyCourse @relation("CoursePrerequisiteRequires", fields: [requiresCourseId], references: [id], onDelete: Cascade)
+
+  @@id([courseId, requiresCourseId])
+}
+
+/// One question system for quizzes, exams, assessments, and audiobook quizzes.
+/// lessonId null = question-bank only; courseId / moduleId / topic / difficulty organise the bank.
+model Question {
+  id          String            @id @default(cuid())
+  lessonId    String?
+  lesson      CourseLesson?     @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  courseId    String?
+  course      AcademyCourse?    @relation(fields: [courseId], references: [id], onDelete: SetNull)
+  topic       String?
+  difficulty  CourseDifficulty?
+  type        QuestionType      @default(MULTIPLE_CHOICE)
+  prompt      String
+  explanation String?
+  points      Int               @default(1)
+  isRequired  Boolean           @default(true)
+  order       Int               @default(0)
+  state       QuestionState     @default(PUBLISHED)
+  version     Int               @default(1)
+  /// Short answer: accepted keywords for automatic matching; empty = manual review.
+  keywords    String[]          @default([])
+  /// "coach" or "ai"; AI output never publishes without coach approval.
+  source      String            @default("coach")
+  createdById String?
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  choices QuestionChoice[]
+
+  @@index([lessonId, order])
+  @@index([courseId, topic])
+}
+
+/// Correctness is tracked by choice id, never by position, so shuffling cannot break scoring.
+model QuestionChoice {
+  id         String   @id @default(cuid())
+  questionId String
+  question   Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  text       String
+  isCorrect  Boolean  @default(false)
+  order      Int      @default(0)
+
+  @@index([questionId, order])
+}
+
+/// Per-learner lesson state. Media fields count actually played seconds; seeking never advances them.
+model LessonProgress {
+  id               String               @id @default(cuid())
+  lessonId         String
+  lesson           CourseLesson         @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  agentProfileId   String
+  agentProfile     AgentProfile         @relation(fields: [agentProfileId], references: [id], onDelete: Cascade)
+  status           LessonProgressStatus @default(NOT_STARTED)
+  startedAt        DateTime?
+  completedAt      DateTime?
+  mediaSeconds     Float                @default(0)
+  lastPositionSec  Float                @default(0)
+  mediaPercent     Int                  @default(0)
+  mediaCompletedAt DateTime?
+  lessonVersion    Int?
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime             @updatedAt
+
+  @@unique([lessonId, agentProfileId])
+  @@index([agentProfileId, status])
+}
+
+/// Immutable attempt history. questionSnapshot freezes the question ids, versions, points, and the choice
+/// order shown; answers map questionId → chosen choice ids or text. Later edits never rewrite a result.
+model QuizAttempt {
+  id               String            @id @default(cuid())
+  lessonId         String
+  lesson           CourseLesson      @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  agentProfileId   String
+  agentProfile     AgentProfile      @relation(fields: [agentProfileId], references: [id], onDelete: Cascade)
+  lessonVersion    Int               @default(1)
+  status           QuizAttemptStatus @default(IN_PROGRESS)
+  questionSnapshot Json
+  answers          Json?
+  scorePercent     Int?
+  passed           Boolean?
+  startedAt        DateTime          @default(now())
+  submittedAt      DateTime?
+  expiresAt        DateTime?
+  reviewedById     String?
+  reviewedAt       DateTime?
+  feedback         String?
+
+  @@index([lessonId, agentProfileId, startedAt])
+}
+
+model AssignmentSubmission {
+  id             String           @id @default(cuid())
+  lessonId       String
+  lesson         CourseLesson     @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  agentProfileId String
+  agentProfile   AgentProfile     @relation(fields: [agentProfileId], references: [id], onDelete: Cascade)
+  submissionType SubmissionType
+  text           String?
+  url            String?
+  storageKey     String?
+  fileName       String?
+  status         SubmissionStatus @default(SUBMITTED)
+  grade          Int?
+  feedback       String?
+  reviewedById   String?
+  reviewedAt     DateTime?
+  submittedAt    DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  @@index([lessonId, agentProfileId])
+}
+
+/// Cached course progress for dashboards and the tracking table; recalculated on every lesson change.
+model CourseProgress {
+  id              String        @id @default(cuid())
+  courseId        String
+  course          AcademyCourse @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  agentProfileId  String
+  agentProfile    AgentProfile  @relation(fields: [agentProfileId], references: [id], onDelete: Cascade)
+  requiredTotal   Int           @default(0)
+  requiredDone    Int           @default(0)
+  percent         Int           @default(0)
+  currentLessonId String?
+  completedAt     DateTime?
+  updatedAt       DateTime      @updatedAt
+
+  @@unique([courseId, agentProfileId])
+  @@index([agentProfileId])
+}
+
+/// Snapshot of a lesson (and its questions) before a significant edit.
+model LessonVersion {
+  id          String       @id @default(cuid())
+  lessonId    String
+  lesson      CourseLesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  version     Int
+  snapshot    Json
+  changedById String?
+  changedAt   DateTime     @default(now())
+  reason      String?
+
+  @@unique([lessonId, version])
 }
 
 model CourseCoach {
@@ -1437,24 +1803,28 @@ model CertificationTemplate {
 
 /// Never agent-writable (INV-I1).
 model Certification {
-  id             String                @id @default(cuid())
-  agentProfileId String
-  agentProfile   AgentProfile          @relation(fields: [agentProfileId], references: [id], onDelete: Cascade)
-  templateId     String
-  template       CertificationTemplate @relation(fields: [templateId], references: [id])
-  origin         CertificationOrigin
-  issuedById     String?
-  issuedAt       DateTime              @default(now())
-  expiresAt      DateTime?
-  assessmentId   String?
-  assessment     Assessment?           @relation(fields: [assessmentId], references: [id])
-  courseId       String?
-  status         CertificationStatus   @default(PENDING_REVIEW)
-  approvedById   String?
-  approvedAt     DateTime?
-  revokedReason  String?
-  createdAt      DateTime              @default(now())
-  updatedAt      DateTime              @updatedAt
+  id                String                @id @default(cuid())
+  agentProfileId    String
+  agentProfile      AgentProfile          @relation(fields: [agentProfileId], references: [id], onDelete: Cascade)
+  templateId        String
+  template          CertificationTemplate @relation(fields: [templateId], references: [id])
+  origin            CertificationOrigin
+  issuedById        String?
+  issuedAt          DateTime              @default(now())
+  expiresAt         DateTime?
+  assessmentId      String?
+  assessment        Assessment?           @relation(fields: [assessmentId], references: [id])
+  courseId          String?
+  status            CertificationStatus   @default(PENDING_REVIEW)
+  approvedById      String?
+  approvedAt        DateTime?
+  revokedReason     String?
+  /// Printed on the certificate; HC-YYYY-NNNNNN.
+  certificateNumber String?               @unique
+  /// Opaque code for public verification.
+  verificationCode  String?               @unique
+  createdAt         DateTime              @default(now())
+  updatedAt         DateTime              @updatedAt
 
   @@unique([agentProfileId, templateId, courseId])
   @@index([agentProfileId, status])

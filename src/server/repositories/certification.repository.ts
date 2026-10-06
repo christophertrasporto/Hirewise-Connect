@@ -1,5 +1,15 @@
 import type { CertificationStatus, Prisma, VerificationLevel } from "@prisma/client";
 import type { Db } from "@/server/db/types";
+import { randomBytes } from "node:crypto";
+
+/** Opaque, URL-safe verification code (no vowels or ambiguous glyphs, so it reads cleanly on a printed certificate). */
+function verificationCode() {
+  const alphabet = "23456789BCDFGHJKLMNPQRSTVWXZ";
+  const bytes = randomBytes(12);
+  let out = "";
+  for (let i = 0; i < 12; i++) out += alphabet[bytes[i] % alphabet.length];
+  return `${out.slice(0, 4)}-${out.slice(4, 8)}-${out.slice(8, 12)}`;
+}
 
 export const certificationRepository = {
   templates(db: Db, activeOnly = true) {
@@ -19,11 +29,30 @@ export const certificationRepository = {
     return db.certification.findFirst({ where: { agentProfileId, templateId, courseId, status: { in: ["PENDING_REVIEW", "APPROVED"] } } });
   },
 
-  create(db: Db, d: { agentProfileId: string; templateId: string; origin: "ACADEMY" | "ADMIN_ISSUED"; issuedById: string | null; assessmentId: string | null; courseId: string | null; status: CertificationStatus; expiresAt: Date | null; approvedById?: string | null }) {
-    return db.certification.create({
-      data: { agentProfileId: d.agentProfileId, templateId: d.templateId, origin: d.origin, issuedById: d.issuedById ?? undefined, assessmentId: d.assessmentId ?? undefined, courseId: d.courseId ?? undefined, status: d.status, expiresAt: d.expiresAt ?? undefined, approvedById: d.approvedById ?? undefined, approvedAt: d.status === "APPROVED" ? new Date() : undefined },
-      include: { template: true, agentProfile: { select: { id: true, displayName: true, userId: true, user: { select: { email: true } } } } },
-    });
+  /** Every certificate gets a printed number (HC-YYYY-NNNNNN, sequential per year) and a verification code. */
+  async create(db: Db, d: { agentProfileId: string; templateId: string; origin: "ACADEMY" | "ADMIN_ISSUED"; issuedById: string | null; assessmentId: string | null; courseId: string | null; status: CertificationStatus; expiresAt: Date | null; approvedById?: string | null }) {
+    const year = new Date().getFullYear();
+    const include = { template: true, agentProfile: { select: { id: true, displayName: true, userId: true, user: { select: { email: true } } } } } as const;
+    const base = { agentProfileId: d.agentProfileId, templateId: d.templateId, origin: d.origin, issuedById: d.issuedById ?? undefined, assessmentId: d.assessmentId ?? undefined, courseId: d.courseId ?? undefined, status: d.status, expiresAt: d.expiresAt ?? undefined, approvedById: d.approvedById ?? undefined, approvedAt: d.status === "APPROVED" ? new Date() : undefined };
+    for (let attempt = 0; ; attempt++) {
+      const n = (await db.certification.count({ where: { certificateNumber: { startsWith: `HC-${year}-` } } })) + 1 + attempt;
+      try {
+        return await db.certification.create({ data: { ...base, certificateNumber: `HC-${year}-${String(n).padStart(6, "0")}`, verificationCode: verificationCode() }, include });
+      } catch (e) {
+        // Unique clash on the number (concurrent issue): take the next one.
+        if (attempt < 5 && (e as { code?: string }).code === "P2002") continue;
+        throw e;
+      }
+    }
+  },
+
+  findByVerificationCode(db: Db, code: string) {
+    return db.certification.findUnique({ where: { verificationCode: code }, include: { template: { select: { name: true, description: true, validityMonths: true } }, agentProfile: { select: { displayName: true } } } });
+  },
+
+  /** Course title and coach for the printed certificate. */
+  courseFor(db: Db, courseId: string) {
+    return db.academyCourse.findUnique({ where: { id: courseId }, select: { id: true, title: true, ownerCoach: { select: { email: true } } } });
   },
 
   findById(db: Db, id: string) {

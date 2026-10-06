@@ -1,6 +1,7 @@
 import { beforeAll, afterAll, describe, expect, it } from "vitest";
 import { testDb, resetDb } from "../setup/db";
-import { createCourse, updateCourse, saveExam, submitCourseForApproval, publishCourse, listCoursesForCoach, getCourseForCoach, catalogForAgent, enrol, getEnrollmentForAgent, startExamAttempt, getAttemptForAgent, submitExamAttempt, recordCoursePayment, listPendingCoursePayments } from "@/server/services/academy.service";
+import { createCourse, updateCourse, saveModule, saveLesson, submitCourseForApproval, publishCourse, listCoursesForCoach, getCourseForCoach, catalogForAgent, enrol, getEnrollmentForAgent, recordCoursePayment, listPendingCoursePayments } from "@/server/services/academy.service";
+import { saveQuestion, startAttempt, attemptForLearner, submitAttempt } from "@/server/services/quiz.service";
 import { recordAssessment, recordEvaluation } from "@/server/services/assessment.service";
 import { issueCertification, revokeCertification, expireCertifications, listPendingCertifications } from "@/server/services/certification.service";
 import { recomputeVerification, setVerificationManually, updateRequirement } from "@/server/services/verification.service";
@@ -16,18 +17,28 @@ import { collectKeys, FORBIDDEN_FOR_CLIENT } from "@/server/views/forbidden-keys
 const db = testDb();
 const ids = { coach: "coach_1", coach2: "coach_2", admin: "admin_1", sales: "sales_1", agentUser: "", agentProfile: "", agent2User: "", agent2Profile: "", clientUser: "", clientId: "", templateSetter: "", templateCsr: "", labelGood: "", labelPoor: "", freeCourse: "", paidCourse: "" };
 
-const courseInput = (title: string, priceUsd: string, requiresCoachReview = false) => ({ title, category: "Sales", description: "A course description long enough to satisfy validation rules.", syllabus: "Module 1", contentUrl: "", priceUsd, passingScore: 70, requiresCoachReview });
-const examInput = { title: "Final exam", instructions: "", timeLimitMin: "" as const, maxAttempts: 2, questions: [
-  { prompt: "Question one prompt", options: ["A", "B", "C"], correctIndex: 1, points: 1, explanation: "" },
-  { prompt: "Question two prompt", options: ["A", "B"], correctIndex: 0, points: 1, explanation: "" },
-  { prompt: "Question three prompt", options: ["A", "B", "C", "D"], correctIndex: 3, points: 2, explanation: "" },
-] };
+let salesCategoryId = "";
+const courseInput = (title: string, priceUsd: string, requiresCoachReview = false) => ({ title, categoryId: salesCategoryId, difficulty: "BEGINNER" as const, description: "A course description long enough to satisfy validation rules.", syllabus: "Module 1", contentUrl: "", priceUsd, passingScore: 70, requiresCoachReview });
+const quizIds = { free: "", paid: "" };
+/** One module with one quiz lesson holding three published questions (points 1, 1, 2). Returns the lesson id. */
+async function buildQuiz(courseId: string, maxAttempts: number) {
+  const actor = await coach();
+  const moduleId = await saveModule(db, actor, courseId, { title: "Module 1", description: "" });
+  const lessonId = await saveLesson(db, actor, courseId, { moduleId, title: "Final quiz", contentType: "QUIZ", passingScore: 70, maxAttempts });
+  await saveQuestion(db, actor, courseId, lessonId, { prompt: "Question one prompt", points: 1, choices: [{ text: "A" }, { text: "B", isCorrect: true }, { text: "C" }] });
+  await saveQuestion(db, actor, courseId, lessonId, { prompt: "Question two prompt", points: 1, choices: [{ text: "A", isCorrect: true }, { text: "B" }] });
+  await saveQuestion(db, actor, courseId, lessonId, { prompt: "Question three prompt", points: 2, choices: [{ text: "A" }, { text: "B" }, { text: "C" }, { text: "D", isCorrect: true }] });
+  return lessonId;
+}
+/** Answer by choice text so the test does not depend on ids or display order. */
+const answersByText = (questions: Array<{ questionId: string; choices: Array<{ id: string; text: string }> }>, picks: string[]) => Object.fromEntries(questions.map((q, i) => [q.questionId, q.choices.filter((c) => c.text === picks[i]).map((c) => c.id)]));
 
 beforeAll(async () => {
   process.env.APP_URL = "http://localhost:3000";
   setEmailChannelForTests(new ConsoleEmailChannel());
   await resetDb(db);
   for (const key of Object.keys(ROLE_NAMES) as RoleKey[]) await db.role.create({ data: { key, name: ROLE_NAMES[key].name } });
+  salesCategoryId = (await db.courseCategory.create({ data: { name: "Sales", slug: "sales", order: 10 } })).id;
   const role = async (k: RoleKey) => (await db.role.findUniqueOrThrow({ where: { key: k } })).id;
   await db.user.create({ data: { id: ids.coach, email: "coach@hirewise.example", roleId: await role("COACH") } });
   await db.user.create({ data: { id: ids.coach2, email: "coach2@hirewise.example", roleId: await role("COACH") } });
@@ -96,11 +107,11 @@ describe("coach-authored courses with pricing and exams", () => {
     expect(a?.newValue).toEqual({ priceCents: 4900, currency: "USD" });
   });
 
-  it("submitting without an exam is refused; the coach builds the exam and submits; admin publishes with a template", async () => {
-    await expect(submitCourseForApproval(db, await coach(), ids.freeCourse)).rejects.toThrow(/exam/i);
-    await expect(saveExam(db, await coach(), ids.freeCourse, { ...examInput, questions: [{ ...examInput.questions[0], correctIndex: 9 }] })).rejects.toThrow(/does not exist/);
-    await saveExam(db, await coach(), ids.freeCourse, examInput);
-    await saveExam(db, await coach(), ids.paidCourse, { ...examInput, maxAttempts: 1 });
+  it("submitting without a published lesson is refused; the coach builds the quiz and submits; admin publishes with a template", async () => {
+    await expect(submitCourseForApproval(db, await coach(), ids.freeCourse)).rejects.toThrow(/published lesson/i);
+    quizIds.free = await buildQuiz(ids.freeCourse, 2);
+    quizIds.paid = await buildQuiz(ids.paidCourse, 1);
+    await expect(saveQuestion(db, await coach(), ids.freeCourse, quizIds.free, { prompt: "No right answer", choices: [{ text: "A" }, { text: "B" }] })).rejects.toThrow(/exactly one choice/);
     await submitCourseForApproval(db, await coach(), ids.freeCourse);
     await submitCourseForApproval(db, await coach(), ids.paidCourse);
     await expect(publishCourse(db, await coach(), ids.freeCourse, {})).rejects.toThrow(ForbiddenError);
@@ -108,19 +119,21 @@ describe("coach-authored courses with pricing and exams", () => {
     await publishCourse(db, admin(), ids.paidCourse, { certificationTemplateId: ids.templateCsr });
     const r = await runWorkerOnce(db);
     expect(r.failures).toBe(0);
-    const c = await db.academyCourse.findUniqueOrThrow({ where: { id: ids.freeCourse }, include: { exam: true } });
+    const c = await db.academyCourse.findUniqueOrThrow({ where: { id: ids.freeCourse } });
     expect(c.status).toBe("PUBLISHED");
-    expect(c.exam?.status).toBe("PUBLISHED");
+    expect(await db.question.count({ where: { lessonId: quizIds.free, state: "PUBLISHED" } })).toBe(3);
     expect(await db.task.count({ where: { type: "PUBLISH_COURSE", status: "OPEN" } })).toBe(0);
     expect(await db.notification.count({ where: { userId: ids.coach, type: "COURSE_PUBLISHED" } })).toBe(2);
   });
 });
 
-describe("agent enrolment, payment gating, and exam", () => {
-  it("the catalog shows prices; the exam projection never contains correctIndex", async () => {
+describe("agent enrolment, payment gating, and quizzes", () => {
+  it("the catalog shows prices; projections never contain the answer key", async () => {
     const cat = await catalogForAgent(db, agent());
     expect(cat.map((c) => [c.title, c.priceLabel])).toEqual(expect.arrayContaining([["Setter Fundamentals", "Free"], ["CSR Excellence", "USD 49.00"]]));
-    expect(collectKeys(cat).has("correctIndex")).toBe(false);
+    const keys = collectKeys(cat);
+    expect(keys.has("isCorrect")).toBe(false);
+    expect(keys.has("correctChoiceIds")).toBe(false);
   });
 
   it("free course unlocks on enrolment; paid course stays locked until staff records payment", async () => {
@@ -130,11 +143,12 @@ describe("agent enrolment, payment gating, and exam", () => {
     const paid = await getEnrollmentForAgent(db, agent(), ids.paidCourse);
     expect(free.enrollment?.paymentStatus).toBe("NOT_REQUIRED");
     expect(free.course.syllabus).toBe("Module 1");
-    expect(free.exam?.questionCount).toBe(3);
+    expect(free.course.questionCount).toBe(3);
+    expect(free.course.modules).not.toBeNull();
     expect(paid.enrollment?.paymentStatus).toBe("PENDING");
     expect(paid.course.syllabus).toBeNull();
-    expect(paid.exam).toBeNull();
-    await expect(startExamAttempt(db, agent(), ids.paidCourse)).rejects.toThrow(ForbiddenError);
+    expect(paid.course.modules).toBeNull();
+    await expect(startAttempt(db, agent(), quizIds.paid)).rejects.toThrow(ForbiddenError);
     await runWorkerOnce(db);
     expect(await db.notification.count({ where: { type: "COURSE_PAYMENT_PENDING" } })).toBeGreaterThan(0);
   });
@@ -152,47 +166,50 @@ describe("agent enrolment, payment gating, and exam", () => {
     expect([e.paymentStatus, e.paidCents, e.paymentReference, e.paymentRecordedById]).toEqual(["PAID", 4900, "GCASH-1", ids.sales]);
     await expect(recordCoursePayment(db, sales(), enrollmentId, { paidUsd: "49", waived: false })).rejects.toThrow(/pending/);
     const paid = await getEnrollmentForAgent(db, agent(), ids.paidCourse);
-    expect(paid.exam?.questionCount).toBe(3);
+    expect(paid.course.modules).not.toBeNull();
+    expect(paid.course.questionCount).toBe(3);
   });
 
   it("an agent cannot open another agent's attempt", async () => {
-    const attemptId = await startExamAttempt(db, agent(), ids.freeCourse);
-    await expect(getAttemptForAgent(db, agent2(), attemptId)).rejects.toThrow(NotFoundError);
-    await expect(submitExamAttempt(db, agent2(), attemptId, {})).rejects.toThrow(NotFoundError);
-    const a = await getAttemptForAgent(db, agent(), attemptId);
-    expect(collectKeys(a).has("correctIndex")).toBe(false);
+    const attemptId = await startAttempt(db, agent(), quizIds.free);
+    await expect(attemptForLearner(db, agent2(), attemptId)).rejects.toThrow(NotFoundError);
+    await expect(submitAttempt(db, agent2(), attemptId, {})).rejects.toThrow(NotFoundError);
+    const a = await attemptForLearner(db, agent(), attemptId);
+    expect(JSON.stringify(a)).not.toContain("correctChoiceIds");
+    expect(JSON.stringify(a)).not.toContain("isCorrect");
     expect(a.questions).toHaveLength(3);
     // resuming returns the same open attempt
-    expect(await startExamAttempt(db, agent(), ids.freeCourse)).toBe(attemptId);
+    expect(await startAttempt(db, agent(), quizIds.free)).toBe(attemptId);
   });
 
   it("a failing attempt records no completion; a passing attempt completes the course but waits for coach review before certifying", async () => {
-    const attemptId = await startExamAttempt(db, agent(), ids.freeCourse);
-    const a = await getAttemptForAgent(db, agent(), attemptId);
-    const [q1, q2, q3] = a.questions;
-    const fail = await submitExamAttempt(db, agent(), attemptId, { [q1.id]: 0, [q2.id]: 1, [q3.id]: 0 });
-    expect(fail).toMatchObject({ scorePercent: 0, passed: false });
+    const attemptId = await startAttempt(db, agent(), quizIds.free);
+    const a = await attemptForLearner(db, agent(), attemptId);
+    const fail = await submitAttempt(db, agent(), attemptId, answersByText(a.questions, ["A", "B", "A"]));
+    expect(fail).toMatchObject({ scorePercent: 0, passed: false, attemptsLeft: 1, courseCompleted: false });
     expect(await db.courseCompletion.count()).toBe(0);
-    await expect(submitExamAttempt(db, agent(), attemptId, {})).rejects.toThrow(/already submitted/);
+    await expect(submitAttempt(db, agent(), attemptId, {})).rejects.toThrow(/already submitted/);
 
-    const second = await startExamAttempt(db, agent(), ids.freeCourse);
-    const pass = await submitExamAttempt(db, agent(), second, { [q1.id]: 1, [q2.id]: 0, [q3.id]: 3 });
-    expect(pass).toMatchObject({ scorePercent: 100, passed: true });
-    expect(pass.certification).toEqual({ issued: false, reason: "coach assessment pending" });
+    const second = await startAttempt(db, agent(), quizIds.free);
+    const b = await attemptForLearner(db, agent(), second);
+    const pass = await submitAttempt(db, agent(), second, answersByText(b.questions, ["B", "A", "D"]));
+    expect(pass).toMatchObject({ scorePercent: 100, passed: true, courseCompleted: true, coursePercent: 100 });
+    // the template requires a coach review, so no certification yet
+    expect(await db.certification.count({ where: { agentProfileId: ids.agentProfile, templateId: ids.templateSetter } })).toBe(0);
     const e = await db.courseEnrollment.findUniqueOrThrow({ where: { courseId_agentProfileId: { courseId: ids.freeCourse, agentProfileId: ids.agentProfile } }, include: { completion: true } });
     expect(e.status).toBe("COMPLETED");
     expect(e.completion?.examScore).toBe(100);
-    await expect(startExamAttempt(db, agent(), ids.freeCourse)).rejects.toThrow(/already completed/);
+    await expect(startAttempt(db, agent(), quizIds.free)).rejects.toThrow(/attempts/);
     const r = await runWorkerOnce(db);
     expect(r.failures).toBe(0);
     expect(await db.task.count({ where: { type: "ASSESS_STUDENT", status: "OPEN", assigneeUserId: ids.coach } })).toBe(1);
   });
 
   it("attempt limit is enforced on the paid course (maxAttempts 1)", async () => {
-    const attemptId = await startExamAttempt(db, agent(), ids.paidCourse);
-    const a = await getAttemptForAgent(db, agent(), attemptId);
-    await submitExamAttempt(db, agent(), attemptId, { [a.questions[0].id]: 0 });
-    await expect(startExamAttempt(db, agent(), ids.paidCourse)).rejects.toThrow(/attempts/);
+    const attemptId = await startAttempt(db, agent(), quizIds.paid);
+    const a = await attemptForLearner(db, agent(), attemptId);
+    await submitAttempt(db, agent(), attemptId, answersByText(a.questions, ["A", "B", "A"]));
+    await expect(startAttempt(db, agent(), quizIds.paid)).rejects.toThrow(/attempts/);
   });
 });
 
@@ -231,11 +248,12 @@ describe("assessment, certification pipeline, verification ladder", () => {
     await enrol(db, agent2(), ids.paidCourse);
     const pending = await listPendingCoursePayments(db, admin());
     await recordCoursePayment(db, admin(), pending[0].id, { waived: true, reason: "Scholarship" });
-    const attemptId = await startExamAttempt(db, agent2(), ids.paidCourse);
-    const a = await getAttemptForAgent(db, agent2(), attemptId);
-    const [q1, q2, q3] = a.questions;
-    const r = await submitExamAttempt(db, agent2(), attemptId, { [q1.id]: 1, [q2.id]: 0, [q3.id]: 3 });
-    expect(r.certification).toEqual({ issued: true, status: "APPROVED" });
+    const attemptId = await startAttempt(db, agent2(), quizIds.paid);
+    const a = await attemptForLearner(db, agent2(), attemptId);
+    const r = await submitAttempt(db, agent2(), attemptId, answersByText(a.questions, ["B", "A", "D"]));
+    expect(r).toMatchObject({ scorePercent: 100, passed: true, courseCompleted: true });
+    const cert = await db.certification.findFirstOrThrow({ where: { agentProfileId: ids.agent2Profile, templateId: ids.templateCsr } });
+    expect([cert.status, cert.origin, cert.courseId]).toEqual(["APPROVED", "ACADEMY", ids.paidCourse]);
     const p = await db.agentProfile.findUniqueOrThrow({ where: { id: ids.agent2Profile } });
     // certification but no assessment: ladder stops at PROFILE_VERIFIED because SKILLS_ASSESSED needs an assessment
     expect(p.verificationLevel).toBe("PROFILE_VERIFIED");

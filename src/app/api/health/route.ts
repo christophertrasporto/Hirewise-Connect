@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/server/db/client";
+import { getEnv } from "@/server/env";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -23,15 +24,31 @@ function classify(err: unknown): { reason: string; code: string | null } {
   return { reason: "unknown", code };
 }
 
-/** Liveness and readiness for the hosting platform: process up and database reachable. */
+/**
+ * Environment validation result, with values never included: validation messages only name variables.
+ * A failing environment breaks every flow that builds links or talks to a provider, so it is surfaced here.
+ */
+function envStatus(): { env: "ok" | "invalid"; envError?: string; email?: string } {
+  try {
+    const env = getEnv();
+    return { env: "ok", email: env.EMAIL_DRIVER };
+  } catch (err) {
+    const msg = (err instanceof Error ? err.message : String(err)).split("\n").map((l) => l.trim()).filter(Boolean).slice(0, 3).join(" ");
+    return { env: "invalid", envError: msg.slice(0, 300) };
+  }
+}
+
+/** Liveness and readiness for the hosting platform: process up, environment valid, database reachable. */
 export async function GET() {
   const startedAt = Date.now();
+  const envInfo = envStatus();
   try {
     await prisma.$queryRaw`SELECT 1`;
     const stale = await prisma.outboxEvent.count({ where: { processedAt: null, createdAt: { lt: new Date(Date.now() - 10 * 60_000) } } });
-    return NextResponse.json({ status: "ok", database: "ok", worker: stale === 0 ? "ok" : "lagging", staleEvents: stale, latencyMs: Date.now() - startedAt }, { headers: { "Cache-Control": "no-store" } });
+    const failedEmails = await prisma.job.count({ where: { type: "SEND_EMAIL", status: "FAILED" } });
+    return NextResponse.json({ status: envInfo.env === "ok" ? "ok" : "degraded", database: "ok", ...envInfo, worker: stale === 0 ? "ok" : "lagging", staleEvents: stale, failedEmails, latencyMs: Date.now() - startedAt }, { status: envInfo.env === "ok" ? 200 : 503, headers: { "Cache-Control": "no-store" } });
   } catch (err) {
     const { reason, code } = classify(err);
-    return NextResponse.json({ status: "degraded", database: "unreachable", reason, code, databaseUrlSet: !!process.env.DATABASE_URL, directUrlSet: !!process.env.DIRECT_URL, latencyMs: Date.now() - startedAt }, { status: 503, headers: { "Cache-Control": "no-store" } });
+    return NextResponse.json({ status: "degraded", database: "unreachable", ...envInfo, reason, code, databaseUrlSet: !!process.env.DATABASE_URL, directUrlSet: !!process.env.DIRECT_URL, latencyMs: Date.now() - startedAt }, { status: 503, headers: { "Cache-Control": "no-store" } });
   }
 }

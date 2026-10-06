@@ -25,6 +25,29 @@ const STAFF_USERS: Array<{ email: string; role: RoleKey }> = [
   { email: "ops@hirewise.example", role: "OPERATIONS" },
 ];
 
+/** Demo courses are created with a category name; make sure a CourseCategory row exists and is linked. */
+async function linkCourseCategories() {
+  const courses = await prisma.academyCourse.findMany({ where: { categoryId: null }, select: { id: true, category: true } });
+  for (const c of courses) {
+    const name = c.category.trim();
+    if (!name) continue;
+    const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
+    const cat = await prisma.courseCategory.upsert({ where: { name }, create: { name, slug, order: 1000 }, update: {} });
+    await prisma.academyCourse.update({ where: { id: c.id }, data: { categoryId: cat.id } });
+  }
+}
+
+/** Demo exams are a "Final exam" module with one QUIZ lesson; questions use the shared question tables. */
+async function createFinalQuiz(courseId: string, q: { title: string; instructions: string | null; timeLimitMin: number | null; maxAttempts: number; passingScore: number; status: "DRAFT" | "PUBLISHED"; questions: Array<{ prompt: string; options: string[]; correctIndex: number; points?: number; explanation?: string | null }> }) {
+  const order = (await prisma.courseModule.count({ where: { courseId } })) + 1;
+  const finalModule = await prisma.courseModule.create({ data: { courseId, order, title: "Final exam", isRequired: true, status: "PUBLISHED" } });
+  const lesson = await prisma.courseLesson.create({ data: { moduleId: finalModule.id, order: 1, title: q.title, contentType: "QUIZ", body: q.instructions, isRequired: true, status: q.status, passingScore: q.passingScore, maxAttempts: q.maxAttempts, timeLimitMin: q.timeLimitMin } });
+  for (const [i, qq] of q.questions.entries()) {
+    await prisma.question.create({ data: { lessonId: lesson.id, courseId, type: "MULTIPLE_CHOICE", prompt: qq.prompt, explanation: qq.explanation ?? null, points: qq.points ?? 1, order: i + 1, state: "PUBLISHED", choices: { create: qq.options.map((text, k) => ({ text, isCorrect: k === qq.correctIndex, order: k + 1 })) } } });
+  }
+  return lesson;
+}
+
 async function main() {
   const scope = resolveSeedScope(process.argv, process.env);
   if (scope === "demo") assertDemoSeedAllowed(process.env);
@@ -205,7 +228,7 @@ async function main() {
     if (!course) {
       course = await prisma.academyCourse.create({ data: { code: c.code, title: c.title, category: c.category, description: c.description, syllabus: c.syllabus, ownerCoachUserId: coachUser.id, priceCents: c.priceCents, currency: "USD", passingScore: c.passingScore, requiresCoachReview: c.requiresCoachReview, certificationTemplateId: templateIds.get(c.template), status: c.status, publishedAt: c.status === "PUBLISHED" ? new Date(Date.now() - 10 * 86_400_000) : undefined, publishedById: c.status === "PUBLISHED" ? adminUser.id : undefined, coaches: { create: { coachUserId: coachUser.id } } } });
       if (c.exam) {
-        await prisma.exam.create({ data: { courseId: course.id, title: c.exam.title, instructions: c.exam.instructions, timeLimitMin: c.exam.timeLimitMin ?? undefined, maxAttempts: c.exam.maxAttempts, status: c.status === "PUBLISHED" ? "PUBLISHED" : "DRAFT", questions: { create: c.exam.questions.map((q, i) => ({ order: i + 1, prompt: q.prompt, options: q.options, correctIndex: q.correctIndex, points: q.points, explanation: "explanation" in q ? q.explanation : undefined })) } } });
+        await createFinalQuiz(course.id, { title: c.exam.title, instructions: c.exam.instructions, timeLimitMin: c.exam.timeLimitMin ?? null, maxAttempts: c.exam.maxAttempts, passingScore: c.passingScore, status: (c.status as string) === "DRAFT" ? "DRAFT" : "PUBLISHED", questions: c.exam.questions });
       }
     }
   }
@@ -401,7 +424,7 @@ async function main() {
   for (const c of MORE_COURSES) {
     if (await prisma.academyCourse.findUnique({ where: { code: c.code } })) continue;
     const course = await prisma.academyCourse.create({ data: { code: c.code, title: c.title, category: c.category, description: c.description, syllabus: c.syllabus, ownerCoachUserId: c.owner.id, priceCents: c.priceCents, currency: "USD", passingScore: c.passingScore, requiresCoachReview: false, certificationTemplateId: templateIds.get(c.template), status: "PUBLISHED", publishedAt: new Date(Date.now() - 7 * DAY), publishedById: adminUser.id, coaches: { create: { coachUserId: c.owner.id } } } });
-    await prisma.exam.create({ data: { courseId: course.id, title: `${c.title} — final exam`, instructions: "Single answer per question. Two attempts.", maxAttempts: 2, status: "PUBLISHED", questions: { create: c.questions.map((q, i) => ({ order: i + 1, prompt: q.prompt, options: q.options, correctIndex: q.correctIndex, points: 1 })) } } });
+    await createFinalQuiz(course.id, { title: `${c.title} — final exam`, instructions: "Single answer per question. Two attempts.", timeLimitMin: null, maxAttempts: 2, passingScore: c.passingScore, status: "PUBLISHED", questions: [{ prompt: `Which statement best reflects the Hirewise approach to ${c.title.toLowerCase()}?`, options: ["Improvise every call", "Follow the method and log outcomes", "Avoid follow-ups", "Skip qualification"], correctIndex: 1 }, { prompt: "Communication with clients during hiring happens:", options: ["Directly by phone", "Through Hirewise Connect", "By personal email", "Never"], correctIndex: 1 }] });
   }
 
   // Shortlists for the new clients (never Acme: the e2e suite expects Acme's shortlist empty)
@@ -466,6 +489,8 @@ async function main() {
   await placementAt("Harbor Health Clinics", withRate[withRate.length - 2], "Customer Service Representative", "DEPLOYMENT_PREP");
 
   console.log("Seed complete.");
+  await linkCourseCategories();
+
   console.log("Roles:", roleIds.size, "| Permissions:", permIds.size, "| Agreements:", AGREEMENTS.length, "| Skills:", SKILLS.length, "| Software:", SOFTWARE.length);
   console.log(`\nDemo accounts (password: ${DEMO_PASSWORD}):`);
   for (const u of STAFF_USERS) console.log(`  ${u.role.padEnd(12)} ${u.email}${u.role === "SUPER_ADMIN" || u.role === "ADMIN" ? "  (MFA setup on first login)" : ""}`);

@@ -38,6 +38,10 @@ export type DomainEventMap = {
   CERTIFICATION_APPROVED: { certificationId: string; templateName: string; agentProfileId: string; agentUserId: string; agentEmail: string; expiresAt: string | null };
   CERTIFICATION_REVOKED: { certificationId: string; templateName: string; agentUserId: string; agentEmail: string; reason: string };
   CERTIFICATION_EXPIRING: { certificationId: string; templateName: string; agentUserId: string; agentEmail: string; expiresAt: string };
+  // Course Builder phase 7
+  ASSIGNMENT_SUBMITTED: { submissionId: string; lessonId: string; lessonTitle: string; courseId: string; courseTitle: string; agentProfileId: string; displayName: string; coachUserIds: string[]; late: boolean; resubmission: boolean };
+  ASSIGNMENT_REVIEWED: { submissionId: string; lessonId: string; lessonTitle: string; courseId: string; courseTitle: string; agentUserId: string; agentEmail: string; decision: "GRADED" | "RETURNED"; grade: number | null; maxPoints: number | null; feedback: string | null };
+  ATTEMPT_PENDING_REVIEW: { attemptId: string; lessonId: string; lessonTitle: string; courseId: string; courseTitle: string; agentProfileId: string; displayName: string; coachUserIds: string[] };
   ASSESSMENT_FINALISED: { assessmentId: string; agentProfileId: string; courseId: string | null; agentUserId: string; agentEmail: string; label: string | null; courseTitle: string | null };
   // Phase 4 — commercial. Agent-facing payloads never carry client financial terms (Section 9).
   BILLING_RATE_PROPOSED: { rateId: string; agentProfileId: string; displayName: string; proposedByUserId: string; amount: number; currency: string; unit: string };

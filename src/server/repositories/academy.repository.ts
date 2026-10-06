@@ -1,4 +1,4 @@
-import type { CourseStatus, EnrollmentStatus, Prisma } from "@prisma/client";
+import type { CourseDifficulty, CourseStatus, EnrollmentStatus, LessonContentType, Prisma, PublishState, ReviewMode, ScorePolicy, SubmissionType } from "@prisma/client";
 import type { Db } from "@/server/db/types";
 
 export function courseInclude() {
@@ -6,12 +6,57 @@ export function courseInclude() {
     ownerCoach: { select: { id: true, email: true } },
     coaches: { include: { coach: { select: { id: true, email: true } } } },
     certificationTemplate: { select: { id: true, name: true } },
-    exam: { include: { questions: { orderBy: { order: "asc" } } } },
+    categoryRef: { select: { id: true, name: true, slug: true } },
+    prerequisites: { select: { requiresCourseId: true, requires: { select: { id: true, title: true } } } },
+    modules: { orderBy: { order: "asc" }, include: { lessons: { orderBy: { order: "asc" }, include: { _count: { select: { questions: true } } } } } },
     _count: { select: { enrollments: true } },
   } satisfies Prisma.AcademyCourseInclude;
 }
 
-export type CourseCreate = { code: string; title: string; category: string; description: string; syllabus: string | null; contentUrl: string | null; ownerCoachUserId: string; priceCents: number; passingScore: number; requiresCoachReview: boolean };
+export type LessonWrite = {
+  title: string;
+  contentType: LessonContentType;
+  description: string | null;
+  body: string | null;
+  url: string | null;
+  storageKey: string | null;
+  fileName: string | null;
+  contentMime: string | null;
+  sizeBytes: number | null;
+  durationSec: number | null;
+  isRequired: boolean;
+  status: PublishState;
+  requiredPercent: number | null;
+  passingScore: number | null;
+  maxAttempts: number | null;
+  timeLimitMin: number | null;
+  randomizeCount: number | null;
+  shuffleAnswers: boolean;
+  showCorrectAnswers: boolean;
+  showExplanations: boolean;
+  retakeWaitMinutes: number | null;
+  scorePolicy: ScorePolicy;
+  reviewMode: ReviewMode;
+  dueAt: Date | null;
+  points: number | null;
+  submissionType: SubmissionType | null;
+};
+
+export type CourseBuilderFields = {
+  categoryId: string | null;
+  difficulty: CourseDifficulty;
+  estimatedMinutes: number | null;
+  isRequired: boolean;
+  sequentialUnlock: boolean;
+  completionRequiresQuizPass: boolean;
+  completionRequiresFinalAssessment: boolean;
+  displayOrder: number;
+  introVideoUrl: string | null;
+  welcomeMessage: string | null;
+  thumbnailKey: string | null;
+};
+
+export type CourseCreate = { code: string; title: string; category: string; description: string; syllabus: string | null; contentUrl: string | null; ownerCoachUserId: string; priceCents: number; passingScore: number; requiresCoachReview: boolean } & Partial<CourseBuilderFields>;
 
 export const academyRepository = {
   createCourse(db: Db, d: CourseCreate) {
@@ -84,41 +129,107 @@ export const academyRepository = {
     return db.courseCompletion.create({ data: { enrollmentId: d.enrollmentId, examScore: d.examScore ?? undefined, source: d.source ?? "INTERNAL", externalRef: d.externalRef ?? undefined } });
   },
 
-  // Exams
-  upsertExam(db: Db, courseId: string, d: { title: string; instructions: string | null; timeLimitMin: number | null; maxAttempts: number }) {
-    return db.exam.upsert({ where: { courseId }, create: { courseId, ...d, instructions: d.instructions ?? undefined, timeLimitMin: d.timeLimitMin ?? undefined }, update: { ...d, instructions: d.instructions, timeLimitMin: d.timeLimitMin } });
+  // Curriculum: modules and lessons
+  listModules(db: Db, courseId: string) {
+    return db.courseModule.findMany({ where: { courseId }, orderBy: { order: "asc" }, include: { lessons: { orderBy: { order: "asc" } } } });
   },
 
-  findExam(db: Db, courseId: string) {
-    return db.exam.findUnique({ where: { courseId }, include: { questions: { orderBy: { order: "asc" } } } });
+  findModule(db: Db, id: string) {
+    return db.courseModule.findUnique({ where: { id }, include: { lessons: { orderBy: { order: "asc" } } } });
   },
 
-  async replaceQuestions(db: Db, examId: string, questions: Array<{ prompt: string; options: string[]; correctIndex: number; points: number; explanation: string | null }>) {
-    await db.examQuestion.deleteMany({ where: { examId } });
-    if (questions.length) await db.examQuestion.createMany({ data: questions.map((q, i) => ({ examId, order: i + 1, prompt: q.prompt, options: q.options, correctIndex: q.correctIndex, points: q.points, explanation: q.explanation ?? undefined })) });
+  async createModule(db: Db, courseId: string, d: { title: string; description: string | null; isRequired?: boolean; status?: PublishState }) {
+    const order = (await db.courseModule.count({ where: { courseId } })) + 1;
+    return db.courseModule.create({ data: { courseId, order, title: d.title, description: d.description ?? undefined, isRequired: d.isRequired ?? true, status: d.status ?? "PUBLISHED" } });
   },
 
-  setExamStatus(db: Db, examId: string, status: "DRAFT" | "PUBLISHED") {
-    return db.exam.update({ where: { id: examId }, data: { status } });
+  updateModule(db: Db, id: string, d: { title: string; description: string | null; isRequired?: boolean; status?: PublishState }) {
+    return db.courseModule.update({ where: { id }, data: d });
   },
 
-  createAttempt(db: Db, d: { examId: string; enrollmentId: string; expiresAt: Date | null }) {
-    return db.examAttempt.create({ data: { examId: d.examId, enrollmentId: d.enrollmentId, expiresAt: d.expiresAt ?? undefined } });
+  /** Copy a module and its lessons (not learner data) to the end of the same course. */
+  async duplicateModule(db: Db, moduleId: string) {
+    const m = await db.courseModule.findUniqueOrThrow({ where: { id: moduleId }, include: { lessons: { orderBy: { order: "asc" }, include: { questions: { include: { choices: { orderBy: { order: "asc" } } }, orderBy: { order: "asc" } } } } } });
+    const order = (await db.courseModule.count({ where: { courseId: m.courseId } })) + 1;
+    const copy = await db.courseModule.create({ data: { courseId: m.courseId, order, title: `${m.title} (copy)`, description: m.description, isRequired: m.isRequired, status: "DRAFT" } });
+    for (const l of m.lessons) await this.copyLesson(db, l, copy.id, l.order, l.title);
+    return copy;
   },
 
-  findAttempt(db: Db, id: string) {
-    return db.examAttempt.findUnique({ where: { id }, include: { exam: { include: { questions: { orderBy: { order: "asc" } } } }, enrollment: { include: { course: { include: courseInclude() }, agentProfile: { select: { id: true, displayName: true, userId: true, user: { select: { email: true } } } }, completion: true } } } });
+  /** Copy a lesson (content, settings, questions, choices) into a module; learner progress is never copied. */
+  async copyLesson(db: Db, l: Prisma.CourseLessonGetPayload<{ include: { questions: { include: { choices: true } } } }>, moduleId: string, order: number, title: string) {
+    const { id: _id, moduleId: _m, order: _o, title: _t, createdAt: _c, updatedAt: _u, questions, version: _v, ...rest } = l;
+    void _id; void _m; void _o; void _t; void _c; void _u; void _v;
+    const copy = await db.courseLesson.create({ data: { ...rest, moduleId, order, title, status: "DRAFT", version: 1 } });
+    for (const q of questions) {
+      const { id: _qid, lessonId: _ql, createdAt: _qc, updatedAt: _qu, choices, version: _qv, ...qrest } = q;
+      void _qid; void _ql; void _qc; void _qu; void _qv;
+      await db.question.create({ data: { ...qrest, lessonId: copy.id, version: 1, choices: { create: choices.map(({ text, isCorrect, order }) => ({ text, isCorrect, order })) } } });
+    }
+    return copy;
   },
 
-  submitAttempt(db: Db, id: string, d: { answers: Prisma.InputJsonValue; scorePercent: number; passed: boolean; status: "SUBMITTED" | "EXPIRED" }) {
-    return db.examAttempt.update({ where: { id }, data: { ...d, submittedAt: new Date() } });
+  async duplicateLesson(db: Db, lessonId: string) {
+    const l = await db.courseLesson.findUniqueOrThrow({ where: { id: lessonId }, include: { questions: { include: { choices: { orderBy: { order: "asc" } } }, orderBy: { order: "asc" } } } });
+    const order = (await db.courseLesson.count({ where: { moduleId: l.moduleId } })) + 1;
+    return this.copyLesson(db, l, l.moduleId, order, `${l.title} (copy)`);
   },
 
-  countAttempts(db: Db, enrollmentId: string) {
-    return db.examAttempt.count({ where: { enrollmentId, status: { in: ["SUBMITTED", "EXPIRED"] } } });
+  findLessonFull(db: Db, id: string) {
+    return db.courseLesson.findUnique({ where: { id }, include: { module: { select: { id: true, courseId: true, order: true, title: true } }, questions: { include: { choices: { orderBy: { order: "asc" } } }, orderBy: { order: "asc" } }, _count: { select: { attempts: true, progress: true, submissions: true } } } });
   },
 
-  openAttempt(db: Db, enrollmentId: string) {
-    return db.examAttempt.findFirst({ where: { enrollmentId, status: "IN_PROGRESS" } });
+  async deleteModule(db: Db, id: string) {
+    const m = await db.courseModule.delete({ where: { id } });
+    await this.renumberModules(db, m.courseId);
+    return m;
+  },
+
+  async renumberModules(db: Db, courseId: string) {
+    const rows = await db.courseModule.findMany({ where: { courseId }, orderBy: { order: "asc" }, select: { id: true } });
+    for (const [i, r] of rows.entries()) await db.courseModule.update({ where: { id: r.id }, data: { order: i + 1 } });
+  },
+
+  async swapModuleOrder(db: Db, a: { id: string; order: number }, b: { id: string; order: number }) {
+    await db.courseModule.update({ where: { id: a.id }, data: { order: -1 } });
+    await db.courseModule.update({ where: { id: b.id }, data: { order: a.order } });
+    await db.courseModule.update({ where: { id: a.id }, data: { order: b.order } });
+  },
+
+  findLesson(db: Db, id: string) {
+    return db.courseLesson.findUnique({ where: { id }, include: { module: { select: { id: true, courseId: true, order: true } } } });
+  },
+
+  async createLesson(db: Db, moduleId: string, d: LessonWrite) {
+    const order = (await db.courseLesson.count({ where: { moduleId } })) + 1;
+    return db.courseLesson.create({ data: { moduleId, order, ...d } });
+  },
+
+  async updateLesson(db: Db, id: string, moduleId: string, d: LessonWrite) {
+    const current = await db.courseLesson.findUniqueOrThrow({ where: { id }, select: { moduleId: true } });
+    if (current.moduleId !== moduleId) {
+      const order = (await db.courseLesson.count({ where: { moduleId } })) + 1;
+      const row = await db.courseLesson.update({ where: { id }, data: { ...d, moduleId, order } });
+      await this.renumberLessons(db, current.moduleId);
+      return row;
+    }
+    return db.courseLesson.update({ where: { id }, data: d });
+  },
+
+  async deleteLesson(db: Db, id: string) {
+    const l = await db.courseLesson.delete({ where: { id } });
+    await this.renumberLessons(db, l.moduleId);
+    return l;
+  },
+
+  async renumberLessons(db: Db, moduleId: string) {
+    const rows = await db.courseLesson.findMany({ where: { moduleId }, orderBy: { order: "asc" }, select: { id: true } });
+    for (const [i, r] of rows.entries()) await db.courseLesson.update({ where: { id: r.id }, data: { order: i + 1 } });
+  },
+
+  async swapLessonOrder(db: Db, a: { id: string; order: number }, b: { id: string; order: number }) {
+    await db.courseLesson.update({ where: { id: a.id }, data: { order: -1 } });
+    await db.courseLesson.update({ where: { id: b.id }, data: { order: a.order } });
+    await db.courseLesson.update({ where: { id: a.id }, data: { order: b.order } });
   },
 };

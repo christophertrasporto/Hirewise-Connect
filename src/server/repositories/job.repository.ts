@@ -37,3 +37,14 @@ export const jobRepository = {
     });
   },
 };
+
+/** Inline helpers used by the mailer: run one freshly created job in the request instead of waiting for the worker. */
+export const jobInlineRepository = {
+  claimById(db: Db, id: string) {
+    return db.job.update({ where: { id }, data: { status: "RUNNING", lockedAt: new Date(), attempts: { increment: 1 } } });
+  },
+  /** Most recent job of a type addressed to one recipient (payload.to). */
+  latestForRecipient(db: Db, type: string, to: string) {
+    return db.job.findFirst({ where: { type, payload: { path: ["to"], equals: to } }, orderBy: { createdAt: "desc" } });
+  },
+};

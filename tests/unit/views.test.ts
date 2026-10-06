@@ -23,10 +23,10 @@ function agentFixture() {
     recordings: [{ id: "r1", agentProfileId: "a1", kind: "COLD_CALL" as const, title: "Solar", storageKey: "agents/a1/recording/x.mp3", durationSec: 60, status: "SUBMITTED" as const, submittedAt: now, reviewedById: null, reviewedAt: null, reviewFeedback: null, createdAt: now, updatedAt: now }],
     portfolioItems: [],
     certifications: [
-      { id: "c1", agentProfileId: "a1", templateId: "t1", origin: "ACADEMY" as const, issuedById: null, issuedAt: now, expiresAt: null, assessmentId: "as1", courseId: "co1", status: "APPROVED" as const, approvedById: "admin", approvedAt: now, revokedReason: null, createdAt: now, updatedAt: now,
+      { id: "c1", agentProfileId: "a1", templateId: "t1", origin: "ACADEMY" as const, issuedById: null, issuedAt: now, expiresAt: null, assessmentId: "as1", courseId: "co1", status: "APPROVED" as const, approvedById: "admin", approvedAt: now, revokedReason: null, certificateNumber: null, verificationCode: null, createdAt: now, updatedAt: now,
         template: { id: "t1", name: "Hirewise Certified Appointment Setter", badgeKey: "setter", clientVisibleScores: ["examScore", "roleplayScore"] },
         assessment: { examScore: 88, practicalScore: 70, roleplayScore: 91, communicationScore: 85, resultLabel: { label: "Excellent", rank: 3 } } },
-      { id: "c2", agentProfileId: "a1", templateId: "t2", origin: "ADMIN_ISSUED" as const, issuedById: "admin", issuedAt: now, expiresAt: null, assessmentId: null, courseId: null, status: "REVOKED" as const, approvedById: null, approvedAt: null, revokedReason: "cheating suspected", createdAt: now, updatedAt: now,
+      { id: "c2", agentProfileId: "a1", templateId: "t2", origin: "ADMIN_ISSUED" as const, issuedById: "admin", issuedAt: now, expiresAt: null, assessmentId: null, courseId: null, status: "REVOKED" as const, approvedById: null, approvedAt: null, revokedReason: "cheating suspected", certificateNumber: null, verificationCode: null, createdAt: now, updatedAt: now,
         template: { id: "t2", name: "Other", badgeKey: null, clientVisibleScores: [] }, assessment: null },
     ],
     assessments: [{ id: "as1", courseId: "co1", agentProfileId: "a1", coachUserId: "coach", type: "ROLEPLAY" as const, examScore: 88, practicalScore: 70, roleplayScore: 91, communicationScore: 85, skillScores: null, comments: "internal coach comments", strengths: "Great tone", areasForImprovement: "Objection handling", resultLabelId: "l3", certificationRecommended: true, status: "FINAL" as const, assessedAt: now, createdAt: now, updatedAt: now,

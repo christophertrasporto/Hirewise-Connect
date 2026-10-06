@@ -107,6 +107,11 @@ export class LocalDiskStorage implements StorageAdapter {
 
 let instance: StorageAdapter | null = null;
 
+/** Test helper: forget the cached adapter so a test file can point STORAGE_LOCAL_DIR at its own directory. */
+export function resetStorageForTests() {
+  instance = null;
+}
+
 export function getStorage(): StorageAdapter {
   if (instance) return instance;
   const env = getEnv();
