@@ -31,7 +31,7 @@ export default async function StaffAcademyCoursesPage() {
               <li key={c.id} className="flex flex-col gap-3 py-4 md:flex-row md:items-center md:justify-between">
                 <div>
                   <Link href={`/courses/manage/${c.id}`} className="text-[15px] font-semibold text-ink-900 hover:text-brand-700">{c.title}</Link>
-                  <p className="text-[12.5px] text-ink-400">{c.category} · {c.priceLabel} · by {c.ownerCoach.email} · {c.exam?.questions.length ?? 0} questions{c.requiresCoachReview ? " · coach review required" : ""}</p>
+                  <p className="text-[12.5px] text-ink-400">{c.category} · {c.priceLabel} · by {c.ownerCoach.email} · {c.lessonCount} lessons{c.requiresCoachReview ? " · coach review required" : ""}</p>
                 </div>
                 <div className="w-full md:w-[300px]"><CourseWorkflowButton courseId={c.id} op="PUBLISH" label="Publish" variant="primary" templates={templates.map((t) => ({ id: t.id, name: t.name }))} /></div>
               </li>

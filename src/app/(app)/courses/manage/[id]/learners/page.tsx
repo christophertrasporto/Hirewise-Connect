@@ -3,17 +3,42 @@ import { prisma } from "@/server/db/client";
 import { listLabels } from "@/server/services/assessment.service";
 import { Card, StatusBadge, EmptyState, fmtDate } from "@/components/app/ui";
 import { AssessmentForm } from "@/components/academy/CourseActions";
+import { ReviewAttemptForm } from "@/components/academy/QuizRunner";
+import { attemptsAwaitingReview } from "@/server/services/quiz.service";
 import { loadBuilderCourse } from "../load";
 
 export const metadata: Metadata = { title: "Learners" };
 
 export default async function LearnersPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const { course, enrollments } = await loadBuilderCourse(id);
+  const { actor, course, enrollments } = await loadBuilderCourse(id);
   const labels = await listLabels(prisma);
+  const reviews = actor.permissions.has("course.manage") || actor.permissions.has("course.quiz.build") ? await attemptsAwaitingReview(prisma, actor, course.id).catch(() => []) : [];
   const assessed = new Set((await prisma.assessment.findMany({ where: { courseId: course.id, status: "FINAL" }, select: { agentProfileId: true } })).map((a) => a.agentProfileId));
 
   return (
+    <div className="space-y-5">
+    {reviews.length > 0 && (
+      <Card title={`Attempts awaiting your review (${reviews.length})`} description="Written answers without keyword matching, or assessments set to manual review. Record the final score; the learner is notified and course progress updates.">
+        <ul className="divide-y divide-ink-100">
+          {reviews.map((r) => (
+            <li key={r.id} className="space-y-3 py-4">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="text-[14.5px] font-semibold text-ink-900">{r.learner.displayName} <span className="font-normal text-ink-400">· {r.lesson.title} · submitted {fmtDate(r.submittedAt)}</span></p>
+                <span className="text-[12.5px] text-ink-500">Auto score so far: {r.autoScore ?? 0}%</span>
+              </div>
+              {r.shortAnswers.map((a) => (
+                <div key={a.questionId} className="rounded-2xl bg-ink-50 p-3 text-[13.5px]">
+                  <p className="font-semibold text-ink-800">{a.prompt} <span className="font-normal text-ink-400">· {a.points} pt{a.points === 1 ? "" : "s"}</span></p>
+                  <p className="mt-1 whitespace-pre-line text-ink-700">{a.answer || <span className="text-ink-400">No answer</span>}</p>
+                </div>
+              ))}
+              <ReviewAttemptForm courseId={course.id} attemptId={r.id} autoScore={r.autoScore} passingScore={r.passingScore} />
+            </li>
+          ))}
+        </ul>
+      </Card>
+    )}
     <Card title="Learners" description="Everyone enrolled in this course. Assess learners who completed it; coach review feeds certification.">
       {enrollments.length === 0 ? <EmptyState title="No learners yet" description={course.status === "PUBLISHED" ? "Talent can enrol from the catalog." : "Learners can enrol once the course is published."} /> : (
         <ul className="divide-y divide-ink-100">
@@ -38,5 +63,6 @@ export default async function LearnersPage({ params }: { params: Promise<{ id: s
         </ul>
       )}
     </Card>
+    </div>
   );
 }

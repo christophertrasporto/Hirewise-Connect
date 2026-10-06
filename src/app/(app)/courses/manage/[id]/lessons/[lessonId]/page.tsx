@@ -5,10 +5,11 @@ import { ArrowLeft } from "lucide-react";
 import { prisma } from "@/server/db/client";
 import { getLessonForCoach } from "@/server/services/academy.service";
 import { NotFoundError } from "@/server/policies/authorize";
-import { Card, Banner } from "@/components/app/ui";
+import { Card } from "@/components/app/ui";
 import { LessonForm } from "@/components/academy/CurriculumEditor";
 import { LessonContent } from "@/components/academy/LessonContent";
 import { LESSON_TYPE_META } from "@/components/academy/lesson-meta";
+import { QuestionBuilder } from "@/components/academy/QuestionBuilder";
 import { cn } from "@/lib/cn";
 import { loadBuilderCourse } from "../../load";
 
@@ -61,9 +62,9 @@ export default async function LessonPage({ params, searchParams }: { params: Pro
       {tab === "content" && <Card title="Content"><LessonForm courseId={course.id} modules={modules} moduleId={lesson.moduleId} lesson={value} section="content" /></Card>}
       {tab === "settings" && <Card title="Settings"><LessonForm courseId={course.id} modules={modules} moduleId={lesson.moduleId} lesson={value} section="settings" /></Card>}
       {tab === "questions" && (
-        <Card title="Questions">
+        <Card title="Questions" description={hasQuestions ? "Multiple choice, multiple correct answers, true/false, or short answer. Add as many as you need. Editing a question that learners have already answered starts a new version; their attempts keep the old one." : undefined}>
           {hasQuestions ? (
-            <Banner tone="info" title="The Question Builder arrives in the next phase">Multiple choice, multiple correct, true/false, and short answer, with unlimited questions, shuffle, random draws, and retakes. Settings for passing score and attempts are already on the Settings tab.</Banner>
+            <QuestionBuilder courseId={course.id} lessonId={lesson.id} questions={lesson.questions.map((q) => ({ id: q.id, type: q.type, prompt: q.prompt, explanation: q.explanation, points: q.points, isRequired: q.isRequired, state: q.state === "SUGGESTED" ? "DRAFT" : q.state, keywords: q.keywords, version: q.version, choices: q.choices.map((c) => ({ id: c.id, text: c.text, isCorrect: c.isCorrect })) }))} />
           ) : (
             <p className="text-[14px] text-ink-500">{meta.label} lessons have no questions. Change the lesson type to Quiz, Assessment, or Audio to add some.</p>
           )}

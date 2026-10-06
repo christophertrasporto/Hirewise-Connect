@@ -33,7 +33,7 @@ export default async function CoachPage() {
                 <li key={c.id} className="flex items-center justify-between gap-4 py-3">
                   <div className="min-w-0">
                     <Link href={`/courses/manage/${c.id}`} className="block truncate text-[15px] font-semibold text-ink-900 hover:text-brand-700">{c.title}</Link>
-                    <p className="text-[12.5px] text-ink-400">{c.category} · {c.priceLabel} · {c.exam ? `${c.exam.questions.length} questions` : "no exam yet"} · {c.enrolledCount} enrolled</p>
+                    <p className="text-[12.5px] text-ink-400">{c.category} · {c.priceLabel} · {`${c.lessonCount} lesson${c.lessonCount === 1 ? "" : "s"}`} · {c.enrolledCount} enrolled</p>
                   </div>
                   <StatusBadge status={c.status} />
                 </li>

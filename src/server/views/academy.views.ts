@@ -44,8 +44,10 @@ export function toCourseAgentView(c: CourseRecord, unlocked = false) {
     passingScore: c.passingScore,
     certification: c.certificationTemplate ? { id: c.certificationTemplate.id, name: c.certificationTemplate.name } : null,
     coach: c.ownerCoach.email.split("@")[0],
-    hasExam: !!c.exam && c.exam.status === "PUBLISHED",
-    questionCount: c.exam?.questions.length ?? 0,
+    quizCount: visibleModules(c).reduce((n, m) => n + m.lessons.filter((l) => l.contentType === "QUIZ" || l.contentType === "ASSESSMENT" || l.contentType === "AUDIO").length, 0),
+    questionCount: visibleModules(c).reduce((n, m) => n + m.lessons.reduce((k, l) => k + l._count.questions, 0), 0),
+    introVideoUrl: c.introVideoUrl,
+    welcomeMessage: unlocked ? c.welcomeMessage : null,
     syllabus: unlocked ? c.syllabus : null,
     contentUrl: unlocked ? c.contentUrl : null,
     lessonCount: visibleModules(c).reduce((n, m) => n + m.lessons.length, 0),
@@ -70,7 +72,7 @@ export function toEnrollmentAgentView(e: EnrollmentRecord) {
   };
 }
 
-/** Coach / admin view: includes the exam with correct answers. */
+/** Coach / admin view: full curriculum with settings and question counts. */
 export function toCourseCoachView(c: CourseRecord) {
   return {
     id: c.id,
@@ -104,7 +106,6 @@ export function toCourseCoachView(c: CourseRecord) {
     enrolledCount: c._count.enrollments,
     modules: c.modules.map((m) => ({ id: m.id, order: m.order, title: m.title, description: m.description, isRequired: m.isRequired, status: m.status, lessons: m.lessons.map((l) => ({ id: l.id, order: l.order, title: l.title, contentType: l.contentType, description: l.description, body: l.body, url: l.url, storageKey: l.storageKey, fileName: l.fileName, contentMime: l.contentMime, sizeBytes: l.sizeBytes, durationSec: l.durationSec, isRequired: l.isRequired, status: l.status, version: l.version, requiredPercent: l.requiredPercent, passingScore: l.passingScore, maxAttempts: l.maxAttempts, timeLimitMin: l.timeLimitMin, randomizeCount: l.randomizeCount, shuffleAnswers: l.shuffleAnswers, showCorrectAnswers: l.showCorrectAnswers, showExplanations: l.showExplanations, retakeWaitMinutes: l.retakeWaitMinutes, scorePolicy: l.scorePolicy, reviewMode: l.reviewMode, dueAt: l.dueAt, points: l.points, submissionType: l.submissionType, questionCount: l._count.questions })) })),
     lessonCount: c.modules.reduce((n, m) => n + m.lessons.length, 0),
-    exam: c.exam ? { id: c.exam.id, title: c.exam.title, instructions: c.exam.instructions, timeLimitMin: c.exam.timeLimitMin, maxAttempts: c.exam.maxAttempts, status: c.exam.status, questions: c.exam.questions.map((q) => ({ id: q.id, order: q.order, prompt: q.prompt, options: q.options, correctIndex: q.correctIndex, points: q.points, explanation: q.explanation })) } : null,
     createdAt: c.createdAt,
   };
 }

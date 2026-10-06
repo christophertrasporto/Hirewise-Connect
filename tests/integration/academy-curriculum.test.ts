@@ -3,7 +3,8 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { testDb, resetDb } from "../setup/db";
-import { createCourse, saveExam, submitCourseForApproval, publishCourse, updateCourse, getCourseForCoach, saveModule, deleteModule, moveModule, saveLesson, deleteLesson, moveLesson, createLessonUploadUrl, lessonDownloadUrl, enrol, getEnrollmentForAgent, catalogForAgent, startExamAttempt, getAttemptForAgent, submitExamAttempt, KEEP_FILE } from "@/server/services/academy.service";
+import { createCourse, submitCourseForApproval, publishCourse, updateCourse, getCourseForCoach, saveModule, deleteModule, moveModule, saveLesson, deleteLesson, moveLesson, createLessonUploadUrl, lessonDownloadUrl, enrol, getEnrollmentForAgent, catalogForAgent, KEEP_FILE } from "@/server/services/academy.service";
+import { saveQuestion, deleteQuestion, startAttempt, attemptForLearner, submitAttempt } from "@/server/services/quiz.service";
 import { resolveActor } from "@/server/auth/resolve-actor";
 import { makeActor } from "@/server/auth/actor";
 import { ForbiddenError, NotFoundError } from "@/server/policies/authorize";
@@ -18,10 +19,14 @@ const ids = { coach: "coach_c1", coach2: "coach_c2", admin: "admin_c1", agentUse
 
 let salesCategoryId = "";
 const courseInput = (title: string, priceUsd: string) => ({ title, categoryId: salesCategoryId, difficulty: "BEGINNER" as const, description: "A course description long enough to satisfy validation rules.", syllabus: "", contentUrl: "", priceUsd, passingScore: 60, requiresCoachReview: false });
-const examInput = { title: "Final exam", instructions: "", timeLimitMin: "" as const, maxAttempts: 2, questions: [
-  { prompt: "Question one prompt", options: ["A", "B", "C"], correctIndex: 1, points: 1, explanation: "" },
-  { prompt: "Question two prompt", options: ["A", "B"], correctIndex: 0, points: 1, explanation: "" },
-] };
+/** A quiz lesson with two published questions in the given module. */
+async function buildQuiz(courseId: string, moduleId: string) {
+  const actor = await coach();
+  const lessonId = await saveLesson(db, actor, courseId, { moduleId, title: "Module quiz", contentType: "QUIZ", passingScore: 60, maxAttempts: 2 });
+  await saveQuestion(db, actor, courseId, lessonId, { prompt: "Question one prompt", points: 1, choices: [{ text: "A" }, { text: "B", isCorrect: true }, { text: "C" }] });
+  await saveQuestion(db, actor, courseId, lessonId, { prompt: "Question two prompt", points: 1, choices: [{ text: "A", isCorrect: true }, { text: "B" }] });
+  return lessonId;
+}
 
 beforeAll(async () => {
   dir = mkdtempSync(path.join(tmpdir(), "hw-cur-"));
@@ -155,46 +160,48 @@ describe("curriculum: modules and lessons of every content type", () => {
 });
 
 describe("editing after publishing", () => {
-  it("details, curriculum, and exam stay editable while PUBLISHED; kept questions retain their ids", async () => {
-    await saveExam(db, await coach(), ids.course, examInput);
-    await saveExam(db, await coach(), ids.paid, examInput);
+  it("details, curriculum, and questions stay editable while PUBLISHED; open attempts keep their frozen snapshot", async () => {
+    const quiz = await buildQuiz(ids.course, ids.m1);
+    const paidModule = await saveModule(db, await coach(), ids.paid, { title: "Module 1", description: "" });
+    await buildQuiz(ids.paid, paidModule);
     await submitCourseForApproval(db, await coach(), ids.course);
     await submitCourseForApproval(db, await coach(), ids.paid);
     await publishCourse(db, admin(), ids.course, {});
     await publishCourse(db, admin(), ids.paid, {});
 
-    const before = await db.examQuestion.findMany({ where: { exam: { courseId: ids.course } }, orderBy: { order: "asc" } });
+    const before = await db.question.findMany({ where: { lessonId: quiz }, orderBy: { order: "asc" }, include: { choices: { orderBy: { order: "asc" } } } });
     expect(before).toHaveLength(2);
 
-    // an agent is mid-attempt when the coach edits the exam
+    // an agent is mid-attempt when the coach edits the quiz
     await enrol(db, agent(), ids.course);
-    const attemptId = await startExamAttempt(db, agent(), ids.course);
+    const attemptId = await startAttempt(db, agent(), quiz);
 
     await updateCourse(db, await coach(), ids.course, { ...courseInput("Curriculum course, 2nd edition", ""), syllabus: "Updated overview" });
     const newModule = await saveModule(db, await coach(), ids.course, { title: "Module 3: Booking", description: "" });
     await saveLesson(db, await coach(), ids.course, { moduleId: newModule, title: "Closing for the appointment", contentType: "TEXT", body: "Ask for a specific time." });
-    await saveExam(db, await coach(), ids.course, {
-      ...examInput,
-      questions: [
-        { id: before[0].id, prompt: "Question one prompt, reworded", options: ["A", "B", "C"], correctIndex: 1, points: 2, explanation: "" },
-        { prompt: "Brand new question three", options: ["Yes", "No"], correctIndex: 0, points: 1, explanation: "" },
-      ],
-    });
+    await saveQuestion(db, await coach(), ids.course, quiz, { id: before[0].id, prompt: "Question one prompt, reworded", points: 2, choices: before[0].choices.map((c) => ({ id: c.id, text: c.text, isCorrect: c.isCorrect })) });
+    await deleteQuestion(db, await coach(), ids.course, before[1].id);
+    const q3 = await saveQuestion(db, await coach(), ids.course, quiz, { prompt: "Brand new question three", points: 1, choices: [{ text: "Yes", isCorrect: true }, { text: "No" }] });
 
-    const c = await db.academyCourse.findUniqueOrThrow({ where: { id: ids.course }, include: { exam: { include: { questions: { orderBy: { order: "asc" } } } }, modules: true } });
+    const c = await db.academyCourse.findUniqueOrThrow({ where: { id: ids.course }, include: { modules: true } });
     expect(c.status).toBe("PUBLISHED");
     expect(c.title).toBe("Curriculum course, 2nd edition");
-    expect(c.exam?.status).toBe("PUBLISHED");
     expect(c.modules).toHaveLength(3);
-    expect(c.exam?.questions.map((q) => q.id)).toEqual([before[0].id, expect.any(String)]);
-    expect(c.exam?.questions[0].prompt).toBe("Question one prompt, reworded");
-    expect(c.exam?.questions[0].points).toBe(2);
-    expect(await db.examQuestion.findUnique({ where: { id: before[1].id } })).toBeNull();
+    const now = await db.question.findMany({ where: { lessonId: quiz }, orderBy: { order: "asc" }, include: { choices: true } });
+    expect(now.map((q) => q.id)).toEqual([before[0].id, q3]);
+    expect(now.map((q) => q.order)).toEqual([1, 2]);
+    expect(now[0].prompt).toBe("Question one prompt, reworded");
+    expect(now[0].points).toBe(2);
+    expect(now[0].version).toBe(2);
+    expect(now[0].choices.map((x) => x.id).sort()).toEqual(before[0].choices.map((x) => x.id).sort()); // choice ids survive the edit
+    expect(await db.question.findUnique({ where: { id: before[1].id } })).toBeNull();
 
-    // the open attempt sees the current questions and grades against them
-    const view = await getAttemptForAgent(db, agent(), attemptId);
-    expect(view.questions.map((q) => q.id)).toEqual(c.exam!.questions.map((q) => q.id));
-    const r = await submitExamAttempt(db, agent(), attemptId, { [before[0].id]: 1, [c.exam!.questions[1].id]: 0 });
+    // the open attempt still shows the two questions it started with and grades against that snapshot
+    const view = await attemptForLearner(db, agent(), attemptId);
+    expect(view.questions.map((q) => q.questionId)).toEqual(before.map((q) => q.id));
+    expect(view.questions[0].prompt).toBe("Question one prompt");
+    const pick = (i: number, text: string) => view.questions[i].choices.filter((x) => x.text === text).map((x) => x.id);
+    const r = await submitAttempt(db, agent(), attemptId, { [before[0].id]: pick(0, "B"), [before[1].id]: pick(1, "A") });
     expect(r.scorePercent).toBe(100);
     expect(r.passed).toBe(true);
   });
@@ -204,7 +211,7 @@ describe("what agents see", () => {
   it("catalog and locked enrolments show the outline only; unlocked enrolments get the content but never a storage key", async () => {
     const catalog = await catalogForAgent(db, agent2());
     const card = catalog.find((c) => c.id === ids.course)!;
-    expect(card.lessonCount).toBe(5);
+    expect(card.lessonCount).toBe(6);
     expect(card.modules).toBeNull();
     expect(card.outline.map((m) => m.title)).toEqual(["Module 1: Openers", "Module 2: Handling objections", "Module 3: Booking"]);
     expect(card.outline[1].lessons.map((l) => l.contentType)).toEqual(["VIDEO", "DOCUMENT", "LINK"]);
@@ -233,7 +240,8 @@ describe("what agents see", () => {
     expect(text.body).toContain("Earn permission");
     const keys = collectKeys(unlocked);
     expect(keys.has("storageKey")).toBe(false);
-    expect(keys.has("correctIndex")).toBe(false);
+    expect(keys.has("isCorrect")).toBe(false);
+    expect(keys.has("correctChoiceIds")).toBe(false);
 
     const url = await lessonDownloadUrl(db, agent(), ids.doc);
     expect(url).toContain("/api/storage/");

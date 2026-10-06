@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { prisma } from "@/server/db/client";
 import { requireActor } from "@/server/auth/require-actor";
 import { toActionError, formList, formString, type ActionResult } from "@/server/http/action-result";
-import { courseSchema, courseSettingsSchema, examSchema, createCourse, updateCourse, updateCourseSettings, setCourseCertificationTemplate, submitCourseForApproval, publishCourse, archiveCourse, saveExam, enrol, startExamAttempt, submitExamAttempt, recordCoursePayment, addCoachToCourse, moduleSchema, lessonSchema, lessonUploadRequestSchema, saveModule, deleteModule, moveModule, duplicateModule, saveLesson, deleteLesson, moveLesson, duplicateLesson, createLessonUploadUrl } from "@/server/services/academy.service";
+import { courseSchema, courseSettingsSchema, createCourse, updateCourse, updateCourseSettings, setCourseCertificationTemplate, submitCourseForApproval, publishCourse, archiveCourse, enrol, recordCoursePayment, addCoachToCourse, moduleSchema, lessonSchema, lessonUploadRequestSchema, saveModule, deleteModule, moveModule, duplicateModule, saveLesson, deleteLesson, moveLesson, duplicateLesson, createLessonUploadUrl } from "@/server/services/academy.service";
 import { categorySchema, saveCategory } from "@/server/services/category.service";
 import { assessmentSchema, evaluationSchema, labelSchema, recordAssessment, recordEvaluation, saveLabel } from "@/server/services/assessment.service";
 import { templateSchema, saveTemplate, issueCertification, reviewCertification, revokeCertification } from "@/server/services/certification.service";
@@ -117,26 +117,6 @@ export async function updateCourseAction(_prev: ActionResult, fd: FormData): Pro
     const courseId = formString(fd, "courseId");
     await updateCourse(prisma, actor, courseId, courseInput(fd));
     revalidateCourse(courseId);
-    return { ok: true };
-  } catch (e) {
-    return toActionError(e);
-  }
-}
-
-/** Exam builder posts a JSON blob of questions built client-side. */
-export async function saveExamAction(_prev: ActionResult, fd: FormData): Promise<ActionResult> {
-  try {
-    const actor = await requireActor();
-    const courseId = formString(fd, "courseId");
-    let questions: unknown = [];
-    try {
-      questions = JSON.parse(formString(fd, "questions") || "[]");
-    } catch {
-      return { ok: false, error: "The question list could not be read. Reload and try again." };
-    }
-    const input = examSchema.parse({ title: formString(fd, "title"), instructions: formString(fd, "instructions"), timeLimitMin: formString(fd, "timeLimitMin"), maxAttempts: formString(fd, "maxAttempts") || "2", questions });
-    await saveExam(prisma, actor, courseId, input);
-    revalidatePath(`/coach/courses/${courseId}`);
     return { ok: true };
   } catch (e) {
     return toActionError(e);
@@ -343,34 +323,6 @@ export async function enrolAction(_prev: ActionResult, fd: FormData): Promise<Ac
     revalidatePath("/courses");
     revalidatePath(`/courses/${courseId}`);
     return { ok: true };
-  } catch (e) {
-    return toActionError(e);
-  }
-}
-
-export async function startExamAction(_prev: ActionResult, fd: FormData): Promise<ActionResult> {
-  let attemptId: string;
-  try {
-    const actor = await requireActor();
-    attemptId = await startExamAttempt(prisma, actor, formString(fd, "courseId"));
-  } catch (e) {
-    return toActionError(e);
-  }
-  redirect(`/courses/exam/${attemptId}`);
-}
-
-export async function submitExamAction(_prev: ActionResult<{ scorePercent: number; passed: boolean; expired: boolean }>, fd: FormData): Promise<ActionResult<{ scorePercent: number; passed: boolean; expired: boolean }>> {
-  try {
-    const actor = await requireActor();
-    const attemptId = formString(fd, "attemptId");
-    const answers: Record<string, number> = {};
-    for (const [k, v] of fd.entries()) {
-      if (k.startsWith("q:") && typeof v === "string" && v !== "") answers[k.slice(2)] = Number(v);
-    }
-    const r = await submitExamAttempt(prisma, actor, attemptId, answers);
-    revalidatePath("/courses", "layout");
-    revalidatePath("/dashboard");
-    return { ok: true, data: { scorePercent: r.scorePercent, passed: r.passed, expired: r.expired } };
   } catch (e) {
     return toActionError(e);
   }

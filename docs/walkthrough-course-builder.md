@@ -45,9 +45,23 @@ Not in phase 1: any UI, navigation, service, or permission change. The app behav
 
 Kept from before: Admin approves the first publish; everything else is coach-editable at any status.
 
+## Phase 3: Question Builder and quiz engine (done)
+
+| Piece | Where | Notes |
+| --- | --- | --- |
+| Question Builder | lesson page → **Questions** tab, `components/academy/QuestionBuilder.tsx`, `quiz-actions.ts` | One builder for quiz, assessment, and audiobook-quiz lessons. Types: multiple choice (one correct), multiple correct answers, true/false, short answer (keywords for auto-marking; none means the coach marks it). Per question: points, explanation, required, draft/published. Reorder, duplicate (as a draft), delete. No limit on the number of questions. |
+| Question service | `server/services/quiz.service.ts`, `server/repositories/quiz.repository.ts` | Validation per type (choice count, exactly one or at least one correct). Editing a question's prompt, type, choices, or keywords bumps its `version`; choice ids are kept so earlier answers still resolve. Gate: assigned coach with `course.quiz.build`, or `course.manage`. |
+| Attempts | `startAttempt`, `attemptForLearner`, `submitAttempt` | Each attempt freezes a `questionSnapshot` of the published questions as shown (random draw of `randomizeCount`, optional choice shuffle). Answers are choice ids (or text), so shuffling never changes what is correct. The learner projection before submission contains no `correctChoiceIds`, `isCorrect`, or keywords; after submission the key and explanations appear only if the lesson allows. Open attempts resume. |
+| Rules | lesson settings from phase 2 | Attempt limit (null = unlimited), retake wait, time limit (an overrun of more than 30 s is recorded as `EXPIRED` and never passes), passing score (lesson, else course), score policy highest/latest, show answers/explanations. Audiobook quizzes also require `mediaCompletedAt` (phase 4 sets it). |
+| Scoring | `gradeSnapshot` | Choice questions are all-or-nothing by id set; short answers match any keyword case-insensitively; short answers without keywords (or review mode MANUAL/BOTH) put the attempt in `PENDING_REVIEW`. |
+| Coach review | Learners tab → "Attempts awaiting your review", `reviewAttempt` | The coach records the final score and feedback; the audit row keeps the auto score. Pass/fail then flows into progress exactly like an auto-marked attempt. |
+| Progress | `server/services/progress.service.ts` | `LessonProgress` per quiz (`COMPLETED`, `RETAKE_REQUIRED`, `FAILED`, `PENDING_REVIEW`), then `recalculateCourseProgress`: percent over required published lessons; when all are done the enrolment completes once (`CourseCompletion` with the best quiz score as `examScore`, `COURSE_COMPLETED` audit and event, certification evaluation), the same pipeline the legacy exam used. A course with `completionRequiresQuizPass` off completes the lesson on any submitted attempt. |
+| Learner pages | `/courses/[courseId]/quiz/[lessonId]` (rules, attempt history, start/resume), `/courses/attempt/[attemptId]` (runner and review) | Course page shows the welcome message, intro video, per-lesson status chips, and the progress bar. Mobile layout checked at 375 px. |
+| Removed | `Exam` service functions, `ExamBuilder`, `/courses/exam/[attemptId]`, exam fields in projections | The three legacy tables stay until a later cleanup migration; nothing reads them. Seeds create quizzes through the shared tables. |
+| Tests | `tests/integration/quiz-engine.test.ts`, `tests/unit/academy-grading.test.ts`, rewritten exam sections of `academy.test.ts` and `academy-curriculum.test.ts` | Builder validation and permissions; snapshot shuffle and random draw; choice-id grading, keyword matching, manual review; answer-key leakage; attempt limits, retake wait, score policy, expiry; editing a question after attempts leaves the old snapshot intact; completion and certification pipeline. |
+
 ## Next phases
 
-3. Question Builder and quiz engine (scoring by choice id, shuffle, retakes, attempt history); legacy exam code removed.
 4. Audiobook lesson: upload, player, real-listening tracking, resume, quiz gating, the six audio statuses.
 5. Remaining lesson types: video, text, document, link, assignment with review, assessment with manual review.
 6. Progress, completion rules, sequential unlock, certificates with numbers on the profile.

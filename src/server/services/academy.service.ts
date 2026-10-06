@@ -61,7 +61,7 @@ function slug(title: string) {
 }
 
 /** Coach or Admin sees a course they may edit. Coaches: own or assigned courses only (INV-P5). */
-async function loadEditable(db: PrismaClient, actor: Actor, courseId: string) {
+export async function loadEditableCourse(db: PrismaClient, actor: Actor, courseId: string) {
   const c = await academyRepository.findCourse(db, courseId);
   if (!c) throw new NotFoundError();
   if (actor.permissions.has("course.manage")) return c;
@@ -74,6 +74,10 @@ async function loadEditable(db: PrismaClient, actor: Actor, courseId: string) {
 // ---------------------------------------------------------------------------
 // Coach: courses
 // ---------------------------------------------------------------------------
+
+function publishedLessonCount(c: { modules: Array<{ status: string; lessons: Array<{ status: string }> }> }) {
+  return c.modules.filter((m) => m.status === "PUBLISHED").reduce((n, m) => n + m.lessons.filter((l) => l.status === "PUBLISHED").length, 0);
+}
 
 async function categoryOrThrow(db: PrismaClient, categoryId: string) {
   const cat = await categoryRepository.findById(db, categoryId);
@@ -108,7 +112,7 @@ export async function createCourse(db: PrismaClient, actor: Actor, raw: CourseIn
 }
 
 export async function updateCourse(db: PrismaClient, actor: Actor, courseId: string, raw: CourseInput) {
-  const c = await loadEditable(db, actor, courseId);
+  const c = await loadEditableCourse(db, actor, courseId);
   const input = courseSchema.parse(raw);
   const cat = await categoryOrThrow(db, input.categoryId);
   const priceCents = usdToCents(input.priceUsd || undefined);
@@ -121,7 +125,7 @@ export async function updateCourse(db: PrismaClient, actor: Actor, courseId: str
 
 /** Settings tab: completion rules, sequential unlock, prerequisites, access gate. Editable at any status. */
 export async function updateCourseSettings(db: PrismaClient, actor: Actor, courseId: string, raw: CourseSettingsInput) {
-  const c = await loadEditable(db, actor, courseId);
+  const c = await loadEditableCourse(db, actor, courseId);
   const input = courseSettingsSchema.parse(raw);
   const prereqs = [...new Set(input.prerequisiteIds)].filter((id) => id !== c.id);
   if (prereqs.length) {
@@ -145,7 +149,7 @@ export async function updateCourseSettings(db: PrismaClient, actor: Actor, cours
 }
 
 export async function duplicateModule(db: PrismaClient, actor: Actor, courseId: string, moduleId: string) {
-  const c = await loadEditable(db, actor, courseId);
+  const c = await loadEditableCourse(db, actor, courseId);
   const m = await academyRepository.findModule(db, moduleId);
   if (!m || m.courseId !== c.id) throw new NotFoundError();
   return db.$transaction(async (tx) => {
@@ -156,7 +160,7 @@ export async function duplicateModule(db: PrismaClient, actor: Actor, courseId: 
 }
 
 export async function duplicateLesson(db: PrismaClient, actor: Actor, courseId: string, lessonId: string) {
-  const c = await loadEditable(db, actor, courseId);
+  const c = await loadEditableCourse(db, actor, courseId);
   const l = await academyRepository.findLesson(db, lessonId);
   if (!l || l.module.courseId !== c.id) throw new NotFoundError();
   return db.$transaction(async (tx) => {
@@ -168,7 +172,7 @@ export async function duplicateLesson(db: PrismaClient, actor: Actor, courseId: 
 
 /** One lesson with its questions and learner-data counts, for the lesson page (Content / Questions / Settings / Preview). */
 export async function getLessonForCoach(db: PrismaClient, actor: Actor, courseId: string, lessonId: string) {
-  const c = await loadEditable(db, actor, courseId);
+  const c = await loadEditableCourse(db, actor, courseId);
   const l = await academyRepository.findLessonFull(db, lessonId);
   if (!l || l.module.courseId !== c.id) throw new NotFoundError();
   return { course: toCourseCoachView(c), lesson: l };
@@ -179,9 +183,9 @@ export async function getLessonForCoach(db: PrismaClient, actor: Actor, courseId
  * including PUBLISHED: edits go live immediately and the course never leaves the catalog.
  */
 export async function submitCourseForApproval(db: PrismaClient, actor: Actor, courseId: string) {
-  const c = await loadEditable(db, actor, courseId);
+  const c = await loadEditableCourse(db, actor, courseId);
   if (c.status !== "DRAFT") throw new Error("Only draft courses can be submitted.");
-  if (!c.exam || c.exam.questions.length === 0) throw new Error("Add an exam with at least one question before submitting.");
+  if (publishedLessonCount(c) === 0) throw new Error("Add at least one published lesson in a published module before submitting.");
   await db.$transaction(async (tx) => {
     await academyRepository.setCourseStatus(tx, c.id, "PENDING_APPROVAL");
     await audit(tx, { actor, action: "COURSE_SUBMITTED", entityType: "AcademyCourse", entityId: c.id });
@@ -194,10 +198,9 @@ export async function publishCourse(db: PrismaClient, actor: Actor, courseId: st
   authorize(actor, "course.manage");
   const c = await academyRepository.findCourse(db, courseId);
   if (!c) throw new NotFoundError();
-  if (!c.exam || c.exam.questions.length === 0) throw new Error("The course needs a published exam before it can go live.");
+  if (publishedLessonCount(c) === 0) throw new Error("The course needs at least one published lesson before it can go live.");
   await db.$transaction(async (tx) => {
     if (opts.certificationTemplateId !== undefined) await academyRepository.updateCourse(tx, c.id, { certificationTemplateId: opts.certificationTemplateId || null });
-    if (c.exam!.status !== "PUBLISHED") await academyRepository.setExamStatus(tx, c.exam!.id, "PUBLISHED");
     await academyRepository.setCourseStatus(tx, c.id, "PUBLISHED", { publishedById: actor.userId, publishedAt: new Date() });
     await audit(tx, { actor, action: "COURSE_PUBLISHED", entityType: "AcademyCourse", entityId: c.id, newValue: { certificationTemplateId: opts.certificationTemplateId ?? c.certificationTemplateId, priceCents: c.priceCents } });
     await publishEvent(tx, "COURSE_PUBLISHED", { courseId: c.id, title: c.title, coachUserId: c.ownerCoachUserId });
@@ -239,40 +242,10 @@ export async function listCoursesForCoach(db: PrismaClient, actor: Actor) {
 }
 
 export async function getCourseForCoach(db: PrismaClient, actor: Actor, courseId: string) {
-  const c = await loadEditable(db, actor, courseId);
+  const c = await loadEditableCourse(db, actor, courseId);
   const enrollments = await academyRepository.listEnrollmentsForCourse(db, c.id);
   return { course: toCourseCoachView(c), enrollments: enrollments.map((e) => ({ id: e.id, agent: e.agentProfile, status: e.status, paymentStatus: e.paymentStatus, enrolledAt: e.enrolledAt, completedAt: e.completion?.completedAt ?? null, examScore: e.completion?.examScore ?? e.attempts[0]?.scorePercent ?? null })) };
 }
-
-// ---------------------------------------------------------------------------
-// Coach: exams
-// ---------------------------------------------------------------------------
-
-export const examSchema = z.object({
-  title: z.string().trim().min(2).max(120),
-  instructions: optionalText(2000),
-  timeLimitMin: z.coerce.number().int().min(5).max(240).optional().or(z.literal("")),
-  maxAttempts: z.coerce.number().int().min(1).max(10).default(2),
-  questions: z.array(z.object({
-    id: z.string().trim().min(1).optional(),
-    prompt: z.string().trim().min(5, "Write the question.").max(1000),
-    options: z.array(z.string().trim().min(1)).min(2, "At least two options.").max(6),
-    correctIndex: z.coerce.number().int().min(0),
-    points: z.coerce.number().int().min(1).max(20).default(1),
-    explanation: optionalText(1000),
-  })).min(1, "Add at least one question.").max(100),
-});
-
-export async function saveExam(db: PrismaClient, actor: Actor, courseId: string, input: z.infer<typeof examSchema>) {
-  const c = await loadEditable(db, actor, courseId);
-  for (const q of input.questions) if (q.correctIndex >= q.options.length) throw new Error(`Question "${q.prompt.slice(0, 40)}" marks an answer that does not exist.`);
-  await db.$transaction(async (tx) => {
-    const exam = await academyRepository.upsertExam(tx, c.id, { title: input.title, instructions: input.instructions || null, timeLimitMin: input.timeLimitMin === "" || input.timeLimitMin === undefined ? null : input.timeLimitMin, maxAttempts: input.maxAttempts });
-    await academyRepository.syncQuestions(tx, exam.id, input.questions.map((q) => ({ id: q.id, prompt: q.prompt, options: q.options, correctIndex: q.correctIndex, points: q.points, explanation: q.explanation || null })));
-    await audit(tx, { actor, action: "COURSE_UPDATED", entityType: "Exam", entityId: exam.id, newValue: { questions: input.questions.length, maxAttempts: input.maxAttempts } });
-  });
-}
-
 
 // ---------------------------------------------------------------------------
 // Coach: curriculum (modules and lessons). Editable at any status, including PUBLISHED.
@@ -361,7 +334,7 @@ function lessonKeyPrefix(courseId: string) {
 
 /** Step 1 of a lesson file upload: a presigned PUT scoped to the course. Nothing is recorded until saveLesson. */
 export async function createLessonUploadUrl(db: PrismaClient, actor: Actor, courseId: string, raw: z.infer<typeof lessonUploadRequestSchema>) {
-  const c = await loadEditable(db, actor, courseId);
+  const c = await loadEditableCourse(db, actor, courseId);
   const input = lessonUploadRequestSchema.parse(raw);
   if ((input.kind === "AUDIO" || input.kind === "VIDEO") && !actor.permissions.has("course.manage")) authorize(actor, "course.audio.upload");
   rateLimit(`lesson-upload:${actor.userId}`, 60, 60 * 60_000);
@@ -381,7 +354,7 @@ async function moduleOf(db: PrismaClient, courseId: string, moduleId: string) {
 }
 
 export async function saveModule(db: PrismaClient, actor: Actor, courseId: string, raw: ModuleInput) {
-  const c = await loadEditable(db, actor, courseId);
+  const c = await loadEditableCourse(db, actor, courseId);
   const input = moduleSchema.parse(raw);
   const data = { title: input.title, description: input.description || null, isRequired: input.isRequired, status: input.status };
   return db.$transaction(async (tx) => {
@@ -398,7 +371,7 @@ export async function saveModule(db: PrismaClient, actor: Actor, courseId: strin
 }
 
 export async function deleteModule(db: PrismaClient, actor: Actor, courseId: string, moduleId: string) {
-  const c = await loadEditable(db, actor, courseId);
+  const c = await loadEditableCourse(db, actor, courseId);
   const m = await moduleOf(db, c.id, moduleId);
   await db.$transaction(async (tx) => {
     await academyRepository.deleteModule(tx, m.id);
@@ -407,7 +380,7 @@ export async function deleteModule(db: PrismaClient, actor: Actor, courseId: str
 }
 
 export async function moveModule(db: PrismaClient, actor: Actor, courseId: string, moduleId: string, direction: -1 | 1) {
-  const c = await loadEditable(db, actor, courseId);
+  const c = await loadEditableCourse(db, actor, courseId);
   const modules = await academyRepository.listModules(db, c.id);
   const i = modules.findIndex((m) => m.id === moduleId);
   if (i < 0) throw new NotFoundError();
@@ -460,7 +433,7 @@ function normaliseLesson(input: LessonParsed): LessonWrite {
 export const KEEP_FILE = "__keep__";
 
 export async function saveLesson(db: PrismaClient, actor: Actor, courseId: string, raw: LessonInput) {
-  const c = await loadEditable(db, actor, courseId);
+  const c = await loadEditableCourse(db, actor, courseId);
   let input = lessonSchema.parse(raw);
   await moduleOf(db, c.id, input.moduleId);
   if (input.storageKey === KEEP_FILE) {
@@ -489,7 +462,7 @@ export async function saveLesson(db: PrismaClient, actor: Actor, courseId: strin
 }
 
 export async function deleteLesson(db: PrismaClient, actor: Actor, courseId: string, lessonId: string) {
-  const c = await loadEditable(db, actor, courseId);
+  const c = await loadEditableCourse(db, actor, courseId);
   const l = await academyRepository.findLesson(db, lessonId);
   if (!l || l.module.courseId !== c.id) throw new NotFoundError();
   await db.$transaction(async (tx) => {
@@ -499,7 +472,7 @@ export async function deleteLesson(db: PrismaClient, actor: Actor, courseId: str
 }
 
 export async function moveLesson(db: PrismaClient, actor: Actor, courseId: string, lessonId: string, direction: -1 | 1) {
-  const c = await loadEditable(db, actor, courseId);
+  const c = await loadEditableCourse(db, actor, courseId);
   const l = await academyRepository.findLesson(db, lessonId);
   if (!l || l.module.courseId !== c.id) throw new NotFoundError();
   const m = await moduleOf(db, c.id, l.moduleId);
@@ -521,7 +494,7 @@ export async function lessonDownloadUrl(db: PrismaClient, actor: Actor, lessonId
     const e = await academyRepository.findEnrollment(db, l.module.courseId, profileId);
     if (!e || e.paymentStatus === "PENDING") throw new NotFoundError();
   } else {
-    await loadEditable(db, actor, l.module.courseId);
+    await loadEditableCourse(db, actor, l.module.courseId);
   }
   return getStorage().createDownloadUrl(l.storageKey);
 }
@@ -572,15 +545,18 @@ export async function getEnrollmentForAgent(db: PrismaClient, actor: Actor, cour
     const c = await academyRepository.findCourse(db, courseId);
     if (!c || c.status !== "PUBLISHED") throw new NotFoundError();
     const lock = await coursesLockedFor(db, actor);
-    return { course: toCourseAgentView(c), enrollment: null, exam: null, locked: lock.locked ? { reason: lock.reason ?? "Finish your onboarding checklist first.", href: "/onboarding/welcome-video" } : null };
+    return { course: toCourseAgentView(c), enrollment: null, lessonProgress: {} as Record<string, { status: string; completedAt: Date | null; mediaPercent: number }>, courseProgress: null, locked: lock.locked ? { reason: lock.reason ?? "Finish your onboarding checklist first.", href: "/onboarding/welcome-video" } : null };
   }
   const unlocked = e.paymentStatus === "NOT_REQUIRED" || e.paymentStatus === "PAID" || e.paymentStatus === "WAIVED";
-  const exam = e.course.exam;
+  const lessonIds = e.course.modules.flatMap((m) => m.lessons.map((l) => l.id));
+  const progressRows = unlocked && lessonIds.length ? await db.lessonProgress.findMany({ where: { agentProfileId: profileId, lessonId: { in: lessonIds } } }) : [];
+  const courseProgress = await db.courseProgress.findUnique({ where: { courseId_agentProfileId: { courseId: e.courseId, agentProfileId: profileId } } });
   return {
     locked: null as null | { reason: string; href: string },
     course: toCourseAgentView(e.course, unlocked),
     enrollment: toEnrollmentAgentView(e),
-    exam: exam && exam.status === "PUBLISHED" && unlocked ? { id: exam.id, title: exam.title, instructions: exam.instructions, timeLimitMin: exam.timeLimitMin, maxAttempts: exam.maxAttempts, questionCount: exam.questions.length, attemptsUsed: e.attempts.filter((a) => a.status !== "IN_PROGRESS").length, openAttemptId: e.attempts.find((a) => a.status === "IN_PROGRESS")?.id ?? null } : null,
+    lessonProgress: Object.fromEntries(progressRows.map((p) => [p.lessonId, { status: p.status, completedAt: p.completedAt, mediaPercent: p.mediaPercent }])),
+    courseProgress: courseProgress ? { percent: courseProgress.percent, requiredDone: courseProgress.requiredDone, requiredTotal: courseProgress.requiredTotal } : null,
   };
 }
 
@@ -603,79 +579,6 @@ export async function recordCoursePayment(db: PrismaClient, actor: Actor, enroll
 export async function listPendingCoursePayments(db: PrismaClient, actor: Actor) {
   authorize(actor, "course.payment.record");
   return academyRepository.listPendingPayments(db);
-}
-
-export async function startExamAttempt(db: PrismaClient, actor: Actor, courseId: string) {
-  const profileId = ownProfileId(actor);
-  const e = await academyRepository.findEnrollment(db, courseId, profileId);
-  if (!e) throw new NotFoundError();
-  if (e.paymentStatus === "PENDING") throw new ForbiddenError("This course unlocks once Hirewise records your payment.");
-  const exam = e.course.exam;
-  if (!exam || exam.status !== "PUBLISHED") throw new Error("This course has no published exam yet.");
-  if (e.completion) throw new Error("You have already completed this course.");
-  const open = await academyRepository.openAttempt(db, e.id);
-  if (open) return open.id;
-  const used = await academyRepository.countAttempts(db, e.id);
-  if (used >= exam.maxAttempts) throw new Error(`You have used all ${exam.maxAttempts} attempts. Ask your coach for a retake.`);
-  const attempt = await academyRepository.createAttempt(db, { examId: exam.id, enrollmentId: e.id, expiresAt: exam.timeLimitMin ? new Date(Date.now() + exam.timeLimitMin * 60_000) : null });
-  if (e.status === "ENROLLED") await academyRepository.setEnrollmentStatus(db, e.id, "IN_PROGRESS");
-  return attempt.id;
-}
-
-/** Exam as the agent sees it: never includes correctIndex (projection). */
-export async function getAttemptForAgent(db: PrismaClient, actor: Actor, attemptId: string) {
-  const profileId = ownProfileId(actor);
-  const a = await academyRepository.findAttempt(db, attemptId);
-  if (!a || a.enrollment.agentProfileId !== profileId) throw new NotFoundError();
-  return {
-    id: a.id,
-    status: a.status,
-    courseId: a.enrollment.courseId,
-    courseTitle: a.enrollment.course.title,
-    examTitle: a.exam.title,
-    instructions: a.exam.instructions,
-    expiresAt: a.expiresAt,
-    questions: a.exam.questions.map((q) => ({ id: q.id, order: q.order, prompt: q.prompt, options: q.options, points: q.points })),
-    result: a.status === "SUBMITTED" ? { scorePercent: a.scorePercent, passed: a.passed } : null,
-  };
-}
-
-export function gradeAttempt(questions: Array<{ id: string; correctIndex: number; points: number }>, answers: Record<string, number>): { scorePercent: number; correct: number } {
-  const total = questions.reduce((s, q) => s + q.points, 0) || 1;
-  let earned = 0;
-  let correct = 0;
-  for (const q of questions) {
-    if (answers[q.id] === q.correctIndex) {
-      earned += q.points;
-      correct++;
-    }
-  }
-  return { scorePercent: Math.round((earned / total) * 100), correct };
-}
-
-/** Submit answers, grade, record completion on pass, and run the certification pipeline (Section 8.7). */
-export async function submitExamAttempt(db: PrismaClient, actor: Actor, attemptId: string, answers: Record<string, number>) {
-  const profileId = ownProfileId(actor);
-  const a = await academyRepository.findAttempt(db, attemptId);
-  if (!a || a.enrollment.agentProfileId !== profileId) throw new NotFoundError();
-  if (a.status !== "IN_PROGRESS") throw new Error("This attempt was already submitted.");
-  const expired = !!a.expiresAt && a.expiresAt.getTime() < Date.now() - 30_000;
-  const { scorePercent } = gradeAttempt(a.exam.questions, answers);
-  const passed = !expired && scorePercent >= a.enrollment.course.passingScore;
-  const system: Actor = { userId: "system", role: "SUPER_ADMIN", permissions: new Set() };
-
-  const result = await db.$transaction(async (tx) => {
-    await academyRepository.submitAttempt(tx, a.id, { answers, scorePercent, passed, status: expired ? "EXPIRED" : "SUBMITTED" });
-    if (!passed) return { scorePercent, passed, expired, certification: null as null | { issued: boolean; reason?: string } };
-    await academyRepository.createCompletion(tx, { enrollmentId: a.enrollment.id, examScore: scorePercent });
-    await academyRepository.setEnrollmentStatus(tx, a.enrollment.id, "COMPLETED");
-    await audit(tx, { actor, action: "COURSE_COMPLETED", entityType: "CourseEnrollment", entityId: a.enrollment.id, newValue: { courseId: a.enrollment.courseId, examScore: scorePercent } });
-    const course = a.enrollment.course;
-    await publishEvent(tx, "COURSE_COMPLETED", { courseId: course.id, title: course.title, agentProfileId: profileId, agentUserId: actor.userId, agentEmail: a.enrollment.agentProfile.user.email, displayName: a.enrollment.agentProfile.displayName, examScore: scorePercent, coachUserIds: [course.ownerCoachUserId, ...course.coaches.map((c) => c.coachUserId)], coachReviewRequired: course.requiresCoachReview });
-    const certification = await evaluateCertification(tx, system, { agentProfileId: profileId, courseId: course.id, templateId: course.certificationTemplateId, examScore: scorePercent, assessment: null, completed: true });
-    return { scorePercent, passed, expired, certification };
-  });
-  return result;
 }
 
 /** Signed inbound completion from an external LMS (Section 8.7). Auth is checked by the route (HMAC). */

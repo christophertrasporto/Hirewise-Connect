@@ -8,7 +8,6 @@ export function courseInclude() {
     certificationTemplate: { select: { id: true, name: true } },
     categoryRef: { select: { id: true, name: true, slug: true } },
     prerequisites: { select: { requiresCourseId: true, requires: { select: { id: true, title: true } } } },
-    exam: { include: { questions: { orderBy: { order: "asc" } } } },
     modules: { orderBy: { order: "asc" }, include: { lessons: { orderBy: { order: "asc" }, include: { _count: { select: { questions: true } } } } } },
     _count: { select: { enrollments: true } },
   } satisfies Prisma.AcademyCourseInclude;
@@ -128,54 +127,6 @@ export const academyRepository = {
 
   createCompletion(db: Db, d: { enrollmentId: string; examScore: number | null; source?: "INTERNAL" | "ACADEMY_SYNC"; externalRef?: string | null }) {
     return db.courseCompletion.create({ data: { enrollmentId: d.enrollmentId, examScore: d.examScore ?? undefined, source: d.source ?? "INTERNAL", externalRef: d.externalRef ?? undefined } });
-  },
-
-  // Exams
-  upsertExam(db: Db, courseId: string, d: { title: string; instructions: string | null; timeLimitMin: number | null; maxAttempts: number }) {
-    return db.exam.upsert({ where: { courseId }, create: { courseId, ...d, instructions: d.instructions ?? undefined, timeLimitMin: d.timeLimitMin ?? undefined }, update: { ...d, instructions: d.instructions, timeLimitMin: d.timeLimitMin } });
-  },
-
-  findExam(db: Db, courseId: string) {
-    return db.exam.findUnique({ where: { courseId }, include: { questions: { orderBy: { order: "asc" } } } });
-  },
-
-  /**
-   * Save the question list while keeping the ids of questions that still exist, so in-progress
-   * attempts (answers keyed by question id) and past results stay consistent when a published exam is edited.
-   */
-  async syncQuestions(db: Db, examId: string, questions: Array<{ id?: string; prompt: string; options: string[]; correctIndex: number; points: number; explanation: string | null }>) {
-    const existing = new Set((await db.examQuestion.findMany({ where: { examId }, select: { id: true } })).map((q) => q.id));
-    const keep = questions.filter((q) => q.id && existing.has(q.id)).map((q) => q.id!);
-    await db.examQuestion.deleteMany({ where: { examId, id: { notIn: keep } } });
-    for (const [i, q] of questions.entries()) {
-      const data = { order: i + 1, prompt: q.prompt, options: q.options, correctIndex: q.correctIndex, points: q.points, explanation: q.explanation };
-      if (q.id && existing.has(q.id)) await db.examQuestion.update({ where: { id: q.id }, data });
-      else await db.examQuestion.create({ data: { examId, ...data, explanation: q.explanation ?? undefined } });
-    }
-  },
-
-  setExamStatus(db: Db, examId: string, status: "DRAFT" | "PUBLISHED") {
-    return db.exam.update({ where: { id: examId }, data: { status } });
-  },
-
-  createAttempt(db: Db, d: { examId: string; enrollmentId: string; expiresAt: Date | null }) {
-    return db.examAttempt.create({ data: { examId: d.examId, enrollmentId: d.enrollmentId, expiresAt: d.expiresAt ?? undefined } });
-  },
-
-  findAttempt(db: Db, id: string) {
-    return db.examAttempt.findUnique({ where: { id }, include: { exam: { include: { questions: { orderBy: { order: "asc" } } } }, enrollment: { include: { course: { include: courseInclude() }, agentProfile: { select: { id: true, displayName: true, userId: true, user: { select: { email: true } } } }, completion: true } } } });
-  },
-
-  submitAttempt(db: Db, id: string, d: { answers: Prisma.InputJsonValue; scorePercent: number; passed: boolean; status: "SUBMITTED" | "EXPIRED" }) {
-    return db.examAttempt.update({ where: { id }, data: { ...d, submittedAt: new Date() } });
-  },
-
-  countAttempts(db: Db, enrollmentId: string) {
-    return db.examAttempt.count({ where: { enrollmentId, status: { in: ["SUBMITTED", "EXPIRED"] } } });
-  },
-
-  openAttempt(db: Db, enrollmentId: string) {
-    return db.examAttempt.findFirst({ where: { enrollmentId, status: "IN_PROGRESS" } });
   },
 
   // Curriculum: modules and lessons
