@@ -128,7 +128,7 @@ function LessonBody({ lesson, courseId, progress, submission }: { lesson: Lesson
 }
 
 /** Full curriculum for an unlocked enrolment. `progress` adds per-lesson status chips; `courseId` enables quiz links. */
-export function LessonContent({ modules, courseId, progress = {}, submissions = {} }: { modules: Module[]; courseId?: string; progress?: LessonProgressMap; submissions?: SubmissionMap }) {
+export function LessonContent({ modules, courseId, progress = {}, submissions = {}, locked = {} }: { modules: Module[]; courseId?: string; progress?: LessonProgressMap; submissions?: SubmissionMap; locked?: Record<string, string> }) {
   return (
     <ol className="space-y-6">
       {modules.map((m, i) => (
@@ -141,6 +141,20 @@ export function LessonContent({ modules, courseId, progress = {}, submissions = 
               const I = ICONS[l.contentType];
               const p = progress[l.id];
               const done = p?.status === "COMPLETED";
+              const lockReason = locked[l.id];
+              if (lockReason) {
+                return (
+                  <li key={l.id} id={`lesson-${l.id}`} className="rounded-2xl border border-dashed border-ink-200 bg-ink-50/50 p-4">
+                    <div className="flex items-center gap-3">
+                      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white text-ink-300 ring-1 ring-inset ring-ink-100"><Lock className="h-4 w-4" /></span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block text-[14.5px] font-semibold text-ink-500">{j + 1}. {l.title}</span>
+                        <span className="block text-[12.5px] text-ink-400">{LESSON_TYPE_META[l.contentType].label}{l.durationSec ? ` · ${fmtDuration(l.durationSec)}` : ""} · {lockReason}</span>
+                      </span>
+                    </div>
+                  </li>
+                );
+              }
               return (
                 <li key={l.id} id={`lesson-${l.id}`} className="rounded-2xl border border-ink-100 bg-white p-4">
                   <details open={i === 0 && j === 0}>

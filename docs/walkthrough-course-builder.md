@@ -86,9 +86,21 @@ Permissions: reviewing assignments needs `assignment.review` (COACH default) or 
 
 Tests: `tests/integration/lesson-types.test.ts` (self-marking rules and refusals, uploaded and YouTube video completion, assignment validation per type, scoped uploads, review gates, return and resubmit, grading completes the course, manual-review assessment queue).
 
+## Phase 6: completion rules, sequential unlock, certificates (done)
+
+| Piece | Where | Notes |
+| --- | --- | --- |
+| Completion rules | `server/services/progress.service.ts` (`requiredLessons`, `recalculateCourseProgress`) | Every required lesson complete, always. `completionRequiresQuizPass` (quiz lessons complete only on a pass, enforced by the quiz engine). `completionRequiresFinalAssessment` makes the last published assessment lesson count as required even when it is optional, so the percentage and the completion agree. |
+| Curriculum edits | `recalculateAllForCourse`, called inside `saveModule`, `deleteModule`, `saveLesson`, `deleteLesson`, and `updateCourseSettings` | Adding a required lesson lowers every enrolled learner's cached percentage; an existing completion is never revoked. A learner who now satisfies the rules completes. |
+| Sequential unlock | `lockedLessons` (pure), `assertLessonUnlocked`, `lockedLessonsFor` | Course setting, off by default. A lesson is locked while any earlier required lesson is incomplete, across modules; optional lessons never block and open with their module. An audiobook is complete only after audio and quiz, so the next lesson waits for both. Enforced in every learner entry point (quiz start and state, media progress, open and mark complete, assignment upload and submit, lesson file download) and shown on the course page as a greyed row with "Finish "X" first.". |
+| Certificate numbers | `certification.repository.create`, migration `20261006050000_certificate_numbers` | Every certificate gets `HC-YYYY-NNNNNN` (sequential per issue year, retried on a unique clash) and a 12-character verification code without vowels or ambiguous glyphs. The migration numbers existing rows deterministically. |
+| Certificate page | `/certificates/[id]` | Learner name, course, completion date, certificate ID, coach, validity, and the verification link; printable. Visible to the owner and to staff with a certification permission (`certification.review`, `.issue`, or `.revoke`). |
+| Public verification | `/verify/[code]` (marketing layout, no login) | Minimal projection: status, number, certification, learner display name, course, dates. Unknown codes, revoked, pending, and expired certificates read as not valid. |
+| Profile | talent dashboard → Certifications | Lists every certificate with its number, dates, and status, linking to the certificate page. |
+| Tests | `tests/integration/completion-rules.test.ts` | Pure locking rule, every learner entry point refused while locked, unlock on quiz pass, final-assessment rule, curriculum edits after completion, sequential numbering for Academy and admin-issued certificates, certificate access, public verification states. |
+
 ## Next phases
 
-6. Progress, completion rules, sequential unlock, certificates with numbers on the profile.
 7. Learner dashboard and Admin/Coach tracking table.
 8. Safe editing of published courses and version history.
 9. Welcome video on lesson infrastructure.

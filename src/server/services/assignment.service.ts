@@ -9,7 +9,7 @@ import { audit } from "@/server/audit/audit";
 import { getStorage, newStorageKey } from "@/server/adapters/storage";
 import { rateLimit } from "@/server/auth/rate-limit";
 import { loadEditableCourse, LESSON_UPLOAD_RULES } from "./academy.service";
-import { recalculateCourseProgress } from "./progress.service";
+import { recalculateCourseProgress, assertLessonUnlocked } from "./progress.service";
 import { toSubmissionLearnerView } from "@/server/views/academy.views";
 
 /**
@@ -45,6 +45,7 @@ async function learnerAssignment(db: PrismaClient, actor: Actor, lessonId: strin
   const enrollment = await academyRepository.findEnrollment(db, lesson.module.courseId, profileId);
   if (!enrollment) throw new NotFoundError();
   if (enrollment.paymentStatus === "PENDING") throw new ForbiddenError("This course unlocks once Hirewise records your payment.");
+  await assertLessonUnlocked(db, lesson, profileId);
   return { profileId, lesson };
 }
 

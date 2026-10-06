@@ -81,7 +81,7 @@ export function toAgentSelfView(a: AgentSelfRecord) {
     recordings: a.recordings.map((r) => ({ id: r.id, kind: r.kind, title: r.title, status: r.status, durationSec: r.durationSec, reviewFeedback: r.reviewFeedback, createdAt: r.createdAt })),
     portfolio: a.portfolioItems.map((p) => ({ id: p.id, title: p.title, status: p.status, url: p.url, reviewFeedback: p.reviewFeedback })),
     // Academy: the agent sees their certifications and their coach's feedback (not internal-only areasForImprovement wording is theirs to see too).
-    certifications: a.certifications.map((c) => ({ id: c.id, name: c.template.name, badgeKey: c.template.badgeKey, status: c.status, issuedAt: c.issuedAt, expiresAt: c.expiresAt })),
+    certifications: a.certifications.map((c) => ({ id: c.id, name: c.template.name, badgeKey: c.template.badgeKey, status: c.status, issuedAt: c.issuedAt, expiresAt: c.expiresAt, certificateNumber: c.certificateNumber, verificationCode: c.verificationCode })),
     assessments: a.assessments.map((s) => ({ id: s.id, courseTitle: s.course?.title ?? null, type: s.type, examScore: s.examScore, practicalScore: s.practicalScore, roleplayScore: s.roleplayScore, communicationScore: s.communicationScore, result: s.resultLabel?.label ?? null, strengths: s.strengths, areasForImprovement: s.areasForImprovement, assessedAt: s.assessedAt })),
     courses: a.enrollments.map((e) => ({ courseId: e.course.id, title: e.course.title, category: e.course.category, status: e.status, paymentStatus: e.paymentStatus, completedAt: e.completion?.completedAt ?? null, examScore: e.completion?.examScore ?? null })),
     // Section 14 Q4 / INV-C2: the agent learns only that a client rate exists, never the amount.

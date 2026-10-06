@@ -6,7 +6,7 @@ import { quizRepository, type ChoiceWrite, type QuestionWrite } from "@/server/r
 import { academyRepository } from "@/server/repositories/academy.repository";
 import { audit } from "@/server/audit/audit";
 import { loadEditableCourse } from "./academy.service";
-import { recalculateCourseProgress } from "./progress.service";
+import { recalculateCourseProgress, assertLessonUnlocked } from "./progress.service";
 
 /**
  * One question system for quizzes, assessments, and audiobook quizzes (Course Builder phase 3).
@@ -200,6 +200,7 @@ async function learnerLesson(db: PrismaClient, actor: Actor, lessonId: string) {
   const enrollment = await academyRepository.findEnrollment(db, lesson.module.courseId, profileId);
   if (!enrollment) throw new NotFoundError();
   if (enrollment.paymentStatus === "PENDING") throw new ForbiddenError("This course unlocks once Hirewise records your payment.");
+  await assertLessonUnlocked(db, lesson, profileId);
   return { profileId, lesson, enrollment };
 }
 

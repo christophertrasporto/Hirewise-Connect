@@ -22,7 +22,7 @@ export default async function CoursePage({ params }: { params: Promise<{ courseI
     if (e instanceof NotFoundError) notFound();
     throw e;
   }
-  const { course, enrollment, lessonProgress, courseProgress, submissions } = data;
+  const { course, enrollment, lessonProgress, courseProgress, submissions, lockedLessons } = data;
   const onboardingLock = "locked" in data ? data.locked : null;
   const locked = enrollment?.paymentStatus === "PENDING";
   const completed = enrollment?.status === "COMPLETED";
@@ -44,7 +44,7 @@ export default async function CoursePage({ params }: { params: Promise<{ courseI
           {!enrollment && intro && <Card title="Introduction"><div className="aspect-video overflow-hidden rounded-2xl bg-ink-900"><iframe src={intro} title="Course introduction" className="h-full w-full" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen" allowFullScreen referrerPolicy="strict-origin-when-cross-origin" /></div></Card>}
           <Card title="Lessons" description={course.lessonCount > 0 ? `${course.outline.length} module${course.outline.length === 1 ? "" : "s"} · ${course.lessonCount} lesson${course.lessonCount === 1 ? "" : "s"} · ${requiredLessons.length || course.outline.flatMap((m) => m.lessons).length} required` : undefined}>
             {course.modules ? (
-              course.modules.length === 0 ? <EmptyState title="The coach has not added lessons yet" description={course.syllabus ? "See the overview below." : undefined} /> : <LessonContent modules={course.modules} courseId={course.id} progress={lessonProgress} submissions={submissions} />
+              course.modules.length === 0 ? <EmptyState title="The coach has not added lessons yet" description={course.syllabus ? "See the overview below." : undefined} /> : <LessonContent modules={course.modules} courseId={course.id} progress={lessonProgress} submissions={submissions} locked={lockedLessons} />
             ) : (
               <>
                 <div className="mb-4 flex items-center gap-3 rounded-2xl bg-ink-50 p-5 text-[14px] text-ink-500"><Lock className="h-5 w-5 text-ink-300" /> {enrollment ? "Lessons unlock as soon as your payment is recorded." : "Enrol to open the lessons."}</div>
@@ -86,6 +86,7 @@ export default async function CoursePage({ params }: { params: Promise<{ courseI
                   <div className="flex justify-between"><dt className="text-ink-500">Enrolled</dt><dd className="font-medium text-ink-800">{fmtDate(enrollment.enrolledAt)}</dd></div>
                   <div className="flex justify-between"><dt className="text-ink-500">Default passing score</dt><dd className="font-medium text-ink-800">{course.passingScore}%</dd></div>
                   <div className="flex justify-between"><dt className="text-ink-500">Quizzes</dt><dd className="font-medium text-ink-800">{course.quizCount}</dd></div>
+                  {course.sequentialUnlock && <div className="flex justify-between"><dt className="text-ink-500">Order</dt><dd className="font-medium text-ink-800">Lessons unlock in sequence</dd></div>}
                 </dl>
                 {!completed && !locked && course.quizCount === 0 && <p className="text-[13px] text-ink-500">This course has no quiz yet.</p>}
               </div>

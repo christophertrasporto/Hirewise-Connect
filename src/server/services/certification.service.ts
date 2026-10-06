@@ -147,3 +147,38 @@ export async function expireCertifications(db: PrismaClient, now = new Date()): 
   }
   return { expired: due.length, expiring: soon.length };
 }
+
+// ---------------------------------------------------------------------------
+// Certificates (Course Builder phase 6): the printed record and public verification
+// ---------------------------------------------------------------------------
+
+export type CertificateView = { id: string; certificateNumber: string | null; verificationCode: string | null; status: string; templateName: string; templateDescription: string | null; learnerName: string; courseTitle: string | null; coach: string | null; issuedAt: Date; expiresAt: Date | null; origin: string };
+
+async function toCertificateView(db: Db, c: NonNullable<Awaited<ReturnType<typeof certificationRepository.findById>>>): Promise<CertificateView> {
+  const course = c.courseId ? await certificationRepository.courseFor(db, c.courseId) : null;
+  return { id: c.id, certificateNumber: c.certificateNumber, verificationCode: c.verificationCode, status: c.status, templateName: c.template.name, templateDescription: c.template.description, learnerName: c.agentProfile.displayName, courseTitle: course?.title ?? null, coach: course ? course.ownerCoach.email.split("@")[0] : null, issuedAt: c.issuedAt, expiresAt: c.expiresAt, origin: c.origin };
+}
+
+/** The certificate as its owner, or staff who review, issue, or revoke certifications, may see it. */
+export async function certificateForActor(db: PrismaClient, actor: Actor, id: string): Promise<CertificateView> {
+  const c = await certificationRepository.findById(db, id);
+  if (!c) throw new NotFoundError();
+  if (actor.role === "AGENT") {
+    if (c.agentProfileId !== actor.agentProfileId) throw new NotFoundError();
+  } else if (!actor.permissions.has("certification.review") && !actor.permissions.has("certification.issue") && !actor.permissions.has("certification.revoke")) {
+    throw new NotFoundError();
+  }
+  return toCertificateView(db, c);
+}
+
+/** Public verification by code: a minimal, non-personal projection. Unknown codes and non-approved certificates read as not valid. */
+export async function verifyCertificate(db: PrismaClient, rawCode: string): Promise<{ found: boolean; valid: boolean; status: string | null; certificateNumber: string | null; templateName: string | null; learnerName: string | null; courseTitle: string | null; issuedAt: Date | null; expiresAt: Date | null }> {
+  const code = rawCode.trim().toUpperCase();
+  const none = { found: false, valid: false, status: null, certificateNumber: null, templateName: null, learnerName: null, courseTitle: null, issuedAt: null, expiresAt: null };
+  if (!/^[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}$/.test(code)) return none;
+  const c = await certificationRepository.findByVerificationCode(db, code);
+  if (!c) return none;
+  const course = c.courseId ? await certificationRepository.courseFor(db, c.courseId) : null;
+  const expired = !!c.expiresAt && c.expiresAt.getTime() < Date.now();
+  return { found: true, valid: c.status === "APPROVED" && !expired, status: expired && c.status === "APPROVED" ? "EXPIRED" : c.status, certificateNumber: c.certificateNumber, templateName: c.template.name, learnerName: c.agentProfile.displayName, courseTitle: course?.title ?? null, issuedAt: c.issuedAt, expiresAt: c.expiresAt };
+}

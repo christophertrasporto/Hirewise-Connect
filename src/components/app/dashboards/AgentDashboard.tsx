@@ -101,8 +101,20 @@ export function AgentDashboard({ profile, completion, notifications, requests, p
               </ul>
             )}
           </Card>
-          <Card title="Certifications" description="Issued by the Hirewise VA Academy (Phase 3).">
-            <EmptyState title="No certifications yet" description="Academy courses and coach assessments arrive in Phase 3." />
+          <Card title="Certifications" description="Issued by the Hirewise VA Academy. Each certificate carries a number and a public verification link.">
+            {profile.certifications.length === 0 ? <EmptyState title="No certifications yet" description="Complete a course with a certification to earn one." /> : (
+              <ul className="divide-y divide-ink-100 text-[14px]">
+                {profile.certifications.map((c) => (
+                  <li key={c.id} className="flex flex-wrap items-center justify-between gap-2 py-2.5">
+                    <span>
+                      <Link href={`/certificates/${c.id}`} className="font-semibold text-ink-800 hover:text-brand-700">{c.name}</Link>
+                      <span className="block text-[12.5px] text-ink-400">{c.certificateNumber ?? "Pending number"}{c.issuedAt ? ` · issued ${fmtDate(c.issuedAt)}` : ""}{c.expiresAt ? ` · valid until ${fmtDate(c.expiresAt)}` : ""}</span>
+                    </span>
+                    <StatusBadge status={c.status} />
+                  </li>
+                ))}
+              </ul>
+            )}
           </Card>
         </div>
       </div>

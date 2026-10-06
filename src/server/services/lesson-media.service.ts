@@ -5,7 +5,7 @@ import { ForbiddenError, NotFoundError } from "@/server/policies/authorize";
 import { quizRepository } from "@/server/repositories/quiz.repository";
 import { academyRepository } from "@/server/repositories/academy.repository";
 import { audit } from "@/server/audit/audit";
-import { recalculateCourseProgress } from "./progress.service";
+import { recalculateCourseProgress, assertLessonUnlocked } from "./progress.service";
 import { youTubeId } from "@/lib/video-url";
 
 /**
@@ -48,6 +48,7 @@ async function learnerMediaLesson(db: PrismaClient, actor: Actor, lessonId: stri
   const enrollment = await academyRepository.findEnrollment(db, lesson.module.courseId, profileId);
   if (!enrollment) throw new NotFoundError();
   if (enrollment.paymentStatus === "PENDING") throw new ForbiddenError("This course unlocks once Hirewise records your payment.");
+  await assertLessonUnlocked(db, lesson, profileId);
   return { profileId, lesson, enrollment };
 }
 
@@ -148,6 +149,7 @@ async function learnerLesson(db: PrismaClient, actor: Actor, lessonId: string) {
   const enrollment = await academyRepository.findEnrollment(db, lesson.module.courseId, profileId);
   if (!enrollment) throw new NotFoundError();
   if (enrollment.paymentStatus === "PENDING") throw new ForbiddenError("This course unlocks once Hirewise records your payment.");
+  await assertLessonUnlocked(db, lesson, profileId);
   return { profileId, lesson, enrollment };
 }
 

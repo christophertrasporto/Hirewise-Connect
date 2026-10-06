@@ -12,6 +12,7 @@ import { getStorage, newStorageKey } from "@/server/adapters/storage";
 import { rateLimit } from "@/server/auth/rate-limit";
 import type { LessonWrite } from "@/server/repositories/academy.repository";
 import { coursesLockedFor } from "./onboarding.service";
+import { recalculateAllForCourse, lockedLessonsFor, assertLessonUnlocked } from "./progress.service";
 import { categoryRepository } from "@/server/repositories/category.repository";
 import { assignmentRepository } from "@/server/repositories/assignment.repository";
 import { toSubmissionLearnerView as toSubmissionView, type SubmissionLearnerView } from "@/server/views/academy.views";
@@ -147,6 +148,7 @@ export async function updateCourseSettings(db: PrismaClient, actor: Actor, cours
     await tx.coursePrerequisite.deleteMany({ where: { courseId: c.id } });
     if (prereqs.length) await tx.coursePrerequisite.createMany({ data: prereqs.map((requiresCourseId) => ({ courseId: c.id, requiresCourseId })), skipDuplicates: true });
     await audit(tx, { actor, action: "COURSE_UPDATED", entityType: "AcademyCourse", entityId: c.id, newValue: { settings: { isRequired: input.isRequired, sequentialUnlock: input.sequentialUnlock, completionRequiresQuizPass: input.completionRequiresQuizPass, completionRequiresFinalAssessment: input.completionRequiresFinalAssessment, displayOrder: input.displayOrder, prerequisites: prereqs.length, minVerificationLevel: input.minVerificationLevel || null } } });
+    await recalculateAllForCourse(tx, c.id);
   });
 }
 
@@ -368,6 +370,7 @@ export async function saveModule(db: PrismaClient, actor: Actor, courseId: strin
       id = (await academyRepository.createModule(tx, c.id, data)).id;
     }
     await audit(tx, { actor, action: "COURSE_UPDATED", entityType: "CourseModule", entityId: id, newValue: { courseId: c.id, title: input.title, op: input.id ? "update" : "create" } });
+    await recalculateAllForCourse(tx, c.id);
     return id;
   });
 }
@@ -378,6 +381,7 @@ export async function deleteModule(db: PrismaClient, actor: Actor, courseId: str
   await db.$transaction(async (tx) => {
     await academyRepository.deleteModule(tx, m.id);
     await audit(tx, { actor, action: "COURSE_UPDATED", entityType: "CourseModule", entityId: m.id, previousValue: { title: m.title, lessons: m.lessons.length }, newValue: { courseId: c.id, op: "delete" } });
+    await recalculateAllForCourse(tx, c.id);
   });
 }
 
@@ -459,6 +463,7 @@ export async function saveLesson(db: PrismaClient, actor: Actor, courseId: strin
       id = (await academyRepository.createLesson(tx, input.moduleId, data)).id;
     }
     await audit(tx, { actor, action: "COURSE_UPDATED", entityType: "CourseLesson", entityId: id, newValue: { courseId: c.id, moduleId: input.moduleId, title: data.title, contentType: data.contentType, op: input.id ? "update" : "create" } });
+    await recalculateAllForCourse(tx, c.id);
     return id;
   });
 }
@@ -470,6 +475,7 @@ export async function deleteLesson(db: PrismaClient, actor: Actor, courseId: str
   await db.$transaction(async (tx) => {
     await academyRepository.deleteLesson(tx, l.id);
     await audit(tx, { actor, action: "COURSE_UPDATED", entityType: "CourseLesson", entityId: l.id, previousValue: { title: l.title, contentType: l.contentType }, newValue: { courseId: c.id, op: "delete" } });
+    await recalculateAllForCourse(tx, c.id);
   });
 }
 
@@ -495,6 +501,7 @@ export async function lessonDownloadUrl(db: PrismaClient, actor: Actor, lessonId
     const profileId = ownProfileId(actor);
     const e = await academyRepository.findEnrollment(db, l.module.courseId, profileId);
     if (!e || e.paymentStatus === "PENDING") throw new NotFoundError();
+    await assertLessonUnlocked(db, l, profileId);
   } else {
     await loadEditableCourse(db, actor, l.module.courseId);
   }
@@ -550,16 +557,18 @@ export async function getEnrollmentForAgent(db: PrismaClient, actor: Actor, cour
     const c = await academyRepository.findCourse(db, courseId);
     if (!c || c.status !== "PUBLISHED") throw new NotFoundError();
     const lock = await coursesLockedFor(db, actor);
-    return { course: toCourseAgentView(c), enrollment: null, lessonProgress: {} as LessonProgressMap, submissions: {} as Record<string, SubmissionLearnerView>, courseProgress: null, locked: lock.locked ? { reason: lock.reason ?? "Finish your onboarding checklist first.", href: "/onboarding/welcome-video" } : null };
+    return { course: toCourseAgentView(c), enrollment: null, lessonProgress: {} as LessonProgressMap, submissions: {} as Record<string, SubmissionLearnerView>, lockedLessons: {} as Record<string, string>, courseProgress: null, locked: lock.locked ? { reason: lock.reason ?? "Finish your onboarding checklist first.", href: "/onboarding/welcome-video" } : null };
   }
   const unlocked = e.paymentStatus === "NOT_REQUIRED" || e.paymentStatus === "PAID" || e.paymentStatus === "WAIVED";
   const lessonIds = e.course.modules.flatMap((m) => m.lessons.map((l) => l.id));
   const progressRows = unlocked && lessonIds.length ? await db.lessonProgress.findMany({ where: { agentProfileId: profileId, lessonId: { in: lessonIds } } }) : [];
   const courseProgress = await db.courseProgress.findUnique({ where: { courseId_agentProfileId: { courseId: e.courseId, agentProfileId: profileId } } });
+  const lockedLessons = unlocked ? await lockedLessonsFor(db, e.courseId, profileId) : {};
   const assignmentIds = unlocked ? e.course.modules.flatMap((m) => m.lessons.filter((l) => l.contentType === "ASSIGNMENT").map((l) => l.id)) : [];
   const submissions = Object.fromEntries((await assignmentRepository.latestByLesson(db, assignmentIds, profileId)).map((s) => [s.lessonId, toSubmissionView(s)])) as Record<string, SubmissionLearnerView>;
   return {
     submissions,
+    lockedLessons,
     locked: null as null | { reason: string; href: string },
     course: toCourseAgentView(e.course, unlocked),
     enrollment: toEnrollmentAgentView(e),
