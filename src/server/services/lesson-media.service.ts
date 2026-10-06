@@ -7,6 +7,7 @@ import { academyRepository } from "@/server/repositories/academy.repository";
 import { audit } from "@/server/audit/audit";
 import { recalculateCourseProgress, assertLessonUnlocked } from "./progress.service";
 import { youTubeId } from "@/lib/video-url";
+import { creditPlayback } from "./media-credit";
 
 /**
  * Real-listening tracking for audio (and uploaded video) lessons (Course Builder phase 4).
@@ -104,13 +105,9 @@ export async function recordMediaProgress(db: PrismaClient, actor: Actor, lesson
   const existing = await quizRepository.progress(db, lesson.id, profileId);
   // The coach-side duration (read from the uploaded file) wins over whatever the client claims.
   const durationSec = lesson.durationSec ?? input.durationSec ?? null;
-  const rate = Math.min(2, input.playbackRate ?? 1);
-  const cap = input.elapsedMs === undefined ? 60 : Math.min(60, (input.elapsedMs / 1000) * rate + 2);
-  const credited = Math.min(input.playedDeltaSec, cap);
-  const mediaSeconds = Math.min((existing?.mediaSeconds ?? 0) + credited, durationSec ? durationSec * 1.05 : Number.MAX_SAFE_INTEGER);
-  const percent = durationSec ? Math.min(100, Math.floor((mediaSeconds / durationSec) * 100)) : 0;
   const requiredPercent = lesson.requiredPercent ?? DEFAULT_REQUIRED_PERCENT;
-  const nowAudioDone = !existing?.mediaCompletedAt && durationSec !== null && percent >= requiredPercent;
+  const { seconds: mediaSeconds, percent, reached } = creditPlayback({ existingSeconds: existing?.mediaSeconds ?? 0, deltaSec: input.playedDeltaSec, elapsedMs: input.elapsedMs, playbackRate: input.playbackRate, durationSec, requiredPercent });
+  const nowAudioDone = !existing?.mediaCompletedAt && reached;
   const questionCount = lesson.contentType === "AUDIO" ? (await quizRepository.listForLesson(db, lesson.id, "PUBLISHED")).length : 0;
   const completesLesson = nowAudioDone && questionCount === 0 && !existing?.completedAt;
   await db.$transaction(async (tx) => {

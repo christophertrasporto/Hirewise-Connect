@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { creditPlayback } from "./media-credit";
 import { randomBytes } from "node:crypto";
 import type { PrismaClient } from "@/server/db/types";
 import type { Actor } from "@/server/auth/actor";
@@ -204,7 +205,9 @@ export async function coursesLockedFor(db: PrismaClient, actor: Actor): Promise<
 export const progressReportSchema = z.object({
   positionSec: z.coerce.number().min(0),
   /** Seconds actually played since the previous report (the client sums timeupdate deltas, ignoring seeks). */
-  watchedDeltaSec: z.coerce.number().min(0).max(60),
+  watchedDeltaSec: z.coerce.number().min(0).max(60).optional(),
+  /** Same field as the lesson players send (shared tracker, phase 9). One of the two is required. */
+  playedDeltaSec: z.coerce.number().min(0).max(60).optional(),
   durationSec: z.coerce.number().positive().optional(),
   /** Wall-clock ms since the previous report; caps the credited delta so a tampered client cannot fast-forward. */
   elapsedMs: z.coerce.number().min(0).optional(),
@@ -219,13 +222,10 @@ export async function recordVideoProgress(db: PrismaClient, actor: Actor, raw: P
   if (!cfg.enabled) throw new NotFoundError();
   const existing = await onboardingRepository.progress(db, actor.userId, cfg.videoKey);
   const durationSec = input.durationSec ?? existing?.durationSec ?? cfg.durationSec ?? null;
-  // Credit at most the wall-clock time that passed (times playback rate, plus 2 s of slack), never more than 60 s per report.
-  const rate = Math.min(2, input.playbackRate ?? 1);
-  const cap = input.elapsedMs === undefined ? 60 : Math.min(60, (input.elapsedMs / 1000) * rate + 2);
-  const credited = Math.min(input.watchedDeltaSec, cap);
-  const watchedSeconds = (existing?.watchedSeconds ?? 0) + credited;
-  const percent = durationSec ? Math.min(100, Math.floor((watchedSeconds / durationSec) * 100)) : 0;
-  const nowComplete = !existing?.completedAt && durationSec !== null && percent >= cfg.requiredPercent;
+  // Same crediting rule as lesson audio and video (media-credit.ts): wall-clock capped, never more than 60 s per report.
+  const delta = input.playedDeltaSec ?? input.watchedDeltaSec ?? 0;
+  const { seconds: watchedSeconds, percent, reached } = creditPlayback({ existingSeconds: existing?.watchedSeconds ?? 0, deltaSec: delta, elapsedMs: input.elapsedMs, playbackRate: input.playbackRate, durationSec, requiredPercent: cfg.requiredPercent });
+  const nowComplete = !existing?.completedAt && reached;
   const row = await db.$transaction(async (tx) => {
     const r = await onboardingRepository.upsertProgress(tx, actor.userId, cfg.videoKey, {
       watchedSeconds,
@@ -240,7 +240,8 @@ export async function recordVideoProgress(db: PrismaClient, actor: Actor, raw: P
     }
     return r;
   });
-  return { percent: row.percent, completed: !!row.completedAt, completedAt: row.completedAt, lastPositionSec: row.lastPositionSec, watchedSeconds: row.watchedSeconds, requiredPercent: cfg.requiredPercent, durationSec };
+  // Includes the shared player-state fields so the lesson tracker (useMediaProgress) can drive this endpoint too.
+  return { percent: row.percent, completed: !!row.completedAt, completedAt: row.completedAt, lastPositionSec: row.lastPositionSec, watchedSeconds: row.watchedSeconds, requiredPercent: cfg.requiredPercent, durationSec, audioCompletedAt: row.completedAt, status: row.completedAt ? "COMPLETED" : "IN_PROGRESS", quizUnlocked: false };
 }
 
 // ---------------------------------------------------------------------------

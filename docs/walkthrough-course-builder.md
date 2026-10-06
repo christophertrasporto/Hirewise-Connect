@@ -123,7 +123,19 @@ Everything stays editable after publishing (phases 2 to 7 built it that way). Th
 
 Code: `server/services/lesson-version.service.ts` (`changedFields`, `recordLessonVersion`, `lessonHistory`, `restoreLessonVersion`), `server/repositories/version.repository.ts`, hooks in `saveLesson`, `saveQuestion`, `deleteQuestion`. Tests: `tests/integration/lesson-versions.test.ts`.
 
+## Phase 9: welcome video on the lesson infrastructure (done)
+
+The onboarding gate (verify email → complete profile → watch the welcome video → courses unlock) is unchanged in behaviour and keeps its own table and endpoint, which production already depends on. What moved onto the shared infrastructure:
+
+| Piece | Where | Notes |
+| --- | --- | --- |
+| Player | `components/onboarding/WelcomeVideoPlayer.tsx` is now a thin wrapper over `components/academy/VideoPlayer.tsx` | Same tracker (`useMediaProgress`), same progress bar, same resume behaviour as lesson videos. The welcome video keeps its forward-seek clamp (`restrictSeek`) and its own endpoint via the tracker's `endpoint` option. |
+| Crediting rule | `server/services/media-credit.ts` (`creditPlayback`) | One function used by `recordMediaProgress` (lessons) and `recordVideoProgress` (welcome video): wall-clock cap × playback rate + 2 s, at most 60 s per report, at most 105 % of the duration. |
+| Endpoint | `/api/onboarding/video-progress` | Accepts the tracker's `playedDeltaSec` as well as the older `watchedDeltaSec`, and returns the shared player-state fields. |
+| Not done on purpose | A system "onboarding course" with the welcome video as a lesson | It would put every talent into an enrolment, show up in the catalog and the tracking table, and require migrating live progress rows, for no learner-visible gain. Revisit if onboarding grows beyond one video. |
+
+Tests: `tests/unit/media-credit.test.ts`; the onboarding and audio integration suites cover both callers of the shared rule.
+
 ## Next phases
 
-9. Welcome video on lesson infrastructure.
 10. Question bank and random draws.

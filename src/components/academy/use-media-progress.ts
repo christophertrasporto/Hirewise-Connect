@@ -13,7 +13,7 @@ export type MediaProgressState = { percent: number; mediaCompleted: boolean; sta
  * so seeks never add time. Progress is reported every 8 s while playing, on pause or end, and when the page is
  * hidden (sendBeacon), and the server caps every report against wall-clock time.
  */
-export function useMediaProgress(p: { lessonId: string; trackable: boolean; initial: MediaInitial; questionCount: number; durationSec: number | null }) {
+export function useMediaProgress(p: { lessonId: string; trackable: boolean; initial: MediaInitial; questionCount: number; durationSec: number | null; /** Defaults to the lesson progress endpoint; the onboarding welcome video points at its own. */ endpoint?: string }) {
   const router = useRouter();
   const [state, setState] = useState<MediaProgressState>({ percent: p.initial.percent, mediaCompleted: p.initial.mediaCompleted, status: p.initial.status, quizUnlocked: p.initial.mediaCompleted && p.questionCount > 0 });
   const [error, setError] = useState<string | null>(null);
@@ -29,7 +29,7 @@ export function useMediaProgress(p: { lessonId: string; trackable: boolean; init
       const payload = JSON.stringify({ positionSec: t.position, playedDeltaSec: Math.round(delta * 100) / 100, durationSec: t.duration || undefined, elapsedMs: Date.now() - t.lastReportAt, playbackRate: t.rate });
       t.pendingDelta = 0;
       t.lastReportAt = Date.now();
-      const url = `/api/academy/lessons/${p.lessonId}/progress`;
+      const url = p.endpoint ?? `/api/academy/lessons/${p.lessonId}/progress`;
       if (useBeacon && typeof navigator !== "undefined" && navigator.sendBeacon) {
         navigator.sendBeacon(url, new Blob([payload], { type: "text/plain" }));
         return;
@@ -53,7 +53,7 @@ export function useMediaProgress(p: { lessonId: string; trackable: boolean; init
         setError("Could not save your progress. Check your connection; your position is kept while you stay on this page.");
       }
     },
-    [p.lessonId, p.trackable, router],
+    [p.lessonId, p.trackable, p.endpoint, router],
   );
 
   /** Call on every timeupdate / poll with the current position, playback rate, and whether playback is paused. */
