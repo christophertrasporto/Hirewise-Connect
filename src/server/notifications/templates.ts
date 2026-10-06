@@ -1,9 +1,20 @@
+import { getEnv } from "@/server/env";
+
 /** Transactional email templates. Agent-facing templates never contain client financial terms (Section 9). */
+
+/** Absolute URL for the brand artwork in public/brand; emails cannot reference relative paths. */
+function brandLogoUrl() {
+  try {
+    return `${getEnv().APP_URL.replace(/\/$/, "")}/brand/hirewise-connect-logo-dark.png`;
+  } catch {
+    return "/brand/hirewise-connect-logo-dark.png";
+  }
+}
 
 function layout(title: string, bodyHtml: string) {
   return `<!doctype html><html><body style="font-family:Inter,Arial,sans-serif;background:#f5f7fa;padding:24px;color:#12213a">
   <div style="max-width:560px;margin:0 auto;background:#fff;border-radius:16px;padding:32px;border:1px solid #e9edf3">
-    <p style="font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:#0b8663;font-weight:700;margin:0 0 12px">Hirewise Connect</p>
+    <div style="background:#0a1628;border-radius:12px;padding:14px 18px;margin:0 0 20px"><img src="${brandLogoUrl()}" alt="Hirewise Connect" width="260" style="display:block;max-width:100%;height:auto"></div>
     <h1 style="font-size:22px;margin:0 0 16px">${title}</h1>
     ${bodyHtml}
     <p style="font-size:12px;color:#7a8aa5;margin-top:32px">If you did not request this, you can ignore this email.</p>
