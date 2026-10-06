@@ -10,12 +10,14 @@ import { LessonForm } from "@/components/academy/CurriculumEditor";
 import { LessonContent } from "@/components/academy/LessonContent";
 import { LESSON_TYPE_META } from "@/components/academy/lesson-meta";
 import { QuestionBuilder } from "@/components/academy/QuestionBuilder";
+import { LessonHistory } from "@/components/academy/LessonHistory";
+import { lessonHistory } from "@/server/services/lesson-version.service";
 import { cn } from "@/lib/cn";
 import { loadBuilderCourse } from "../../load";
 
 export const metadata: Metadata = { title: "Lesson" };
 
-const TABS = ["content", "questions", "settings", "preview"] as const;
+const TABS = ["content", "questions", "settings", "preview", "history"] as const;
 type Tab = (typeof TABS)[number];
 
 /** One lesson: Content / Questions / Settings / Preview, so a coach never has to leave the page. */
@@ -39,6 +41,7 @@ export default async function LessonPage({ params, searchParams }: { params: Pro
     isRequired: lesson.isRequired, status: lesson.status, requiredPercent: lesson.requiredPercent, passingScore: lesson.passingScore, maxAttempts: lesson.maxAttempts, timeLimitMin: lesson.timeLimitMin, randomizeCount: lesson.randomizeCount, shuffleAnswers: lesson.shuffleAnswers, showCorrectAnswers: lesson.showCorrectAnswers, showExplanations: lesson.showExplanations, retakeWaitMinutes: lesson.retakeWaitMinutes, scorePolicy: lesson.scorePolicy, reviewMode: lesson.reviewMode, dueAt: lesson.dueAt, points: lesson.points, submissionType: lesson.submissionType, questionCount: lesson.questions.length,
   };
   const base = `/courses/manage/${course.id}/lessons/${lesson.id}`;
+  const history = tab === "history" ? await lessonHistory(prisma, actor, course.id, lesson.id) : null;
 
   return (
     <>
@@ -68,6 +71,11 @@ export default async function LessonPage({ params, searchParams }: { params: Pro
           ) : (
             <p className="text-[14px] text-ink-500">{meta.label} lessons have no questions. Change the lesson type to Quiz, Assessment, or Audio to add some.</p>
           )}
+        </Card>
+      )}
+      {tab === "history" && history && (
+        <Card title="Version history" description="Significant edits to this lesson or its questions freeze the previous version. Attempts and completions stay attributed to the version they happened on.">
+          <LessonHistory courseId={course.id} lessonId={lesson.id} current={history.current} versions={history.versions} />
         </Card>
       )}
       {tab === "preview" && (

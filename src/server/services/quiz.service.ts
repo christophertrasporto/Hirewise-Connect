@@ -8,6 +8,7 @@ import { audit } from "@/server/audit/audit";
 import { publishEvent } from "@/server/events/outbox";
 import { loadEditableCourse } from "./academy.service";
 import { recalculateCourseProgress, assertLessonUnlocked } from "./progress.service";
+import { recordLessonVersion } from "./lesson-version.service";
 
 /**
  * One question system for quizzes, assessments, and audiobook quizzes (Course Builder phase 3).
@@ -81,8 +82,11 @@ export async function saveQuestion(db: PrismaClient, actor: Actor, courseId: str
       // A change to what is asked or what is correct starts a new question version; attempts keep the old one.
       const before = JSON.stringify({ t: existing.type, p: existing.prompt, c: existing.choices.map((c) => [c.id, c.text, c.isCorrect]), k: existing.keywords });
       const after = JSON.stringify({ t: q.type, p: q.prompt, c: choices.map((c) => [c.id ?? null, c.text, c.isCorrect]), k: q.keywords });
+      const significant = before !== after || existing.state !== q.state || existing.points !== q.points;
+      if (significant) await recordLessonVersion(tx, lesson.id, actor, `Changed question "${existing.prompt.slice(0, 60)}"`);
       id = (await quizRepository.updateQuestion(tx, existing.id, q, choices, before !== after)).id;
     } else {
+      await recordLessonVersion(tx, lesson.id, actor, `Added question "${q.prompt.slice(0, 60)}"`);
       id = (await quizRepository.createQuestion(tx, lesson.id, course.id, actor.userId, q, choices)).id;
     }
     await audit(tx, { actor, action: "COURSE_UPDATED", entityType: "Question", entityId: id, newValue: { courseId: course.id, lessonId: lesson.id, type: q.type, state: q.state, op: input.id ? "update" : "create" } });
@@ -95,6 +99,7 @@ export async function deleteQuestion(db: PrismaClient, actor: Actor, courseId: s
   const q = await quizRepository.findQuestion(db, questionId);
   if (!q || q.lesson?.module.courseId !== course.id) throw new NotFoundError();
   await db.$transaction(async (tx) => {
+    if (q.lessonId) await recordLessonVersion(tx, q.lessonId, actor, `Removed question "${q.prompt.slice(0, 60)}"`);
     await quizRepository.deleteQuestion(tx, q.id);
     await audit(tx, { actor, action: "COURSE_UPDATED", entityType: "Question", entityId: q.id, previousValue: { prompt: q.prompt.slice(0, 120) }, newValue: { courseId: course.id, op: "delete" } });
   });

@@ -13,6 +13,7 @@ import { rateLimit } from "@/server/auth/rate-limit";
 import type { LessonWrite } from "@/server/repositories/academy.repository";
 import { coursesLockedFor } from "./onboarding.service";
 import { recalculateAllForCourse, lockedLessonsFor, assertLessonUnlocked } from "./progress.service";
+import { recordLessonVersion, changedFields } from "./lesson-version.service";
 import { categoryRepository } from "@/server/repositories/category.repository";
 import { assignmentRepository } from "@/server/repositories/assignment.repository";
 import { toSubmissionLearnerView as toSubmissionView, type SubmissionLearnerView } from "@/server/views/academy.views";
@@ -458,6 +459,9 @@ export async function saveLesson(db: PrismaClient, actor: Actor, courseId: strin
     if (input.id) {
       const l = await academyRepository.findLesson(db, input.id);
       if (!l || l.module.courseId !== c.id) throw new NotFoundError();
+      // Significant edits freeze the previous state (phase 8); cosmetic ones (description, reveal flags) do not.
+      const changed = changedFields(l, data);
+      if (changed.length) await recordLessonVersion(tx, l.id, actor, `Changed ${changed.join(", ")}`);
       id = (await academyRepository.updateLesson(tx, l.id, input.moduleId, data)).id;
     } else {
       id = (await academyRepository.createLesson(tx, input.moduleId, data)).id;

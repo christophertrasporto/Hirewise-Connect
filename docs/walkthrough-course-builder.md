@@ -108,8 +108,22 @@ Tests: `tests/integration/lesson-types.test.ts` (self-marking rules and refusals
 | Notifications | events `ASSIGNMENT_SUBMITTED`, `ATTEMPT_PENDING_REVIEW` (to the course coaches, in-app) and `ASSIGNMENT_REVIEWED` (to the learner, in-app and email) | Published inside the same transactions as the submission, the quiz submission, and the review; delivered by the worker. |
 | Tests | `tests/integration/tracking.test.ts` | Role scoping (agent refused, coach limited to own courses, Admin filters by coach, course, status, learner), row contents through a full learner journey, notifications, learner cards with next lesson, actions, and certification. |
 
+## Phase 8: safe editing and version history (done)
+
+Everything stays editable after publishing (phases 2 to 7 built it that way). This phase adds the record.
+
+| Rule | How it holds |
+| --- | --- |
+| Changing a description does not reset completion | Nothing ever revokes a completion; description, explanations, and answer-reveal flags are cosmetic and do not even create a version. |
+| Adding an optional lesson does not affect completion | Progress counts required lessons only. |
+| Adding a required lesson recalculates completion | `recalculateAllForCourse` after every curriculum edit (phase 6); the percentage drops, the completion stays. |
+| Changing quiz questions preserves attempts | Attempts carry their own question snapshot (phase 3) and the lesson version they were taken on. |
+| Version history | `LessonVersion` rows: a significant edit to the lesson (type, title, content, link, file, required flag, draft/published, media requirement, quiz and assignment settings) or to its question set (add, remove, reword, re-point, re-state) freezes the previous state with who, when, and why, then bumps `lesson.version`. `QuizAttempt.lessonVersion` and `LessonProgress.lessonVersion` attribute results and completions to a version. |
+| History tab | lesson page → **History**: current version with its attempts and completions, then each earlier version with the changed fields (old → new), question additions and removals, and the attempts and completions recorded on it. **Restore** puts a version's content and settings back (questions are left as they are) and is itself recorded as a new version. |
+
+Code: `server/services/lesson-version.service.ts` (`changedFields`, `recordLessonVersion`, `lessonHistory`, `restoreLessonVersion`), `server/repositories/version.repository.ts`, hooks in `saveLesson`, `saveQuestion`, `deleteQuestion`. Tests: `tests/integration/lesson-versions.test.ts`.
+
 ## Next phases
 
-8. Safe editing of published courses and version history.
 9. Welcome video on lesson infrastructure.
 10. Question bank and random draws.

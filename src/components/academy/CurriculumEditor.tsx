@@ -196,6 +196,25 @@ export function LessonForm({ courseId, modules, moduleId, lesson, onDone, sectio
       {!showContent && <input type="hidden" name="body" value={lesson?.body ?? ""} />}
       {!showSettings && <input type="hidden" name="status" value={lesson?.status ?? "PUBLISHED"} />}
       {!showSettings && lesson?.isRequired && <input type="hidden" name="isRequired" value="on" />}
+      {/* Content-only form: carry every setting through unchanged so saving the content never resets the settings */}
+      {!showSettings && lesson && (
+        <>
+          <input type="hidden" name="requiredPercent" value={lesson.requiredPercent ?? ""} />
+          <input type="hidden" name="passingScore" value={lesson.passingScore ?? ""} />
+          <input type="hidden" name="maxAttempts" value={lesson.maxAttempts ?? ""} />
+          <input type="hidden" name="timeLimitMin" value={lesson.timeLimitMin ?? ""} />
+          <input type="hidden" name="randomizeCount" value={lesson.randomizeCount ?? ""} />
+          <input type="hidden" name="retakeWaitMinutes" value={lesson.retakeWaitMinutes ?? ""} />
+          <input type="hidden" name="scorePolicy" value={lesson.scorePolicy ?? "HIGHEST"} />
+          <input type="hidden" name="reviewMode" value={lesson.reviewMode ?? "AUTO"} />
+          <input type="hidden" name="submissionType" value={lesson.submissionType ?? ""} />
+          <input type="hidden" name="dueAt" value={dateInput(lesson.dueAt ?? null)} />
+          <input type="hidden" name="points" value={lesson.points ?? ""} />
+          {lesson.shuffleAnswers && <input type="hidden" name="shuffleAnswers" value="on" />}
+          {lesson.showCorrectAnswers && <input type="hidden" name="showCorrectAnswers" value="on" />}
+          {lesson.showExplanations && <input type="hidden" name="showExplanations" value="on" />}
+        </>
+      )}
 
       <div className="grid gap-4 md:grid-cols-[1fr_200px]">
         <Field label="Lesson title" htmlFor={`l-title-${uid}`} error={fe.title}>
