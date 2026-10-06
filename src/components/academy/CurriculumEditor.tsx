@@ -6,7 +6,7 @@ import { deleteLessonAction, deleteModuleAction, moveLessonAction, moveModuleAct
 import { idle } from "@/server/http/action-result";
 import { Field, FormAlert, Input, Select, SubmitButton, Textarea } from "@/components/ui/Form";
 import { cn } from "@/lib/cn";
-import { fmtBytes, fmtDuration, LESSON_TYPE_META, type LessonContentType } from "@/components/academy/lesson-meta";
+import { fmtBytes, fmtDuration, LESSON_TYPE_META, EDITABLE_LESSON_TYPES, type LessonContentType } from "@/components/academy/lesson-meta";
 
 export type LessonValue = { id: string; title: string; contentType: LessonContentType; body: string | null; url: string | null; fileName: string | null; contentMime: string | null; sizeBytes: number | null; durationSec: number | null; hasFile: boolean };
 export type ModuleValue = { id: string; title: string; description: string | null; lessons: LessonValue[] };
@@ -136,7 +136,7 @@ function LessonForm({ courseId, modules, moduleId, lesson, onDone }: { courseId:
       <div>
         <p className="mb-2 text-[13px] font-semibold text-ink-700">Content type</p>
         <div className="flex flex-wrap gap-2">
-          {(Object.keys(LESSON_TYPE_META) as LessonContentType[]).map((t) => {
+          {EDITABLE_LESSON_TYPES.map((t) => {
             const I = LESSON_TYPE_META[t].icon;
             return (
               <button key={t} type="button" onClick={() => setType(t)} className={cn("inline-flex h-9 items-center gap-1.5 rounded-full border px-3.5 text-[13px] font-semibold transition", type === t ? "border-brand-500 bg-brand-500 text-white" : "border-ink-200 bg-white text-ink-600 hover:border-brand-300")}>

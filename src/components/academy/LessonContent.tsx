@@ -1,4 +1,4 @@
-import { Download, ExternalLink, FileText, Headphones, Link2, Type, Video } from "lucide-react";
+import { ClipboardCheck, ClipboardList, Download, ExternalLink, FileText, Headphones, Link2, ListChecks, Type, Video } from "lucide-react";
 import { renderMarkdown } from "@/lib/markdown";
 import { fmtBytes, fmtDuration, LESSON_TYPE_META, type LessonContentType } from "@/components/academy/lesson-meta";
 
@@ -7,7 +7,7 @@ type OutlineModule = { id: string; title: string; description: string | null; le
 type Lesson = OutlineLesson & { body: string | null; url: string | null; hasFile: boolean; fileName: string | null; contentMime: string | null; sizeBytes: number | null };
 type Module = Omit<OutlineModule, "lessons"> & { lessons: Lesson[] };
 
-const ICONS: Record<LessonContentType, typeof Video> = { VIDEO: Video, AUDIO: Headphones, LINK: Link2, DOCUMENT: FileText, TEXT: Type };
+const ICONS: Record<LessonContentType, typeof Video> = { VIDEO: Video, AUDIO: Headphones, LINK: Link2, DOCUMENT: FileText, TEXT: Type, QUIZ: ListChecks, ASSIGNMENT: ClipboardList, ASSESSMENT: ClipboardCheck };
 
 /** Uploaded lesson files are streamed through the app so access is re-checked on every play. */
 export const lessonFileUrl = (lessonId: string) => `/api/academy/lessons/${lessonId}`;

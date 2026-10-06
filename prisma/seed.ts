@@ -25,6 +25,18 @@ const STAFF_USERS: Array<{ email: string; role: RoleKey }> = [
   { email: "ops@hirewise.example", role: "OPERATIONS" },
 ];
 
+/** Demo courses are created with a category name; make sure a CourseCategory row exists and is linked. */
+async function linkCourseCategories() {
+  const courses = await prisma.academyCourse.findMany({ where: { categoryId: null }, select: { id: true, category: true } });
+  for (const c of courses) {
+    const name = c.category.trim();
+    if (!name) continue;
+    const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
+    const cat = await prisma.courseCategory.upsert({ where: { name }, create: { name, slug, order: 1000 }, update: {} });
+    await prisma.academyCourse.update({ where: { id: c.id }, data: { categoryId: cat.id } });
+  }
+}
+
 async function main() {
   const scope = resolveSeedScope(process.argv, process.env);
   if (scope === "demo") assertDemoSeedAllowed(process.env);
@@ -466,6 +478,8 @@ async function main() {
   await placementAt("Harbor Health Clinics", withRate[withRate.length - 2], "Customer Service Representative", "DEPLOYMENT_PREP");
 
   console.log("Seed complete.");
+  await linkCourseCategories();
+
   console.log("Roles:", roleIds.size, "| Permissions:", permIds.size, "| Agreements:", AGREEMENTS.length, "| Skills:", SKILLS.length, "| Software:", SOFTWARE.length);
   console.log(`\nDemo accounts (password: ${DEMO_PASSWORD}):`);
   for (const u of STAFF_USERS) console.log(`  ${u.role.padEnd(12)} ${u.email}${u.role === "SUPER_ADMIN" || u.role === "ADMIN" ? "  (MFA setup on first login)" : ""}`);

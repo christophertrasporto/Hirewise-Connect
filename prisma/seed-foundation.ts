@@ -61,6 +61,9 @@ export const SETTINGS: Record<string, unknown> = {
   shortlistChurnPerDay: 12,
 };
 
+/** Course categories (admin-managed; this is only the starting set). */
+export const COURSE_CATEGORIES: string[] = ["Foundation", "Virtual Assistant", "Cold Calling", "Appointment Setting", "Sales", "Customer Service", "Leadership", "Management", "Agency Building", "AI & Automation", "Marketing", "Specialized Skills"];
+
 export const SKILLS: Array<[string, string]> = [
   ["Cold Calling", "Sales"], ["Appointment Setting", "Sales"], ["Lead Generation", "Sales"], ["Outbound Sales", "Sales"], ["Inbound Sales", "Sales"],
   ["Customer Service", "Support"], ["Technical Support", "Support"], ["Live Chat Support", "Support"], ["Email Support", "Support"],
@@ -90,6 +93,7 @@ export type FoundationIds = {
   softwareIds: Map<string, string>;
   labelIds: Map<string, string>;
   templateIds: Map<string, string>;
+  categoryIds: Map<string, string>;
 };
 
 export async function seedFoundation(prisma: PrismaClient): Promise<FoundationIds> {
@@ -172,6 +176,14 @@ export async function seedFoundation(prisma: PrismaClient): Promise<FoundationId
     await prisma.verificationRequirement.upsert({ where: { level: level as never }, create: { level: level as never, rules }, update: {} });
   }
 
+  // Course categories
+  const categoryIds = new Map<string, string>();
+  for (const [i, name] of COURSE_CATEGORIES.entries()) {
+    const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
+    const row = await prisma.courseCategory.upsert({ where: { name }, create: { name, slug, order: (i + 1) * 10 }, update: { order: (i + 1) * 10 } });
+    categoryIds.set(name, row.id);
+  }
+
   // Deposit policies
   const POLICIES = [
     { name: "One month (default)", type: "ONE_MONTH" as const, value: 0, isDefault: true },
@@ -181,5 +193,5 @@ export async function seedFoundation(prisma: PrismaClient): Promise<FoundationId
   ];
   for (const p of POLICIES) await prisma.depositPolicy.upsert({ where: { name: p.name }, create: { name: p.name, type: p.type, value: p.value, currency: "currency" in p ? p.currency : undefined, isDefault: p.isDefault }, update: { type: p.type, value: p.value, isDefault: p.isDefault } });
 
-  return { roleIds, permIds, agreementIds, skillIds, softwareIds, labelIds, templateIds };
+  return { roleIds, permIds, agreementIds, skillIds, softwareIds, labelIds, templateIds, categoryIds };
 }
