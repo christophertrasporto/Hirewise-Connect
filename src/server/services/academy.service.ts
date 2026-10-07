@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { PrismaClient } from "@/server/db/types";
+import type { Db, PrismaClient } from "@/server/db/types";
 import type { Actor } from "@/server/auth/actor";
 import { authorize, ForbiddenError, NotFoundError } from "@/server/policies/authorize";
 import { academyRepository } from "@/server/repositories/academy.repository";
@@ -352,7 +352,7 @@ export async function createLessonUploadUrl(db: PrismaClient, actor: Actor, cour
   return { key, ...upload };
 }
 
-async function moduleOf(db: PrismaClient, courseId: string, moduleId: string) {
+async function moduleOf(db: Db, courseId: string, moduleId: string) {
   const m = await academyRepository.findModule(db, moduleId);
   if (!m || m.courseId !== courseId) throw new NotFoundError();
   return m;
@@ -365,7 +365,9 @@ export async function saveModule(db: PrismaClient, actor: Actor, courseId: strin
   return db.$transaction(async (tx) => {
     let id: string;
     if (input.id) {
-      await moduleOf(db, c.id, input.id);
+      // Inside the transaction every query must use tx: production runs with connection_limit=1 behind the pooler,
+      // so a query on the pooled client here would wait for the connection the transaction holds and time out.
+      await moduleOf(tx, c.id, input.id);
       id = (await academyRepository.updateModule(tx, input.id, data)).id;
     } else {
       id = (await academyRepository.createModule(tx, c.id, data)).id;
@@ -457,7 +459,7 @@ export async function saveLesson(db: PrismaClient, actor: Actor, courseId: strin
   return db.$transaction(async (tx) => {
     let id: string;
     if (input.id) {
-      const l = await academyRepository.findLesson(db, input.id);
+      const l = await academyRepository.findLesson(tx, input.id);
       if (!l || l.module.courseId !== c.id) throw new NotFoundError();
       // Significant edits freeze the previous state (phase 8); cosmetic ones (description, reveal flags) do not.
       const changed = changedFields(l, data);

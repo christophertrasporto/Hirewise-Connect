@@ -7,7 +7,10 @@ let client: PrismaClient | null = null;
 /** Prisma client bound to the test database started by global-setup. */
 export function testDb(): PrismaClient {
   if (!client) {
-    const url = inject("databaseUrl");
+    // Mirror production (Vercel behind the Supabase transaction pooler runs with connection_limit=1): any query that
+    // bypasses the transaction handle inside an interactive transaction deadlocks here instead of only in production.
+    const base = inject("databaseUrl");
+    const url = base + (base.includes("?") ? "&" : "?") + "connection_limit=1&pool_timeout=5";
     process.env.DATABASE_URL = url;
     client = createPrismaClient(url);
   }
