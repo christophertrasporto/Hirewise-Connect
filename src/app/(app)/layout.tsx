@@ -40,9 +40,12 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   if (can(actor, "report.talent") || can(actor, "report.pipeline") || can(actor, "report.academy") || can(actor, "client.read")) nav.push({ href: "/staff/analytics", label: "Analytics", icon: <LineChart /> });
   if (can(actor, "user.manage")) nav.push({ href: "/staff/users", label: "Users", icon: <UserCog /> });
   if (can(actor, "agreement.manage")) nav.push({ href: "/staff/agreements", label: "Agreements", icon: <FileSignature /> });
+  if (can(actor, "agency.read") || can(actor, "agency.review") || can(actor, "agency.manage")) nav.push({ href: "/staff/agencies", label: "Agencies", icon: <Building2 /> });
   if (can(actor, "settings.manage")) nav.push({ href: "/staff/settings", label: "Settings", icon: <Settings /> });
   if (can(actor, "settings.manage")) nav.push({ href: "/staff/launch", label: "Launch readiness", icon: <Rocket /> });
   if (can(actor, "interview.coordinate") || can(actor, "flag.review")) nav.push({ href: "/staff/compliance", label: "Compliance", icon: <ShieldAlert /> });
+  if (actor.agency) nav.splice(1, 0, { href: "/agency", label: "My agency", icon: <Building2 /> });
+  else if (actor.role === "AGENT" || actor.role === "CLIENT" || actor.role === "APPLICANT") nav.push({ href: "/apply/agency", label: "Apply for Agency", icon: <Building2 /> });
   if (actor.role === "AGENT" || actor.role === "CLIENT") nav.push({ href: "/account/agreements", label: "Agreements", icon: <FileSignature /> });
   nav.push({ href: "/notifications", label: "Notifications", icon: <Bell /> });
   if (can(actor, "course.create_own") || can(actor, "course.manage") || can(actor, "course.payment.record") || can(actor, "certification.review")) nav.splice(1, 0, { href: "/courses", label: "Courses", icon: <GraduationCap /> });

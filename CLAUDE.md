@@ -52,4 +52,5 @@ Rules that tooling enforces:
 
 - Windows machine, npm only (no pnpm, no Docker, no Python). Port 3000 belongs to another project; the preview config uses `autoPort`.
 - Local Postgres is the embedded server from `npm run db:local` (data in `.pgdata/`). CI uses a Postgres service container.
-- Phase and decision log: `docs/decisions.md`, `docs/walkthrough-phase-*.md`, `docs/adr/`.
+- Phase and decision log: `docs/decisions.md`, `docs/walkthrough-phase-*.md`, `docs/walkthrough-course-builder.md`, `docs/walkthrough-agency-*.md`, `docs/adr/`.
+- Agency marketplace: `Agency` rows are created only by application approval or `agency.create_direct`; agency data is tenant-scoped through `Actor.agency` and the helpers in `src/server/policies/ownership.ts` (never only in the UI).

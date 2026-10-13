@@ -11,6 +11,7 @@ export const userRepository = {
         status: true,
         role: { select: { key: true } },
         permissionOverrides: { select: { expiresAt: true, permission: { select: { key: true } } } },
+        agencyUsers: { take: 1, orderBy: { createdAt: "asc" }, select: { agencyId: true, role: true, permissions: true, agency: { select: { status: true } } } },
         clientContact: { select: { clientId: true } },
         agentProfile: { select: { id: true } },
         managedClients: { select: { id: true } },
@@ -36,6 +37,15 @@ export const userRepository = {
     return db.user.create({ data: { email: data.email, passwordHash: data.passwordHash ?? undefined, roleId: data.roleId, emailVerifiedAt: data.emailVerifiedAt ?? undefined } });
   },
 
+  setRole(db: Db, userId: string, roleId: string) {
+    return db.user.update({ where: { id: userId }, data: { roleId }, select: { id: true } });
+  },
+
+  /** For agency approval and direct creation: the account, its role, and whether it has a talent profile. */
+  findForAgency(db: Db, where: { id?: string; email?: string }) {
+    return db.user.findFirst({ where: { ...(where.id ? { id: where.id } : {}), ...(where.email ? { email: where.email } : {}), deletedAt: null }, select: { id: true, email: true, status: true, role: { select: { key: true } }, agentProfile: { select: { id: true, displayName: true } }, agencyUsers: { select: { agencyId: true } } } });
+  },
+
   setPassword(db: Db, userId: string, passwordHash: string) {
     return db.user.update({ where: { id: userId }, data: { passwordHash } });
   },
@@ -52,7 +62,7 @@ export const userRepository = {
     return db.user.update({ where: { id: userId }, data: { lastLoginAt: new Date() } });
   },
 
-  roleIdByKey(db: Db, key: "SUPER_ADMIN" | "ADMIN" | "SALES" | "RECRUITER" | "COACH" | "OPERATIONS" | "AGENT" | "CLIENT") {
+  roleIdByKey(db: Db, key: "SUPER_ADMIN" | "ADMIN" | "SALES" | "RECRUITER" | "COACH" | "OPERATIONS" | "AGENT" | "CLIENT" | "APPLICANT" | "AGENCY_OWNER" | "AGENCY_MANAGER") {
     return db.role.findUniqueOrThrow({ where: { key }, select: { id: true } });
   },
 

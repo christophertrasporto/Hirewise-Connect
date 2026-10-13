@@ -44,6 +44,8 @@ export const AGREEMENTS: Array<{ type: AgreementType; title: string; requiredFor
   { type: "AGENT_NON_CIRCUMVENTION", title: "Non-Circumvention Policy (Talent)", requiredForRole: "AGENT", covers: ["Clients introduced through Hirewise", "Restriction on direct engagement", "Duration", "Consequences", "Reporting"] },
   { type: "AGENT_CLIENT_COMMUNICATION", title: "Client Communication Rules", requiredForRole: "AGENT", covers: ["Communication through Hirewise during hiring", "No rate or compensation discussion with clients", "Contact information", "After deployment"] },
   { type: "AGENT_CONFIDENTIALITY", title: "Confidentiality Requirements", requiredForRole: "AGENT", covers: ["Client information", "Campaign materials", "Data handling", "Duration"] },
+  { type: "AGENCY_NON_CIRCUMVENTION", title: "Non-Circumvention Policy (Partner Agency)", requiredForRole: null, covers: ["Clients and opportunities introduced through Hirewise", "No direct engagement with Hirewise clients", "Hirewise as the contracting party", "Agent data and confidentiality", "Duration and remedies"] },
+  { type: "SUBMISSION_TERMS", title: "Candidate Submission Terms", requiredForRole: null, covers: ["Accuracy of the submitted profile", "Hirewise review and client introduction", "Interview coordination through Hirewise", "Non-circumvention per submission", "Withdrawal"] },
   { type: "PLACEMENT_SERVICE_AGREEMENT", title: "Placement Service Agreement", requiredForRole: null, covers: ["Parties", "Position and schedule", "Client billing rate", "Deposit", "Start date", "Pausing, replacement, termination", "Invoicing and payment"] },
 ];
 

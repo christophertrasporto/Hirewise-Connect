@@ -43,6 +43,9 @@ export default function ForTalentPage() {
             <Button href="/register?as=talent" size="lg">
               Apply as talent <ArrowRight className="h-4 w-4" />
             </Button>
+            <Button href="/register/agency" size="lg" variant="outline">
+              Run an agency <ArrowRight className="h-4 w-4" />
+            </Button>
             <Button href="/academy" variant="outline" size="lg">
               Browse Academy courses
             </Button>

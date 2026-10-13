@@ -1,4 +1,4 @@
-import type { RoleKey } from "@prisma/client";
+import type { RoleKey, AgreementType, AcceptanceContext } from "@prisma/client";
 import type { Db } from "@/server/db/types";
 
 export const agreementRepository = {
@@ -19,6 +19,16 @@ export const agreementRepository = {
     const existing = await db.agreementAcceptance.findFirst({ where: { agreementId: data.agreementId, userId: data.userId, placementId: null }, select: { id: true } });
     if (existing) return existing;
     return db.agreementAcceptance.create({ data: { ...data, ipAddress: data.ipAddress ?? undefined, userAgent: data.userAgent ?? undefined }, select: { id: true } });
+  },
+
+  /** The active version of a contextual agreement (agency application, submission terms, placement). */
+  activeByType(db: Db, type: AgreementType) {
+    return db.agreement.findFirst({ where: { isActive: true, type }, orderBy: { version: "desc" } });
+  },
+
+  /** Contextual acceptances are recorded every time (one per application or submission), never deduplicated. */
+  recordContextualAcceptance(db: Db, data: { agreementId: string; userId: string; bodyChecksum: string; context: AcceptanceContext; applicationId?: string | null; submissionId?: string | null; ipAddress?: string | null; userAgent?: string | null }) {
+    return db.agreementAcceptance.create({ data: { agreementId: data.agreementId, userId: data.userId, bodyChecksum: data.bodyChecksum, context: data.context, applicationId: data.applicationId ?? undefined, submissionId: data.submissionId ?? undefined, ipAddress: data.ipAddress ?? undefined, userAgent: data.userAgent ?? undefined }, select: { id: true } });
   },
 
   listAcceptancesForUser(db: Db, userId: string) {

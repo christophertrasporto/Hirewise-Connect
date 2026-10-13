@@ -17,7 +17,7 @@ describe("foundation seed and Super Admin bootstrap (launch checklist step 2-3)"
     expect(await db.user.count()).toBe(0);
     expect(await db.role.count()).toBeGreaterThanOrEqual(8);
     expect(await db.permission.count()).toBeGreaterThan(0);
-    expect(await db.agreement.count({ where: { isActive: true } })).toBe(12);
+    expect(await db.agreement.count({ where: { isActive: true } })).toBe(14); // + AGENCY_NON_CIRCUMVENTION, SUBMISSION_TERMS (Agency A1)
     expect(await db.setting.count()).toBeGreaterThan(0);
     expect(await db.skill.count()).toBeGreaterThan(0);
     expect(await db.assessmentResultLabel.count()).toBe(5);

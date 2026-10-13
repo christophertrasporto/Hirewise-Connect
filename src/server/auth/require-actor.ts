@@ -59,7 +59,7 @@ export type GateStage = "session" | "mfa" | "email" | "agreements";
 export function nextGate(auth: CurrentAuth): string | null {
   if (auth.mfaRequired && !auth.mfaEnrolled) return "/mfa/setup";
   if (auth.mfaRequired && !auth.mfaPassed) return "/mfa/verify";
-  if ((auth.actor.role === "CLIENT" || auth.actor.role === "AGENT") && !auth.emailVerified) return "/verify-email";
+  if ((auth.actor.role === "CLIENT" || auth.actor.role === "AGENT" || auth.actor.role === "APPLICANT" || auth.actor.role === "AGENCY_OWNER" || auth.actor.role === "AGENCY_MANAGER") && !auth.emailVerified) return "/verify-email";
   if (auth.missingAgreements > 0) return "/agreements";
   return null;
 }

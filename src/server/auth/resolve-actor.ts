@@ -1,7 +1,7 @@
 import type { Db } from "@/server/db/types";
 import { userRepository } from "@/server/repositories/user.repository";
 import type { PermissionKey, RoleKey } from "@/server/policies/permissions";
-import { PERMISSIONS } from "@/server/policies/permissions";
+import { PERMISSIONS, AGENCY_PORTAL_PERMISSIONS } from "@/server/policies/permissions";
 import { resolvePermissions, type Actor } from "./actor";
 
 export class ActorUnavailableError extends Error {
@@ -32,6 +32,17 @@ export async function resolveActor(db: Db, userId: string): Promise<Actor> {
   if (role === "AGENT" && u.agentProfile) actor.agentProfileId = u.agentProfile.id;
   if (role === "SALES") actor.salesAssignedClientIds = u.managedClients.map((c) => c.id);
   if (role === "COACH") actor.coachCourseIds = [...new Set([...u.coursesOwned.map((c) => c.id), ...u.courseCoachings.map((c) => c.courseId)])];
+
+  // Agency A1: an Owner or Manager seat adds the portal capabilities and the tenant scope. Suspended and inactive
+  // agencies keep the seat (for read access) but every write checks the status (requireActiveAgency).
+  const seat = u.agencyUsers[0];
+  if (seat) {
+    actor.agency = { id: seat.agencyId, role: seat.role, status: seat.agency.status };
+    const granted = seat.role === "OWNER" ? AGENCY_PORTAL_PERMISSIONS : AGENCY_PORTAL_PERMISSIONS.filter((k) => seat.permissions.includes(k));
+    const merged = new Set<PermissionKey>(actor.permissions);
+    for (const k of granted) merged.add(k);
+    actor.permissions = merged;
+  }
 
   return actor;
 }
