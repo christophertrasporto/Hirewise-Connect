@@ -77,6 +77,22 @@ export const PERMISSIONS = {
   "report.pipeline": { group: "report", description: "Pipeline and conversion reports" },
   "report.revenue": { group: "report", description: "Revenue reports (billing side)" },
   "report.academy": { group: "report", description: "Academy reports" },
+  // Agency marketplace (A1): Hirewise side
+  "agency.read": { group: "agency", description: "Read agencies and their applications (no decisions)" },
+  "agency.review": { group: "agency", description: "Review agency applications: request information, approve, reject" },
+  "agency.manage": { group: "agency", description: "Suspend, reactivate, deactivate, and edit any agency; override memberships" },
+  "agency.create_direct": { group: "agency", description: "Create an agency without an application (Super Admin only)" },
+  // Agency marketplace (A1): portal capabilities. Never on a global role; resolved from AgencyUser membership.
+  "agency.profile.manage": { group: "agency-portal", description: "Edit the agency's own profile" },
+  "agency.team.read": { group: "agency-portal", description: "See the agency's agents" },
+  "agency.team.invite": { group: "agency-portal", description: "Invite agents to the agency" },
+  "agency.team.remove": { group: "agency-portal", description: "End an agent's membership" },
+  "agency.training.purchase": { group: "agency-portal", description: "Buy courses, bundles, and seats" },
+  "agency.training.assign": { group: "agency-portal", description: "Assign purchased seats to agents" },
+  "agency.opportunities.read": { group: "agency-portal", description: "See opportunities shared with the agency" },
+  "agency.submissions.create": { group: "agency-portal", description: "Submit eligible agents to opportunities" },
+  "agency.reports.read": { group: "agency-portal", description: "See the agency's reports" },
+  "agency.settings.manage": { group: "agency-portal", description: "Manage managers, their permissions, and agency settings" },
   // System
   "audit.read": { group: "system", description: "Read the audit log" },
   "settings.manage": { group: "system", description: "Change platform settings" },
@@ -89,18 +105,27 @@ export type PermissionKey = keyof typeof PERMISSIONS;
 export const ALL_PERMISSION_KEYS = Object.keys(PERMISSIONS) as PermissionKey[];
 
 export type StaffRoleKey = "SUPER_ADMIN" | "ADMIN" | "SALES" | "RECRUITER" | "COACH" | "OPERATIONS";
-export type RoleKey = StaffRoleKey | "AGENT" | "CLIENT";
+/** Agency marketplace roles (A1). APPLICANT has no permissions; owner/manager portal rights come from AgencyUser. */
+export type AgencyRoleKey = "APPLICANT" | "AGENCY_OWNER" | "AGENCY_MANAGER";
+export type RoleKey = StaffRoleKey | "AGENT" | "CLIENT" | AgencyRoleKey;
 
-const ADMIN_PERMISSIONS: PermissionKey[] = ALL_PERMISSION_KEYS.filter(
+/** Portal capabilities, granted by AgencyUser membership: owners hold all, managers the subset the owner picks. */
+export const AGENCY_PORTAL_PERMISSIONS = ALL_PERMISSION_KEYS.filter((k) => PERMISSIONS[k].group === "agency-portal");
+/** Catalog keys a global role may hold: everything except the membership-only portal capabilities. */
+const GLOBAL_PERMISSION_KEYS = ALL_PERMISSION_KEYS.filter((k) => PERMISSIONS[k].group !== "agency-portal");
+
+const ADMIN_PERMISSIONS: PermissionKey[] = GLOBAL_PERMISSION_KEYS.filter(
   (k) =>
-    // Admin gets everything except compensation (override only) and system-level RBAC/settings.
-    !["compensation.read", "compensation.write", "settings.manage", "rbac.manage"].includes(k),
+    // Admin gets everything except compensation (override only), system-level RBAC/settings, and direct agency creation.
+    !["compensation.read", "compensation.write", "settings.manage", "rbac.manage", "agency.create_direct"].includes(k),
 );
 
 export const ROLE_PERMISSIONS: Record<RoleKey, readonly PermissionKey[]> = {
+  // Super Admin holds every key, portal capabilities included (Section 7 invariant); scope checks still apply by agency id.
   SUPER_ADMIN: ALL_PERMISSION_KEYS,
   ADMIN: ADMIN_PERMISSIONS,
   SALES: [
+    "agency.read",
     "agent.read_public",
     "client.read",
     "client.manage",
@@ -128,6 +153,7 @@ export const ROLE_PERMISSIONS: Record<RoleKey, readonly PermissionKey[]> = {
     "report.revenue",
   ],
   RECRUITER: [
+    "agency.read",
     "agent.read_public",
     "agent.read_private_contact",
     "agent.review",
@@ -161,6 +187,10 @@ export const ROLE_PERMISSIONS: Record<RoleKey, readonly PermissionKey[]> = {
   // Ownership-based only (Section 7). Deliberately empty.
   AGENT: [],
   CLIENT: [],
+  // Agency marketplace (A1): membership-based. Deliberately empty at the role level.
+  APPLICANT: [],
+  AGENCY_OWNER: [],
+  AGENCY_MANAGER: [],
 };
 
 export const ROLE_NAMES: Record<RoleKey, { name: string; description: string }> = {
@@ -172,6 +202,9 @@ export const ROLE_NAMES: Record<RoleKey, { name: string; description: string }> 
   OPERATIONS: { name: "Operations Manager", description: "Placements, deployment checklists, active agents, availability, reservations." },
   AGENT: { name: "Agent / Talent", description: "Own profile, media, courses, certifications, interviews, placements." },
   CLIENT: { name: "Client", description: "Own profile, marketplace, shortlists, interview requests, placements, invoices." },
+  APPLICANT: { name: "Agency applicant", description: "Has applied to run an agency. No features until approved." },
+  AGENCY_OWNER: { name: "Agency Owner", description: "Runs a partner agency: team, training, submissions, reports. Granted only by application approval." },
+  AGENCY_MANAGER: { name: "Agency Manager", description: "Helps run a partner agency with the permissions its owner grants." },
 };
 
 /** Roles that require MFA (Section 3, Auth). */

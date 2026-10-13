@@ -38,6 +38,10 @@ export type DomainEventMap = {
   CERTIFICATION_APPROVED: { certificationId: string; templateName: string; agentProfileId: string; agentUserId: string; agentEmail: string; expiresAt: string | null };
   CERTIFICATION_REVOKED: { certificationId: string; templateName: string; agentUserId: string; agentEmail: string; reason: string };
   CERTIFICATION_EXPIRING: { certificationId: string; templateName: string; agentUserId: string; agentEmail: string; expiresAt: string };
+  // Agency marketplace (A1)
+  AGENCY_APPLICATION_SUBMITTED: { applicationId: string; applicantUserId: string; applicantName: string; agencyName: string; resubmission: boolean };
+  AGENCY_APPLICATION_DECIDED: { applicationId: string; applicantUserId: string; applicantEmail: string; agencyName: string; status: "NEEDS_MORE_INFO" | "APPROVED" | "REJECTED"; message: string | null; agencyId: string | null };
+  AGENCY_STATUS_CHANGED: { agencyId: string; agencyName: string; status: "ACTIVE" | "SUSPENDED" | "INACTIVE"; reason: string; ownerUserId: string; ownerEmail: string };
   // Course Builder phase 7
   ASSIGNMENT_SUBMITTED: { submissionId: string; lessonId: string; lessonTitle: string; courseId: string; courseTitle: string; agentProfileId: string; displayName: string; coachUserIds: string[]; late: boolean; resubmission: boolean };
   ASSIGNMENT_REVIEWED: { submissionId: string; lessonId: string; lessonTitle: string; courseId: string; courseTitle: string; agentUserId: string; agentEmail: string; decision: "GRADED" | "RETURNED"; grade: number | null; maxPoints: number | null; feedback: string | null };

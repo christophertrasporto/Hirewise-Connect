@@ -1,6 +1,7 @@
 "use server";
 
 import { redirect } from "next/navigation";
+import { applicantRegistrationSchema, registerApplicant } from "@/server/services/agency-application.service";
 import { prisma } from "@/server/db/client";
 import { readSessionCookie, writeSessionCookie, clearSessionCookie, requestMeta } from "@/server/auth/cookies";
 import { HOME_PATH } from "@/server/auth/require-actor";
@@ -83,6 +84,19 @@ export async function registerClientAction(_prev: ActionResult, fd: FormData): P
     return toActionError(e);
   }
   redirect(HOME_PATH);
+}
+
+/** Agency A1: sign-up for people who want to run an agency and are neither talent nor clients (APPLICANT role). */
+export async function registerApplicantAction(_prev: ActionResult, fd: FormData): Promise<ActionResult> {
+  try {
+    const input = applicantRegistrationSchema.parse({ fullName: formString(fd, "fullName"), email: formString(fd, "email"), password: formString(fd, "password") });
+    const meta = await requestMeta();
+    const s = await registerApplicant(prisma, input, meta);
+    await writeSessionCookie(s.token, s.expiresAt);
+  } catch (e) {
+    return toActionError(e);
+  }
+  redirect("/apply/agency");
 }
 
 export async function registerAgentAction(_prev: ActionResult, fd: FormData): Promise<ActionResult> {

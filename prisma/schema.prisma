@@ -30,6 +30,11 @@ enum RoleKey {
   OPERATIONS
   AGENT
   CLIENT
+  /// Signed up through "Apply for Agency"; no permissions until an application is approved (Agency A1).
+  APPLICANT
+  /// Granted only by agency application approval or Super Admin (Agency A1). Portal access comes from AgencyUser.
+  AGENCY_OWNER
+  AGENCY_MANAGER
 }
 
 enum UserStatus {
@@ -138,6 +143,8 @@ enum DocumentOwnerType {
   CLIENT
   PLACEMENT
   AGREEMENT
+  AGENCY_APPLICATION
+  AGENCY
 }
 
 enum DocumentVisibility {
@@ -148,6 +155,10 @@ enum DocumentVisibility {
 }
 
 enum AgreementType {
+  /// Accepted when applying to run an agency (Agency A1).
+  AGENCY_NON_CIRCUMVENTION
+  /// Accepted on every candidate submission (Agency A5).
+  SUBMISSION_TERMS
   CLIENT_TOS
   CLIENT_PRIVACY
   CLIENT_HIRING_TERMS
@@ -393,6 +404,13 @@ model User {
 
   @@index([roleId])
   @@index([status])
+  // Agency marketplace (A1)
+  agencyApplications    AgencyApplication[]        @relation("Applicant")
+  reviewedApplications  AgencyApplication[]        @relation("ApplicationReviewer")
+  applicationHistory    AgencyApplicationHistory[] @relation("ApplicationHistoryActor")
+  ownedAgencies         Agency[]                   @relation("AgencyOwner")
+  agencyUsers           AgencyUser[]
+  membershipApprovals   AgencyMembership[]         @relation("MembershipApprover")
 }
 
 model Role {
@@ -605,8 +623,13 @@ model AgentProfile {
   quizAttempts          QuizAttempt[]
   assignmentSubmissions AssignmentSubmission[]
   courseProgress        CourseProgress[]
+  /// Current primary agency (null = Hirewise Direct). History lives in AgencyMembership (Agency A1).
+  primaryAgencyId       String?
+  primaryAgency         Agency?                @relation("PrimaryAgencyAgents", fields: [primaryAgencyId], references: [id])
+  agencyMemberships     AgencyMembership[]
 
   @@index([status])
+  @@index([primaryAgencyId])
   @@index([availabilityStatus])
   @@index([verificationLevel])
   @@index([primaryRole])
@@ -844,8 +867,13 @@ model AgreementAcceptance {
   userAgent    String?
   bodyChecksum String
   placementId  String?
+  /// Why the acceptance was recorded (Agency A1). PLACEMENT acceptances also carry placementId.
+  context       AcceptanceContext @default(GENERAL)
+  applicationId String?
+  submissionId  String?
 
   @@unique([agreementId, userId, placementId])
+  @@index([applicationId])
   @@index([userId])
 }
 
@@ -2121,4 +2149,169 @@ model SavedSearch {
 
   @@unique([clientId, name])
   @@index([clientId])
+}
+
+// ---------------------------------------------------------------------------
+// Agency marketplace (Agency A1): application-only agencies, owners, memberships
+// ---------------------------------------------------------------------------
+
+enum AgencyApplicationStatus {
+  SUBMITTED
+  UNDER_REVIEW
+  NEEDS_MORE_INFO
+  APPROVED
+  REJECTED
+  WITHDRAWN
+}
+
+enum AgencyStatus {
+  ACTIVE
+  SUSPENDED
+  INACTIVE
+}
+
+enum AgencyUserRole {
+  OWNER
+  MANAGER
+}
+
+enum AgencyMembershipStatus {
+  ACTIVE
+  ENDED
+}
+
+enum AcceptanceContext {
+  GENERAL
+  PLACEMENT
+  AGENCY_APPLICATION
+  AGENT_REGISTRATION
+  SUBMISSION
+}
+
+/// One active application per user. Approval is the only path (besides Super Admin) that creates an Agency.
+model AgencyApplication {
+  id                      String                     @id @default(cuid())
+  applicantUserId         String
+  applicant               User                       @relation("Applicant", fields: [applicantUserId], references: [id])
+  applicantFullName       String
+  applicantEmail          String
+  applicantPhone          String?
+  proposedAgencyName      String
+  proposedLogoKey         String?
+  businessRegistration    String?
+  country                 String
+  city                    String?
+  website                 String?
+  socialLinks             String[]                   @default([])
+  teamSize                Int
+  yearsExperience         Int
+  services                String[]                   @default([])
+  description             String
+  /// The AgreementAcceptance (AGENCY_NON_CIRCUMVENTION) recorded when applying.
+  agreementAcceptanceId   String?
+  status                  AgencyApplicationStatus    @default(SUBMITTED)
+  reviewerId              String?
+  reviewer                User?                      @relation("ApplicationReviewer", fields: [reviewerId], references: [id])
+  /// Internal only. Never in the applicant projection.
+  reviewNotes             String?
+  applicantVisibleMessage String?
+  rejectionReason         String?
+  /// Set on rejection from the configured cooldown (admin may override).
+  reapplyAfter            DateTime?
+  submittedAt             DateTime                   @default(now())
+  resubmittedAt           DateTime?
+  reviewedAt              DateTime?
+  createdAgencyId         String?                    @unique
+  createdAgency           Agency?                    @relation(fields: [createdAgencyId], references: [id])
+  createdAt               DateTime                   @default(now())
+  updatedAt               DateTime                   @updatedAt
+  history                 AgencyApplicationHistory[]
+
+  @@index([applicantUserId, status])
+  @@index([status, submittedAt])
+  @@index([country])
+}
+
+model AgencyApplicationHistory {
+  id             String                   @id @default(cuid())
+  applicationId  String
+  application    AgencyApplication        @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  previousStatus AgencyApplicationStatus?
+  newStatus      AgencyApplicationStatus
+  changedById    String?
+  changedBy      User?                    @relation("ApplicationHistoryActor", fields: [changedById], references: [id])
+  notes          String?
+  changedAt      DateTime                 @default(now())
+
+  @@index([applicationId, changedAt])
+}
+
+/// A partner agency. Created only from an approved AgencyApplication or by a Super Admin (agency.create_direct).
+model Agency {
+  id                String             @id @default(cuid())
+  name              String
+  logoKey           String?
+  ownerUserId       String
+  owner             User               @relation("AgencyOwner", fields: [ownerUserId], references: [id])
+  description       String?
+  contactEmail      String
+  contactPhone      String?
+  country           String
+  city              String?
+  website           String?
+  status            AgencyStatus       @default(ACTIVE)
+  statusReason      String?
+  /// Configurable plan (A6). Null until plans exist.
+  planId            String?
+  trainingAccess    Boolean            @default(true)
+  opportunityAccess Boolean            @default(true)
+  joinedAt          DateTime           @default(now())
+  suspendedAt       DateTime?
+  deactivatedAt     DateTime?
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  application       AgencyApplication?
+  users             AgencyUser[]
+  memberships       AgencyMembership[]
+  primaryAgents     AgentProfile[]     @relation("PrimaryAgencyAgents")
+
+  @@index([status])
+  @@index([ownerUserId])
+}
+
+/// Owner and Manager seats. Portal permissions are resolved from here onto the Actor; managers hold a configurable subset.
+model AgencyUser {
+  id          String         @id @default(cuid())
+  agencyId    String
+  agency      Agency         @relation(fields: [agencyId], references: [id], onDelete: Cascade)
+  userId      String
+  user        User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role        AgencyUserRole
+  permissions String[]       @default([])
+  addedById   String?
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  @@unique([agencyId, userId])
+  @@index([userId])
+}
+
+/// Membership history. agencyId null = Hirewise Direct. One ACTIVE primary membership per agent at a time.
+model AgencyMembership {
+  id             String                 @id @default(cuid())
+  agentProfileId String
+  agentProfile   AgentProfile           @relation(fields: [agentProfileId], references: [id], onDelete: Cascade)
+  agencyId       String?
+  agency         Agency?                @relation(fields: [agencyId], references: [id])
+  isPrimary      Boolean                @default(true)
+  status         AgencyMembershipStatus @default(ACTIVE)
+  joinedAt       DateTime               @default(now())
+  leftAt         DateTime?
+  approvedById   String?
+  approvedBy     User?                  @relation("MembershipApprover", fields: [approvedById], references: [id])
+  endReason      String?
+  createdAt      DateTime               @default(now())
+
+  @@index([agentProfileId, status])
+  @@index([agencyId, status])
 }

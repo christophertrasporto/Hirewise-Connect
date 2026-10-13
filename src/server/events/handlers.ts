@@ -221,6 +221,23 @@ export const EVENT_HANDLERS: { [T in DomainEventType]: EventHandler<T> } = {
     await notifyUser(db, { userId: p.agentUserId, type: "COURSE_PAYMENT_RECORDED", title: `${p.courseTitle} is unlocked`, body: p.waived ? "Hirewise waived the course fee. You can start the course now." : "Your payment was recorded. You can start the course and take the exam.", email: { to: p.agentEmail }, dedupeKey: `CPAID:${p.enrollmentId}` });
   },
 
+  AGENCY_APPLICATION_SUBMITTED: async (db, p) => {
+    await notifyStaff(db, ["SUPER_ADMIN", "ADMIN"], { type: "AGENCY_APPLICATION_SUBMITTED", title: `${p.resubmission ? "Updated" : "New"} agency application: ${p.agencyName}`, body: `${p.applicantName} ${p.resubmission ? "resubmitted their application" : "applied to run an agency"}. Review it under Agencies → Applications.`, dedupeKey: `AGAPP:${p.applicationId}:${p.resubmission ? "re" : "new"}` });
+    const existing = await taskRepository.findOpenByRelated(db, "REVIEW_AGENCY_APPLICATION", "AgencyApplication", p.applicationId);
+    if (!existing) await taskRepository.create(db, { type: "REVIEW_AGENCY_APPLICATION", title: `Review agency application: ${p.agencyName}`, queueRole: "ADMIN", dueAt: new Date(Date.now() + 3 * 24 * 60 * 60_000), relatedType: "AgencyApplication", relatedId: p.applicationId });
+  },
+  AGENCY_APPLICATION_DECIDED: async (db, p) => {
+    const copy = p.status === "APPROVED"
+      ? { title: `Your agency ${p.agencyName} is approved`, body: `Welcome aboard. Your Agency Owner portal is ready: sign in and open "My agency".${p.message ? ` Message from Hirewise: ${p.message}` : ""}` }
+      : p.status === "REJECTED"
+        ? { title: `Your agency application was not approved`, body: p.message ?? "Hirewise did not approve the application." }
+        : { title: `Hirewise needs more information about ${p.agencyName}`, body: `${p.message ?? "Please update your application."} Open your application to edit and resubmit it.` };
+    await notifyUser(db, { userId: p.applicantUserId, type: `AGENCY_APPLICATION_${p.status}`, title: copy.title, body: copy.body, email: { to: p.applicantEmail }, dedupeKey: `AGDEC:${p.applicationId}:${p.status}:${Date.now()}` });
+    if (p.status !== "NEEDS_MORE_INFO") await taskRepository.completeByRelated(db, "REVIEW_AGENCY_APPLICATION", "AgencyApplication", p.applicationId);
+  },
+  AGENCY_STATUS_CHANGED: async (db, p) => {
+    await notifyUser(db, { userId: p.ownerUserId, type: "AGENCY_STATUS_CHANGED", title: `${p.agencyName} is now ${p.status.toLowerCase()}`, body: p.status === "ACTIVE" ? "Your agency is active again. Invites, training purchases, and submissions are available." : `Reason: ${p.reason}. Your data is kept; invites, purchases, and submissions are paused.`, email: { to: p.ownerEmail }, dedupeKey: `AGST:${p.agencyId}:${p.status}:${Date.now()}` });
+  },
   ASSIGNMENT_SUBMITTED: async (db, p) => {
     for (const id of new Set(p.coachUserIds)) await notifyUser(db, { userId: id, type: "ASSIGNMENT_SUBMITTED", title: `${p.displayName} submitted ${p.lessonTitle}`, body: `${p.courseTitle}${p.resubmission ? " · new version" : ""}${p.late ? " · late" : ""}. Review it under Courses → Learners.`, dedupeKey: `ASUB:${p.submissionId}:${id}` });
   },

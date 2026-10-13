@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { redirect } from "next/navigation";
 import { Banner } from "@/components/app/ui";
 import { prisma } from "@/server/db/client";
 import { requireAuth } from "@/server/auth/require-actor";
@@ -37,6 +38,8 @@ export default async function DashboardPage({ searchParams }: { searchParams?: P
     const upcoming = requests.flatMap((r) => r.interviews.filter((i) => i.status === "SCHEDULED").map((i) => ({ id: i.id, requestId: r.id, displayName: i.displayName, scheduledAt: i.scheduledAt, timezone: i.timezone }))).sort((a, b) => new Date(a.scheduledAt).getTime() - new Date(b.scheduledAt).getTime()).slice(0, 5);
     return <>{justVerified && <div className="mb-6"><Banner tone="success" title="Email verified successfully">Welcome to Hirewise Connect.</Banner></div>}<ClientDashboard client={client} notifications={notifications} recommended={recommended} recentlyViewed={recentlyViewed} shortlistCount={shortlist?.candidates.length ?? 0} openRequests={openRequests.length} decisionsPending={requests.filter((r) => r.status === "CLIENT_DECISION_PENDING").length} upcoming={upcoming} placements={placements.map((p) => ({ id: p.id, status: p.status, positionTitle: p.positionTitle, displayName: p.agent.displayName }))} /></>;
   }
+  if (actor.role === "APPLICANT") redirect("/apply/agency");
+  if (actor.role === "AGENCY_OWNER" || actor.role === "AGENCY_MANAGER") redirect(actor.agency ? "/agency" : "/apply/agency");
   const stats = await staffDashboard(prisma, actor);
   return <StaffDashboard role={actor.role} email={email} stats={stats} notifications={notifications} />;
 }

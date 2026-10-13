@@ -71,3 +71,31 @@ export function scopedClientId(actor: Actor, requested: string | undefined, staf
   if (actor.role === "SALES" && actor.salesAssignedClientIds?.includes(requested)) return requested;
   throw new ForbiddenError("No access to this client");
 }
+
+/**
+ * Agency tenant scope (Agency A1). Everything agency-owned is read and written through the actor's own seat;
+ * a staff permission (default agency.manage, or agency.read for reads) bypasses the scope. Anything outside the
+ * actor's agency reads as NotFound, never Forbidden, so the API is not an oracle for other tenants.
+ */
+export function assertAgencyScope(actor: Actor, agencyId: string, staffPermission: PermissionKey = "agency.manage"): void {
+  if (actor.permissions.has(staffPermission)) return;
+  if (actor.agency?.id === agencyId) return;
+  throw new NotFoundError();
+}
+
+/** The agency id an agency user may act on; staff pass the id explicitly. */
+export function scopedAgencyId(actor: Actor, requested: string | undefined, staffPermission: PermissionKey = "agency.manage"): string {
+  if (actor.permissions.has(staffPermission) && requested) return requested;
+  if (actor.agency) {
+    if (requested && requested !== actor.agency.id) throw new NotFoundError();
+    return actor.agency.id;
+  }
+  throw new NotFoundError();
+}
+
+/** Writes from the agency portal need an ACTIVE agency; suspended and inactive agencies keep read access only. */
+export function requireActiveAgency(actor: Actor): string {
+  if (!actor.agency) throw new ForbiddenError("You are not a member of an agency");
+  if (actor.agency.status !== "ACTIVE") throw new ForbiddenError(`Your agency is ${actor.agency.status.toLowerCase()}. Contact Hirewise to restore access.`);
+  return actor.agency.id;
+}

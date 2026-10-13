@@ -17,6 +17,8 @@ export type Actor = {
   coachCourseIds?: readonly string[];
   /** Present for SALES: client ids the rep manages. */
   salesAssignedClientIds?: readonly string[];
+  /** Present when the user holds an Owner or Manager seat in a partner agency (Agency A1). Tenant scope for agency.* data. */
+  agency?: { id: string; role: "OWNER" | "MANAGER"; status: "ACTIVE" | "SUSPENDED" | "INACTIVE" };
 };
 
 export type OverrideGrant = { permission: PermissionKey; expiresAt: Date | null };

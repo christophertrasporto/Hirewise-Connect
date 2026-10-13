@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { ArrowRight, Building2, GraduationCap, Check } from "lucide-react";
+import { ArrowRight, Building2, GraduationCap, Check, Users } from "lucide-react";
 import { AuthShell } from "@/components/auth/AuthShell";
 import { cn } from "@/lib/cn";
 
@@ -26,11 +26,19 @@ const options = [
     points: ["Train and certify in the VA Academy", "Showcase video, voice, and assessments", "Get placed through Hirewise"],
     accent: "gold",
   },
+  {
+    key: "agency",
+    icon: Users,
+    title: "I run a team",
+    subtitle: "Apply to run an agency",
+    points: ["Bring your own agents", "Train and certify them through Hirewise", "Submit them to client opportunities"],
+    accent: "brand",
+  },
 ] as const;
 
 export default async function RegisterPage({ searchParams }: { searchParams: Promise<{ as?: string }> }) {
   const { as } = await searchParams;
-  const preselected = as === "client" || as === "talent" ? as : null;
+  const preselected = as === "client" || as === "talent" || as === "agency" ? as : null;
 
   return (
     <AuthShell>

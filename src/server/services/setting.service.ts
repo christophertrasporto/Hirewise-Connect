@@ -22,6 +22,15 @@ export const SETTING_SCHEMAS = {
   matchWeights: z.object({ skills: z.number().default(30), industry: z.number().default(10), experienceLevel: z.number().default(10), certifications: z.number().default(15), timezone: z.number().default(15), budget: z.number().default(10), assessment: z.number().default(10) }).default({ skills: 30, industry: 10, experienceLevel: 10, certifications: 15, timezone: 15, budget: 10, assessment: 10 }),
   /** Section 14 Q18: days of inactivity after which a soft-deleted or inactive account is anonymised by the admin-run job. */
   retentionDays: z.number().int().positive().default(730),
+  /** Agency marketplace (A1): application rules. Nothing about cooldowns is hardcoded elsewhere. */
+  agencyApplications: z
+    .object({
+      reapplyCooldownDays: z.number().int().min(0).max(3650).default(30),
+      maxDocuments: z.number().int().min(0).max(20).default(5),
+      maxDocumentBytes: z.number().int().positive().default(20 * 1024 * 1024),
+      reviewDueDays: z.number().int().min(1).max(60).default(3),
+    })
+    .default(() => ({ reapplyCooldownDays: 30, maxDocuments: 5, maxDocumentBytes: 20 * 1024 * 1024, reviewDueDays: 3 })),
   /** Section 8.8 thresholds. */
   profileViewBurstPerHour: z.number().int().positive().default(60),
   shortlistChurnPerDay: z.number().int().positive().default(12),
