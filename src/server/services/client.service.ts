@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { acceptTermsTx, requireTermsAccepted } from "@/server/services/terms.service";
 import { logger } from "@/server/logger";
 import type { PrismaClient } from "@/server/db/types";
 import type { Actor } from "@/server/auth/actor";
@@ -20,6 +21,7 @@ import { NotFoundError } from "@/server/policies/authorize";
 const FREE_MAIL = new Set(["gmail.com", "yahoo.com", "outlook.com", "hotmail.com", "live.com", "icloud.com", "aol.com", "proton.me", "protonmail.com", "mail.com", "yandex.com", "gmx.com"]);
 
 export const clientRegistrationSchema = z.object({
+  termsAccepted: z.boolean().default(false),
   companyName: z.string().trim().min(2, "Company name is required.").max(120),
   contactName: z.string().trim().min(2, "Contact person is required.").max(120),
   position: z.string().trim().min(2, "Position is required.").max(120),
@@ -60,6 +62,7 @@ export async function registerClient(db: PrismaClient, input: ClientRegistration
     throw new RegistrationError("Please use your business email address.", "email");
   }
   if (await userRepository.findByEmail(db, input.email)) throw new RegistrationError("An account with this email already exists.", "email");
+  requireTermsAccepted(input.termsAccepted);
 
   const passwordHash = await hashPassword(input.password);
   const role = await userRepository.roleIdByKey(db, "CLIENT");
@@ -84,6 +87,7 @@ export async function registerClient(db: PrismaClient, input: ClientRegistration
     });
     const actor: Actor = { userId: user.id, role: "CLIENT", permissions: new Set(), clientId: client.id };
     await audit(tx, { actor, action: "CLIENT_REGISTERED", entityType: "Client", entityId: client.id, newValue: { companyName: input.companyName, industry: input.industry, country: input.country }, ipAddress: meta.ipAddress ?? undefined });
+    await acceptTermsTx(tx, { userId: user.id, role: "CLIENT", context: "SIGNUP", meta, actor });
     await publishEvent(tx, "USER_CREATED", { userId: user.id, role: "CLIENT", email: input.email });
     await publishEvent(tx, "CLIENT_REGISTERED", { clientId: client.id, userId: user.id, companyName: input.companyName, email: input.email });
     return { userId: user.id, clientId: client.id };

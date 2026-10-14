@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { PLATFORM_TERMS_SECTIONS, PRIVACY_POLICY_SECTIONS, PLATFORM_TERMS_TITLE, PRIVACY_POLICY_TITLE, renderTermsBody } from "../src/server/terms/placeholder-terms";
 import type { PrismaClient, RoleKey as DbRoleKey, AgreementType } from "@prisma/client";
 import { PERMISSIONS, ROLE_PERMISSIONS, ROLE_NAMES, type RoleKey } from "../src/server/policies/permissions";
 import { DEFAULT_REQUIREMENTS } from "../src/server/services/verification.service";
@@ -32,20 +33,21 @@ export function assertDemoSeedAllowed(env: Record<string, string | undefined>): 
   }
 }
 
-export const AGREEMENTS: Array<{ type: AgreementType; title: string; requiredForRole: RoleKey | null; covers: string[] }> = [
-  { type: "CLIENT_TOS", title: "Terms of Service (Client)", requiredForRole: "CLIENT", covers: ["Definitions", "Account eligibility", "Platform use and prohibited conduct", "Suspension and termination", "Limitation of liability", "Governing law"] },
-  { type: "CLIENT_PRIVACY", title: "Privacy Policy (Client)", requiredForRole: "CLIENT", covers: ["Data collected", "Use of data", "Sharing with talent", "Retention", "Rights"] },
-  { type: "CLIENT_HIRING_TERMS", title: "Hiring Terms", requiredForRole: "CLIENT", covers: ["Representation through Hirewise", "Client billing rates", "Interview process", "Selection, agreement, and deposit", "Deployment and management", "Invoicing"] },
-  { type: "CLIENT_NON_CIRCUMVENTION", title: "Non-Circumvention / Direct Hiring Policy (Client)", requiredForRole: "CLIENT", covers: ["Introductions through Hirewise Connect", "Restriction on direct engagement", "Duration", "Placement fee on breach", "Reporting", "Exceptions"] },
-  { type: "CLIENT_COMMUNICATION", title: "Communication Policy (Client)", requiredForRole: "CLIENT", covers: ["Communication through Hirewise", "Interview coordination", "Prohibited topics", "Contact information", "Violations"] },
-  { type: "AGENT_PLATFORM_TERMS", title: "Platform Terms (Talent)", requiredForRole: "AGENT", covers: ["Definitions", "Eligibility", "Profile content and accuracy", "Media licence for approved recordings", "Suspension", "Governing law"] },
-  { type: "AGENT_PRIVACY", title: "Privacy Policy (Talent)", requiredForRole: "AGENT", covers: ["Data collected", "What clients can see", "Recordings and assessments", "Retention", "Rights"] },
-  { type: "AGENT_REPRESENTATION", title: "Representation Terms", requiredForRole: "AGENT", covers: ["Hirewise as representative", "Client rate set by Hirewise", "Compensation separate from client rate", "Placement obligations"] },
-  { type: "AGENT_NON_CIRCUMVENTION", title: "Non-Circumvention Policy (Talent)", requiredForRole: "AGENT", covers: ["Clients introduced through Hirewise", "Restriction on direct engagement", "Duration", "Consequences", "Reporting"] },
-  { type: "AGENT_CLIENT_COMMUNICATION", title: "Client Communication Rules", requiredForRole: "AGENT", covers: ["Communication through Hirewise during hiring", "No rate or compensation discussion with clients", "Contact information", "After deployment"] },
-  { type: "AGENT_CONFIDENTIALITY", title: "Confidentiality Requirements", requiredForRole: "AGENT", covers: ["Client information", "Campaign materials", "Data handling", "Duration"] },
-  { type: "AGENCY_NON_CIRCUMVENTION", title: "Non-Circumvention Policy (Partner Agency)", requiredForRole: null, covers: ["Clients and opportunities introduced through Hirewise", "No direct engagement with Hirewise clients", "Hirewise as the contracting party", "Agent data and confidentiality", "Duration and remedies"] },
-  { type: "SUBMISSION_TERMS", title: "Candidate Submission Terms", requiredForRole: null, covers: ["Accuracy of the submitted profile", "Hirewise review and client introduction", "Interview coordination through Hirewise", "Non-circumvention per submission", "Withdrawal"] },
+/** superseded: replaced by the unified Terms & Platform Agreement (Identity phase 1); seeded inactive, kept for history. */
+export const AGREEMENTS: Array<{ type: AgreementType; title: string; requiredForRole: RoleKey | null; superseded?: boolean; covers: string[] }> = [
+  { type: "CLIENT_TOS", title: "Terms of Service (Client)", requiredForRole: "CLIENT", superseded: true, covers: ["Definitions", "Account eligibility", "Platform use and prohibited conduct", "Suspension and termination", "Limitation of liability", "Governing law"] },
+  { type: "CLIENT_PRIVACY", title: "Privacy Policy (Client)", requiredForRole: "CLIENT", superseded: true, covers: ["Data collected", "Use of data", "Sharing with talent", "Retention", "Rights"] },
+  { type: "CLIENT_HIRING_TERMS", title: "Hiring Terms", requiredForRole: "CLIENT", superseded: true, covers: ["Representation through Hirewise", "Client billing rates", "Interview process", "Selection, agreement, and deposit", "Deployment and management", "Invoicing"] },
+  { type: "CLIENT_NON_CIRCUMVENTION", title: "Non-Circumvention / Direct Hiring Policy (Client)", requiredForRole: "CLIENT", superseded: true, covers: ["Introductions through Hirewise Connect", "Restriction on direct engagement", "Duration", "Placement fee on breach", "Reporting", "Exceptions"] },
+  { type: "CLIENT_COMMUNICATION", title: "Communication Policy (Client)", requiredForRole: "CLIENT", superseded: true, covers: ["Communication through Hirewise", "Interview coordination", "Prohibited topics", "Contact information", "Violations"] },
+  { type: "AGENT_PLATFORM_TERMS", title: "Platform Terms (Talent)", requiredForRole: "AGENT", superseded: true, covers: ["Definitions", "Eligibility", "Profile content and accuracy", "Media licence for approved recordings", "Suspension", "Governing law"] },
+  { type: "AGENT_PRIVACY", title: "Privacy Policy (Talent)", requiredForRole: "AGENT", superseded: true, covers: ["Data collected", "What clients can see", "Recordings and assessments", "Retention", "Rights"] },
+  { type: "AGENT_REPRESENTATION", title: "Representation Terms", requiredForRole: "AGENT", superseded: true, covers: ["Hirewise as representative", "Client rate set by Hirewise", "Compensation separate from client rate", "Placement obligations"] },
+  { type: "AGENT_NON_CIRCUMVENTION", title: "Non-Circumvention Policy (Talent)", requiredForRole: "AGENT", superseded: true, covers: ["Clients introduced through Hirewise", "Restriction on direct engagement", "Duration", "Consequences", "Reporting"] },
+  { type: "AGENT_CLIENT_COMMUNICATION", title: "Client Communication Rules", requiredForRole: "AGENT", superseded: true, covers: ["Communication through Hirewise during hiring", "No rate or compensation discussion with clients", "Contact information", "After deployment"] },
+  { type: "AGENT_CONFIDENTIALITY", title: "Confidentiality Requirements", requiredForRole: "AGENT", superseded: true, covers: ["Client information", "Campaign materials", "Data handling", "Duration"] },
+  { type: "AGENCY_NON_CIRCUMVENTION", title: "Non-Circumvention Policy (Partner Agency)", requiredForRole: null, superseded: true, covers: ["Clients and opportunities introduced through Hirewise", "No direct engagement with Hirewise clients", "Hirewise as the contracting party", "Agent data and confidentiality", "Duration and remedies"] },
+  { type: "SUBMISSION_TERMS", title: "Candidate Submission Terms", requiredForRole: null, superseded: true, covers: ["Accuracy of the submitted profile", "Hirewise review and client introduction", "Interview coordination through Hirewise", "Non-circumvention per submission", "Withdrawal"] },
   { type: "PLACEMENT_SERVICE_AGREEMENT", title: "Placement Service Agreement", requiredForRole: null, covers: ["Parties", "Position and schedule", "Client billing rate", "Deposit", "Start date", "Pausing, replacement, termination", "Invoicing and payment"] },
 ];
 
@@ -134,10 +136,25 @@ export async function seedFoundation(prisma: PrismaClient): Promise<FoundationId
       : [`# ${a.title}`, "", "> LEGAL_PLACEHOLDER — replace with counsel-approved text before launch.", "", ...a.covers.map((c, i) => `## ${i + 1}. ${c}\n\nLEGAL_PLACEHOLDER`)].join("\n");
     const row = await prisma.agreement.upsert({
       where: { type_version: { type: a.type, version: 1 } },
-      create: { type: a.type, version: 1, title: a.title, bodyMarkdown: body, bodyChecksum: checksum(body), effectiveFrom: new Date("2026-01-01"), isActive: true, requiredForRole: (a.requiredForRole as DbRoleKey | null) ?? undefined },
+      create: { type: a.type, version: 1, title: a.title, bodyMarkdown: body, bodyChecksum: checksum(body), effectiveFrom: new Date("2026-01-01"), isActive: !a.superseded, requiredForRole: (a.requiredForRole as DbRoleKey | null) ?? undefined },
       update: { title: a.title, bodyMarkdown: body, bodyChecksum: checksum(body) },
     });
     agreementIds[a.type] = row.id;
+  }
+
+  // Identity phase 1: the unified Terms & Platform Agreement and the Privacy Policy, v1, PLACEHOLDER sections.
+  // The data migration inserts the same rows (same bodies and checksums); this upsert keeps the seed idempotent.
+  for (const doc of [
+    { type: "PLATFORM_TERMS" as const, title: PLATFORM_TERMS_TITLE, sections: PLATFORM_TERMS_SECTIONS },
+    { type: "PRIVACY_POLICY" as const, title: PRIVACY_POLICY_TITLE, sections: PRIVACY_POLICY_SECTIONS },
+  ]) {
+    const body = renderTermsBody(doc.title, doc.sections);
+    const row = await prisma.agreement.upsert({
+      where: { type_version: { type: doc.type, version: 1 } },
+      create: { type: doc.type, version: 1, title: doc.title, bodyMarkdown: body, bodyChecksum: checksum(body), effectiveFrom: new Date("2026-10-14"), isActive: true, requiredForRoles: ["AGENT", "CLIENT", "APPLICANT", "AGENCY_OWNER", "AGENCY_MANAGER"], sections: doc.sections, isMaterialChange: true, requiresReacceptance: true, privacyPolicyMode: "COMBINED", changeNote: doc.type === "PLATFORM_TERMS" ? "Initial unified terms (placeholder text)." : "Initial privacy policy (placeholder text).", publishedAt: new Date("2026-10-14") },
+      update: {},
+    });
+    agreementIds[doc.type] = row.id;
   }
 
   // Settings (Section 14 defaults)

@@ -19,7 +19,7 @@ export type ApplicationWrite = {
 };
 
 export const applicationInclude = {
-  applicant: { select: { id: true, email: true, role: { select: { key: true } }, agentProfile: { select: { id: true } } } },
+  applicant: { select: { id: true, email: true, role: { select: { key: true } }, agentProfiles: { where: { archivedAt: null }, take: 1, select: { id: true } } } },
   reviewer: { select: { id: true, email: true } },
   history: { orderBy: { changedAt: "asc" }, include: { changedBy: { select: { id: true, email: true } } } },
 } satisfies Prisma.AgencyApplicationInclude;

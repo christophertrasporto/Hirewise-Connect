@@ -61,7 +61,7 @@ export default async function UsersPage({ searchParams }: { searchParams: Promis
                 {rows.map((u) => (
                   <li key={u.id} className="flex flex-wrap items-center justify-between gap-3 py-3 text-[14px]">
                     <div>
-                      <p className="font-semibold text-ink-900">{u.agentProfile ? <Link href={`/staff/talent/${u.agentProfile.id}`} className="hover:text-brand-700">{u.agentProfile.displayName}</Link> : u.clientContact?.client.companyName ?? u.email} <span className="font-normal text-ink-400">· {ROLE_NAMES[u.role.key as keyof typeof ROLE_NAMES]?.name ?? u.role.key.toLowerCase()}</span></p>
+                      <p className="font-semibold text-ink-900">{u.agentProfiles[0] ? <Link href={`/staff/talent/${u.agentProfiles[0].id}`} className="hover:text-brand-700">{u.agentProfiles[0].displayName}</Link> : u.clientContact?.client.companyName ?? u.email} <span className="font-normal text-ink-400">· {ROLE_NAMES[u.role.key as keyof typeof ROLE_NAMES]?.name ?? u.role.key.toLowerCase()}</span></p>
                       <p className="text-[12.5px] text-ink-400">{u.email} · joined {fmtDate(u.createdAt)}{u.lastLoginAt ? ` · last login ${fmtDate(u.lastLoginAt)}` : " · never signed in"}</p>
                     </div>
                     <div className="flex items-center gap-2"><StatusBadge status={u.status} /><Link href={`/staff/users?${backQuery}user=${u.id}`} className={`text-[12.5px] font-semibold ${focus?.id === u.id ? "text-ink-900" : "text-brand-600"}`}>Manage</Link></div>

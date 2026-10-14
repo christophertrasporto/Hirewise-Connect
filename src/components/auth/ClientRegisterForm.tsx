@@ -6,9 +6,11 @@ import { ArrowLeft, ArrowRight } from "lucide-react";
 import { registerClientAction } from "@/app/(auth)/actions";
 import { idle } from "@/server/http/action-result";
 import { Field, Input, Select, Textarea, Checkbox, SubmitButton, FormAlert } from "@/components/ui/Form";
+import { TermsCheckbox, type TermsBundleProp } from "@/components/terms/TermsDrawer";
+
 import { COUNTRIES, INDUSTRIES, SERVICES, TIMEZONES } from "@/lib/options";
 
-export function ClientRegisterForm() {
+export function ClientRegisterForm({ terms }: { terms: TermsBundleProp }) {
   const [state, action] = useActionState(registerClientAction, idle);
   const fe = state.fieldErrors ?? {};
   return (
@@ -74,9 +76,10 @@ export function ClientRegisterForm() {
           <Field label="Notes" htmlFor="notes" error={fe.notes} hint="Optional. Campaign details, tools, anything that helps us match you."><Textarea id="notes" name="notes" /></Field>
         </section>
 
-        {state.error && <FormAlert>{state.error}</FormAlert>}
+        <TermsCheckbox bundle={terms} error={fe.termsAccepted} />
+        {state.error && !fe.termsAccepted && <FormAlert>{state.error}</FormAlert>}
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <p className="text-[12.5px] text-ink-400">Next: verify your email, then review and accept the client agreements.</p>
+          <p className="text-[12.5px] text-ink-400">Next: verify your email.</p>
           <SubmitButton pendingText="Creating account…">Create account <ArrowRight className="h-4 w-4" /></SubmitButton>
         </div>
       </form>

@@ -1,4 +1,5 @@
 import { beforeAll, afterAll, describe, expect, it } from "vitest";
+import { seedTerms } from "../setup/terms";
 import { testDb, resetDb } from "../setup/db";
 import { registerClient, activateClient, getOwnClient, listClientsForStaff, RegistrationError } from "@/server/services/client.service";
 import { registerAgent, updateSkills, submitForReview, reviewTransition, getOwnProfile, getAgentForStaff, computeCompletion, SubmissionBlockedError } from "@/server/services/agent.service";
@@ -37,6 +38,7 @@ beforeAll(async () => {
       { type: "AGENT_PLATFORM_TERMS", version: 1, title: "Agent terms", bodyMarkdown: body, bodyChecksum: sum, effectiveFrom: new Date(), requiredForRole: "AGENT" },
     ],
   });
+  await seedTerms(db);
   await db.skill.createMany({ data: [{ name: "Cold Calling", category: "Sales" }, { name: "Appointment Setting", category: "Sales" }, { name: "CRM Management", category: "Tools" }] });
   const staffRole = await db.role.findUniqueOrThrow({ where: { key: "SALES" } });
   await db.user.create({ data: { id: "sales_1", email: "sales@hirewise.example", roleId: staffRole.id } });
@@ -51,7 +53,7 @@ afterAll(async () => {
   await db.$disconnect();
 });
 
-const clientInput = {
+const clientInput = { termsAccepted: true,
   companyName: "Acme Solar",
   contactName: "Jordan Lee",
   position: "Head of Sales",
@@ -139,7 +141,7 @@ describe("login, verification, agreements gate, activation", () => {
     expect((await missingAgreementsFor(db, actor)).length).toBe(1);
     // Accepting twice is idempotent.
     await acceptAgreement(db, actor, first.id, meta);
-    expect(await db.agreementAcceptance.count({ where: { userId: user.id } })).toBe(1);
+    expect(await db.agreementAcceptance.count({ where: { userId: user.id, agreementId: first.id } })).toBe(1);
     const a = await db.auditLog.findFirst({ where: { action: "CLIENT_AGREEMENT_ACCEPTED", actorUserId: user.id } });
     expect(a?.ipAddress).toBe("127.0.0.1");
     // An agent agreement cannot be accepted by a client.
@@ -182,7 +184,7 @@ describe("login, verification, agreements gate, activation", () => {
 });
 
 describe("agent registration → profile → submission → review", () => {
-  const agentInput = { fullName: "Maria Santos", displayName: "Maria S.", email: "maria@talent.example", password: PASSWORD, phone: "", locationCity: "Cebu City", locationCountry: "Philippines", timezone: "Asia/Manila", primaryRole: "Appointment Setter", yearsExperience: 4 };
+  const agentInput = { termsAccepted: true, fullName: "Maria Santos", displayName: "Maria S.", email: "maria@talent.example", password: PASSWORD, phone: "", locationCity: "Cebu City", locationCountry: "Philippines", timezone: "Asia/Manila", primaryRole: "Appointment Setter", yearsExperience: 4 };
   let agentUserId = "";
   let agentProfileId = "";
 

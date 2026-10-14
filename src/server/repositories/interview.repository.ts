@@ -119,6 +119,6 @@ export const interviewRepository = {
   },
 
   authorsByIds(db: Db, ids: string[]) {
-    return db.user.findMany({ where: { id: { in: ids } }, select: { id: true, email: true, role: { select: { key: true } }, agentProfile: { select: { displayName: true } }, clientContact: { select: { name: true } } } });
+    return db.user.findMany({ where: { id: { in: ids } }, select: { id: true, email: true, role: { select: { key: true } }, agentProfiles: { where: { archivedAt: null }, take: 1, select: { displayName: true } }, clientContact: { select: { name: true } } } });
   },
 };

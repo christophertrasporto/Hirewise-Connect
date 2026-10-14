@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { acceptTermsTx, requireTermsAccepted } from "@/server/services/terms.service";
+import { guardSignup, ensureIdentity, syncIdentityContact } from "@/server/services/identity.service";
 import { logger } from "@/server/logger";
 import type { PrismaClient } from "@/server/db/types";
 import type { Actor } from "@/server/auth/actor";
@@ -28,7 +30,6 @@ import { publishEvent } from "@/server/events/outbox";
 import { rateLimit } from "@/server/auth/rate-limit";
 import { toAgentSelfView, toAgentStaffListView, type AgentSelfView } from "@/server/views/agent.views";
 import { assertTransitionAllowed, type AgentProfileStatus } from "@/server/state/agent-profile";
-import { RegistrationError } from "./client.service";
 
 // ---------------------------------------------------------------------------
 // Schemas
@@ -37,6 +38,8 @@ import { RegistrationError } from "./client.service";
 const optionalText = (max: number) => z.string().trim().max(max).optional().or(z.literal(""));
 
 export const agentRegistrationSchema = z.object({
+  termsAccepted: z.boolean().default(false),
+  continuationToken: z.string().trim().optional().or(z.literal("")),
   fullName: z.string().trim().min(2, "Full name is required.").max(120),
   displayName: z.string().trim().min(2, "Professional name is required.").max(60),
   email: emailSchema,
@@ -96,7 +99,9 @@ export const experienceSchema = z.object({
 
 export async function registerAgent(db: PrismaClient, input: AgentRegistrationInput, meta: RequestMeta) {
   rateLimit(`register:${meta.ipAddress ?? "unknown"}`, 10, 60 * 60_000);
-  if (await userRepository.findByEmail(db, input.email)) throw new RegistrationError("An account with this email already exists.", "email");
+  requireTermsAccepted(input.termsAccepted);
+  // Identity phase 1: duplicate detection runs before anything is created; a match raises a flag and stops here.
+  await guardSignup(db, { kind: "SIGNUP", email: input.email, phone: input.phone || null, fullName: input.fullName, data: { fullName: input.fullName, displayName: input.displayName, locationCity: input.locationCity, locationCountry: input.locationCountry, primaryRole: input.primaryRole }, continuationToken: input.continuationToken || null, meta });
   const passwordHash = await hashPassword(input.password);
   const role = await userRepository.roleIdByKey(db, "AGENT");
 
@@ -115,6 +120,9 @@ export async function registerAgent(db: PrismaClient, input: AgentRegistrationIn
       yearsExperience: input.yearsExperience,
     });
     const actor: Actor = { userId: user.id, role: "AGENT", permissions: new Set(), agentProfileId: profile.id };
+    const identityId = await ensureIdentity(tx, actor, { userId: user.id, email: input.email, phone: input.phone || null });
+    await agentRepository.setIdentity(tx, profile.id, identityId);
+    await acceptTermsTx(tx, { userId: user.id, role: "AGENT", context: "SIGNUP", meta, actor });
     await audit(tx, { actor, action: "AGENT_REGISTERED", entityType: "AgentProfile", entityId: profile.id, newValue: { displayName: input.displayName, primaryRole: input.primaryRole }, ipAddress: meta.ipAddress ?? undefined });
     await publishEvent(tx, "USER_CREATED", { userId: user.id, role: "AGENT", email: input.email });
     await publishEvent(tx, "AGENT_REGISTERED", { agentProfileId: profile.id, userId: user.id, displayName: input.displayName, email: input.email });
@@ -181,6 +189,8 @@ export async function updatePersonal(db: PrismaClient, actor: Actor, input: z.in
     { displayName: input.displayName, locationCity: input.locationCity, locationCountry: input.locationCountry, timezone: input.timezone, languages: input.languages, workSetup: input.workSetup, preferredShift: input.preferredShift || null, equipmentSummary: input.equipmentSummary || null, internetSummary: input.internetSummary || null },
     { fullLegalName: input.fullLegalName, phone: input.phone || null, addressLine: input.addressLine || null },
   );
+  // Identity phase 1: the identity contacts follow the private phone so duplicate detection stays accurate.
+  await syncIdentityContact(db, actor, actor.userId, { kind: "PHONE", value: input.phone || null, source: "PRIVATE_CONTACT" });
   return recomputeCompletion(db, p.id);
 }
 

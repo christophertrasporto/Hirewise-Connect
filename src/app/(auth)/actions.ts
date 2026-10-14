@@ -76,6 +76,7 @@ export async function registerClientAction(_prev: ActionResult, fd: FormData): P
       preferredSchedule: formString(fd, "preferredSchedule"),
       expectedStartDate: formString(fd, "expectedStartDate"),
       notes: formString(fd, "notes"),
+      termsAccepted: fd.get("termsAccepted") === "on",
     });
     const meta = await requestMeta();
     const s = await registerClient(prisma, input, meta);
@@ -89,7 +90,7 @@ export async function registerClientAction(_prev: ActionResult, fd: FormData): P
 /** Agency A1: sign-up for people who want to run an agency and are neither talent nor clients (APPLICANT role). */
 export async function registerApplicantAction(_prev: ActionResult, fd: FormData): Promise<ActionResult> {
   try {
-    const input = applicantRegistrationSchema.parse({ fullName: formString(fd, "fullName"), email: formString(fd, "email"), password: formString(fd, "password") });
+    const input = applicantRegistrationSchema.parse({ fullName: formString(fd, "fullName"), email: formString(fd, "email"), password: formString(fd, "password"), termsAccepted: fd.get("termsAccepted") === "on", continuationToken: formString(fd, "continuationToken") });
     const meta = await requestMeta();
     const s = await registerApplicant(prisma, input, meta);
     await writeSessionCookie(s.token, s.expiresAt);
@@ -112,6 +113,8 @@ export async function registerAgentAction(_prev: ActionResult, fd: FormData): Pr
       timezone: formString(fd, "timezone"),
       primaryRole: formString(fd, "primaryRole"),
       yearsExperience: formString(fd, "yearsExperience") || "0",
+      termsAccepted: fd.get("termsAccepted") === "on",
+      continuationToken: formString(fd, "continuationToken"),
     });
     const meta = await requestMeta();
     const s = await registerAgent(prisma, input, meta);

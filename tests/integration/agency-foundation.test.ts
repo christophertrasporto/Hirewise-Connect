@@ -1,4 +1,5 @@
 import { beforeAll, afterAll, describe, expect, it } from "vitest";
+import { seedTerms } from "../setup/terms";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -48,8 +49,7 @@ beforeAll(async () => {
   const cu = await db.user.create({ data: { email: "client@acme.example", roleId: await role("CLIENT"), emailVerifiedAt: new Date() } });
   ids.clientUser = cu.id;
   await db.client.create({ data: { companyName: "Acme", status: "ACTIVE", timezone: "America/Los_Angeles", contacts: { create: { userId: cu.id, name: "C", businessEmail: cu.email, isPrimary: true } } } });
-  const body = "# Non-Circumvention Policy (Partner Agency)\n\nLEGAL_PLACEHOLDER";
-  await db.agreement.create({ data: { type: "AGENCY_NON_CIRCUMVENTION", version: 1, title: "Non-Circumvention Policy (Partner Agency)", bodyMarkdown: body, bodyChecksum: "chk-agency-v1", effectiveFrom: new Date("2026-01-01"), isActive: true } });
+  await seedTerms(db);
 });
 
 afterAll(async () => {
@@ -83,11 +83,11 @@ describe("permissions and roles", () => {
 describe("applying", () => {
   it("staff cannot apply; a talent account applies once, accepting the agreement; the acceptance and audit are recorded", async () => {
     await expect(submitApplication(db, await admin(), applicationInput("Staff agency"), meta)).rejects.toBeInstanceOf(ForbiddenError);
-    await expect(submitApplication(db, await ana(), applicationInput("ABC Virtual Assistants", { agreementAccepted: false }), meta)).rejects.toThrow(/Accept the Non-Circumvention/);
+    await expect(submitApplication(db, await ana(), applicationInput("ABC Virtual Assistants", { agreementAccepted: false }), meta)).rejects.toThrow(/Accept the Hirewise Connect Terms/);
     await expect(submitApplication(db, await ana(), applicationInput("ABC Virtual Assistants", { description: "too short" }), meta)).rejects.toThrow();
     ids.appA = await submitApplication(db, await ana(), applicationInput("ABC Virtual Assistants"), meta);
-    const acc = await db.agreementAcceptance.findFirstOrThrow({ where: { userId: ids.agentUser, context: "AGENCY_APPLICATION" } });
-    expect(acc).toMatchObject({ applicationId: ids.appA, bodyChecksum: "chk-agency-v1", ipAddress: "203.0.113.5", userAgent: "vitest" });
+    const acc = await db.agreementAcceptance.findFirstOrThrow({ where: { userId: ids.agentUser, context: "AGENCY_APPLICATION", agreement: { type: "PLATFORM_TERMS" } }, include: { agreement: true } });
+    expect(acc).toMatchObject({ applicationId: ids.appA, bodyChecksum: acc.agreement.bodyChecksum, ipAddress: "203.0.113.5", userAgent: "vitest", role: "AGENT" });
     expect((await db.agencyApplication.findUniqueOrThrow({ where: { id: ids.appA } })).agreementAcceptanceId).toBe(acc.id);
     expect(await db.auditLog.count({ where: { action: "AGENCY_APPLICATION_SUBMITTED", entityId: ids.appA } })).toBe(1);
     expect(await db.auditLog.count({ where: { action: "AGENCY_AGREEMENT_ACCEPTED", actorUserId: ids.agentUser } })).toBe(1);
@@ -230,7 +230,7 @@ describe("agencies: creation paths, tenant scope, status", () => {
   });
 
   it("an applicant account becomes AGENCY_OWNER on approval, keeps no agent profile, and registers through the public form", async () => {
-    const s = await registerApplicant(db, { fullName: "Carla Reyes", email: "carla@agency.example", password: "LongerPassw0rd!" }, meta);
+    const s = await registerApplicant(db, { termsAccepted: true, fullName: "Carla Reyes", email: "carla@agency.example", password: "LongerPassw0rd!" }, meta);
     ids.applicantUser = s.userId;
     await db.user.update({ where: { id: s.userId }, data: { emailVerifiedAt: new Date() } });
     const carla = await resolveActor(db, s.userId);

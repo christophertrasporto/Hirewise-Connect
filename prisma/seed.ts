@@ -92,7 +92,7 @@ async function main() {
           onboarding: { create: { servicesNeeded: ["Appointment Setting", "Cold Calling"], agentsRequired: 3, preferredSchedule: "Mon–Fri 9–5 PST", expectedStartDate: new Date("2026-11-02"), notes: "Residential solar leads, dialer provided." } },
         },
       });
-  for (const t of ["CLIENT_TOS", "CLIENT_PRIVACY", "CLIENT_HIRING_TERMS", "CLIENT_NON_CIRCUMVENTION", "CLIENT_COMMUNICATION"]) {
+  for (const t of ["PLATFORM_TERMS", "PRIVACY_POLICY", "CLIENT_TOS", "CLIENT_PRIVACY", "CLIENT_HIRING_TERMS", "CLIENT_NON_CIRCUMVENTION", "CLIENT_COMMUNICATION"]) {
     const exists = await prisma.agreementAcceptance.findFirst({ where: { agreementId: agreementIds[t], userId: clientUser.id, placementId: null } });
     if (!exists) await prisma.agreementAcceptance.create({ data: { agreementId: agreementIds[t], userId: clientUser.id, bodyChecksum: checksum("seed"), ipAddress: "127.0.0.1", userAgent: "seed" } });
   }
@@ -103,7 +103,7 @@ async function main() {
     create: { email: "maria@talent.example", roleId: roleIds.get("AGENT")!, passwordHash, emailVerifiedAt: new Date() },
     update: { passwordHash, emailVerifiedAt: new Date() },
   });
-  let agent = await prisma.agentProfile.findUnique({ where: { userId: agentUser.id } });
+  let agent = await prisma.agentProfile.findFirst({ where: { archivedAt: null, userId: agentUser.id } });
   if (!agent) {
     agent = await prisma.agentProfile.create({
       data: {
@@ -132,7 +132,7 @@ async function main() {
       },
     });
   }
-  for (const t of ["AGENT_PLATFORM_TERMS", "AGENT_PRIVACY", "AGENT_REPRESENTATION", "AGENT_NON_CIRCUMVENTION", "AGENT_CLIENT_COMMUNICATION", "AGENT_CONFIDENTIALITY"]) {
+  for (const t of ["PLATFORM_TERMS", "PRIVACY_POLICY", "AGENT_PLATFORM_TERMS", "AGENT_PRIVACY", "AGENT_REPRESENTATION", "AGENT_NON_CIRCUMVENTION", "AGENT_CLIENT_COMMUNICATION", "AGENT_CONFIDENTIALITY"]) {
     const exists = await prisma.agreementAcceptance.findFirst({ where: { agreementId: agreementIds[t], userId: agentUser.id, placementId: null } });
     if (!exists) await prisma.agreementAcceptance.create({ data: { agreementId: agreementIds[t], userId: agentUser.id, bodyChecksum: checksum("seed"), ipAddress: "127.0.0.1", userAgent: "seed" } });
   }
@@ -148,11 +148,11 @@ async function main() {
   ];
   for (const a of approvedAgents) {
     const u = await prisma.user.upsert({ where: { email: a.email }, create: { email: a.email, roleId: roleIds.get("AGENT")!, passwordHash, emailVerifiedAt: new Date() }, update: { passwordHash, emailVerifiedAt: new Date() } });
-    for (const t of ["AGENT_PLATFORM_TERMS", "AGENT_PRIVACY", "AGENT_REPRESENTATION", "AGENT_NON_CIRCUMVENTION", "AGENT_CLIENT_COMMUNICATION", "AGENT_CONFIDENTIALITY"]) {
+    for (const t of ["PLATFORM_TERMS", "PRIVACY_POLICY", "AGENT_PLATFORM_TERMS", "AGENT_PRIVACY", "AGENT_REPRESENTATION", "AGENT_NON_CIRCUMVENTION", "AGENT_CLIENT_COMMUNICATION", "AGENT_CONFIDENTIALITY"]) {
       const exists = await prisma.agreementAcceptance.findFirst({ where: { agreementId: agreementIds[t], userId: u.id, placementId: null } });
       if (!exists) await prisma.agreementAcceptance.create({ data: { agreementId: agreementIds[t], userId: u.id, bodyChecksum: checksum("seed"), ipAddress: "127.0.0.1", userAgent: "seed" } });
     }
-    const existing = await prisma.agentProfile.findUnique({ where: { userId: u.id } });
+    const existing = await prisma.agentProfile.findFirst({ where: { archivedAt: null, userId: u.id } });
     if (existing) continue;
     await prisma.agentProfile.create({
       data: {
@@ -178,7 +178,7 @@ async function main() {
   const beta = betaContact
     ? await prisma.client.findUniqueOrThrow({ where: { id: betaContact.clientId } })
     : await prisma.client.create({ data: { companyName: "Beta Corp", industry: "SaaS / Technology", country: "Australia", timezone: "Australia/Sydney", status: "ACTIVE", source: "seed", contacts: { create: { userId: betaUser.id, name: "Sam Ng", position: "COO", businessEmail: "ops@beta-corp.example", isPrimary: true } }, onboarding: { create: { servicesNeeded: ["Customer Service"], agentsRequired: 2 } } } });
-  for (const t of ["CLIENT_TOS", "CLIENT_PRIVACY", "CLIENT_HIRING_TERMS", "CLIENT_NON_CIRCUMVENTION", "CLIENT_COMMUNICATION"]) {
+  for (const t of ["PLATFORM_TERMS", "PRIVACY_POLICY", "CLIENT_TOS", "CLIENT_PRIVACY", "CLIENT_HIRING_TERMS", "CLIENT_NON_CIRCUMVENTION", "CLIENT_COMMUNICATION"]) {
     const exists = await prisma.agreementAcceptance.findFirst({ where: { agreementId: agreementIds[t], userId: betaUser.id, placementId: null } });
     if (!exists) await prisma.agreementAcceptance.create({ data: { agreementId: agreementIds[t], userId: betaUser.id, bodyChecksum: checksum("seed"), ipAddress: "127.0.0.1", userAgent: "seed" } });
   }
@@ -300,8 +300,8 @@ async function main() {
   const rng = () => { rngState = (rngState + 0x6d2b79f5) | 0; let t = Math.imul(rngState ^ (rngState >>> 15), 1 | rngState); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
   const pick = <T,>(arr: readonly T[]) => arr[Math.floor(rng() * arr.length)];
   const DAY = 86_400_000;
-  const agentAgreements = ["AGENT_PLATFORM_TERMS", "AGENT_PRIVACY", "AGENT_REPRESENTATION", "AGENT_NON_CIRCUMVENTION", "AGENT_CLIENT_COMMUNICATION", "AGENT_CONFIDENTIALITY"];
-  const clientAgreements = ["CLIENT_TOS", "CLIENT_PRIVACY", "CLIENT_HIRING_TERMS", "CLIENT_NON_CIRCUMVENTION", "CLIENT_COMMUNICATION"];
+  const agentAgreements = ["PLATFORM_TERMS", "PRIVACY_POLICY", "AGENT_PLATFORM_TERMS", "AGENT_PRIVACY", "AGENT_REPRESENTATION", "AGENT_NON_CIRCUMVENTION", "AGENT_CLIENT_COMMUNICATION", "AGENT_CONFIDENTIALITY"];
+  const clientAgreements = ["PLATFORM_TERMS", "PRIVACY_POLICY", "CLIENT_TOS", "CLIENT_PRIVACY", "CLIENT_HIRING_TERMS", "CLIENT_NON_CIRCUMVENTION", "CLIENT_COMMUNICATION"];
   const accept = async (userId: string, types: string[]) => {
     for (const t of types) {
       const exists = await prisma.agreementAcceptance.findFirst({ where: { agreementId: agreementIds[t], userId, placementId: null } });
@@ -372,7 +372,7 @@ async function main() {
     const role = ROLES[i % ROLES.length];
     const u = await prisma.user.upsert({ where: { email }, create: { email, roleId: roleIds.get("AGENT")!, passwordHash, emailVerifiedAt: new Date() }, update: { passwordHash } });
     await accept(u.id, agentAgreements);
-    let p = await prisma.agentProfile.findUnique({ where: { userId: u.id } });
+    let p = await prisma.agentProfile.findFirst({ where: { archivedAt: null, userId: u.id } });
     if (!p) {
       const years = 1 + Math.floor(rng() * 8);
       const level = years <= 1 ? "ENTRY" : years <= 3 ? "JUNIOR" : years <= 5 ? "MID" : years <= 7 ? "SENIOR" : "LEAD";
@@ -487,6 +487,22 @@ async function main() {
   const withRate = generated.filter((g) => g.status === "APPROVED" && ["AVAILABLE", "AVAILABLE_SOON"].includes(g.availability));
   await placementAt("Summit Insurance Group", withRate[withRate.length - 1], "Appointment Setter", "AWAITING_DEPOSIT");
   await placementAt("Harbor Health Clinics", withRate[withRate.length - 2], "Customer Service Representative", "DEPLOYMENT_PREP");
+
+  // Identity phase 1: every talent-type demo user gets a PlatformIdentity, exactly like the production backfill.
+  const withoutIdentity = await prisma.user.findMany({ where: { platformIdentity: null, OR: [{ agentProfiles: { some: {} } }, { role: { key: "APPLICANT" } }] }, select: { id: true, email: true, emailVerifiedAt: true, agentProfiles: { select: { id: true, platformIdentityId: true, privateContact: { select: { phone: true } } } } } });
+  for (const u of withoutIdentity) {
+    const rawPhone = u.agentProfiles[0]?.privateContact?.phone ?? null;
+    const phone = rawPhone ? rawPhone.replace(/[^0-9+]/g, "").replace(/^00/, "+") : null;
+    const identity = await prisma.platformIdentity.create({
+      data: {
+        userId: u.id,
+        primaryEmail: u.email.toLowerCase(),
+        verifiedAt: u.emailVerifiedAt,
+        contacts: { create: [{ kind: "EMAIL", valueNormalized: u.email.toLowerCase(), valueDisplay: u.email, source: "BACKFILL", verifiedAt: u.emailVerifiedAt }, ...(phone && phone.replace(/D/g, "").length >= 6 ? [{ kind: "PHONE" as const, valueNormalized: phone, valueDisplay: rawPhone!, source: "BACKFILL" as const }] : [])] },
+      },
+    });
+    for (const profile of u.agentProfiles) if (!profile.platformIdentityId) await prisma.agentProfile.update({ where: { id: profile.id }, data: { platformIdentityId: identity.id } });
+  }
 
   console.log("Seed complete.");
   await linkCourseCategories();

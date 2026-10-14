@@ -17,7 +17,7 @@ import { toAgencyOwnerView, toAgencyStaffView } from "@/server/views/agency.view
  */
 const optionalText = (max: number) => z.string().trim().max(max).optional().or(z.literal(""));
 
-type OwnerCandidate = { id: string; email: string; role: { key: string }; agentProfile: { id: string } | null };
+type OwnerCandidate = { id: string; email: string; role: { key: string }; agentProfiles: Array<{ id: string }> };
 
 /**
  * Shared by approval and direct creation. Runs inside the caller's transaction: creates the agency, the Owner
@@ -34,9 +34,10 @@ export async function provisionAgency(tx: Db, actor: Actor, owner: OwnerCandidat
     await userRepository.setRole(tx, owner.id, role.id);
     await audit(tx, { actor, action: "USER_ROLE_CHANGED", entityType: "User", entityId: owner.id, previousValue: { role: "APPLICANT" }, newValue: { role: "AGENCY_OWNER", agencyId: agency.id } });
   }
-  if (owner.agentProfile) {
-    const m = await agencyRepository.startMembership(tx, { agentProfileId: owner.agentProfile.id, agencyId: agency.id, approvedById: actor.userId });
-    await audit(tx, { actor, action: "AGENCY_MEMBERSHIP_STARTED", entityType: "AgencyMembership", entityId: m.id, newValue: { agentProfileId: owner.agentProfile.id, agencyId: agency.id, how: "owner" } });
+  const ownerProfile = owner.agentProfiles[0] ?? null;
+  if (ownerProfile) {
+    const m = await agencyRepository.startMembership(tx, { agentProfileId: ownerProfile.id, agencyId: agency.id, approvedById: actor.userId });
+    await audit(tx, { actor, action: "AGENCY_MEMBERSHIP_STARTED", entityType: "AgencyMembership", entityId: m.id, newValue: { agentProfileId: ownerProfile.id, agencyId: agency.id, how: "owner" } });
   }
   return agency.id;
 }

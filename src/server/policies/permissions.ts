@@ -48,6 +48,11 @@ export const PERMISSIONS = {
   // Agreements
   "agreement.manage": { group: "agreement", description: "Create and version agreements" },
   "agreement.read_acceptances": { group: "agreement", description: "Read agreement acceptance records" },
+  // Identity phase 1: platform identity, duplicate review, unified terms
+  "identity.read": { group: "identity", description: "Read platform identities and their full history (Hirewise only)" },
+  "identity.review": { group: "identity", description: "Decide duplicate flags: approve a new profile, link, or reject" },
+  "terms.manage": { group: "identity", description: "Publish versions of the unified Terms & Platform Agreement and Privacy Policy" },
+  "terms.report": { group: "identity", description: "Read and export terms acceptance status per user, role, and agency" },
   // Academy
   "course.manage": { group: "academy", description: "Create, edit, publish, and archive any course; assign coaches; link certification templates" },
   "course.create_own": { group: "academy", description: "Create and edit courses and exams the actor coaches; set the course price; submit for publishing" },
@@ -117,7 +122,7 @@ const GLOBAL_PERMISSION_KEYS = ALL_PERMISSION_KEYS.filter((k) => PERMISSIONS[k].
 const ADMIN_PERMISSIONS: PermissionKey[] = GLOBAL_PERMISSION_KEYS.filter(
   (k) =>
     // Admin gets everything except compensation (override only), system-level RBAC/settings, and direct agency creation.
-    !["compensation.read", "compensation.write", "settings.manage", "rbac.manage", "agency.create_direct"].includes(k),
+    !["compensation.read", "compensation.write", "settings.manage", "rbac.manage", "agency.create_direct", "terms.manage"].includes(k),
 );
 
 export const ROLE_PERMISSIONS: Record<RoleKey, readonly PermissionKey[]> = {
@@ -153,6 +158,7 @@ export const ROLE_PERMISSIONS: Record<RoleKey, readonly PermissionKey[]> = {
     "report.revenue",
   ],
   RECRUITER: [
+    "identity.read",
     "agency.read",
     "agent.read_public",
     "agent.read_private_contact",

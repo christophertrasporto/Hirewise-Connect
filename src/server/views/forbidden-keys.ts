@@ -36,6 +36,40 @@ export const FORBIDDEN_FOR_CLIENT = [
   "proposedBy",
   "monthlyCompensation",
   "margin",
+  // Identity phase 1: the platform identity never leaves Hirewise
+  "platformIdentity",
+  "platformIdentityId",
+  "identityContacts",
+  "idVerificationRefs",
+  "duplicateFlags",
+  "attemptedData",
+] as const;
+
+/**
+ * Keys that must never appear in anything an Agency Owner or Manager receives (Identity phase 1 starts the list;
+ * client-facing identity and commercial masking extend it in later phases).
+ */
+export const FORBIDDEN_FOR_AGENCY = [
+  "platformIdentity",
+  "platformIdentityId",
+  "identityContacts",
+  "idVerificationRefs",
+  "duplicateFlags",
+  "privateContact",
+  "fullLegalName",
+  "personalEmail",
+  "addressLine",
+  "governmentIdRefs",
+  "passwordHash",
+  "mfaSecretEnc",
+  "clientBillingRate",
+  "billingRate",
+  "agentCompensation",
+  "compensation",
+  "salesNotes",
+  "internalFeedback",
+  "reviewFeedback",
+  "businessEmail",
 ] as const;
 
 export const FORBIDDEN_FOR_AGENT = [

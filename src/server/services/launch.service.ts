@@ -14,7 +14,11 @@ import { createHash } from "node:crypto";
  * still contain LEGAL_PLACEHOLDER.
  */
 
-export const AGREEMENT_TYPES = ["CLIENT_TOS", "CLIENT_PRIVACY", "CLIENT_HIRING_TERMS", "CLIENT_NON_CIRCUMVENTION", "CLIENT_COMMUNICATION", "AGENT_PLATFORM_TERMS", "AGENT_PRIVACY", "AGENT_REPRESENTATION", "AGENT_NON_CIRCUMVENTION", "AGENT_CLIENT_COMMUNICATION", "AGENT_CONFIDENTIALITY", "PLACEMENT_SERVICE_AGREEMENT"] as const;
+/** Superseded by the unified Terms & Platform Agreement (Identity phase 1). Kept for history; never re-published. */
+export const SUPERSEDED_AGREEMENT_TYPES = ["CLIENT_TOS", "CLIENT_PRIVACY", "CLIENT_HIRING_TERMS", "CLIENT_NON_CIRCUMVENTION", "CLIENT_COMMUNICATION", "AGENT_PLATFORM_TERMS", "AGENT_PRIVACY", "AGENT_REPRESENTATION", "AGENT_NON_CIRCUMVENTION", "AGENT_CLIENT_COMMUNICATION", "AGENT_CONFIDENTIALITY", "AGENCY_NON_CIRCUMVENTION", "SUBMISSION_TERMS"] as const;
+/** Documents that must have an active, counsel-approved version before launch. */
+export const ACTIVE_REQUIRED_TYPES = ["PLATFORM_TERMS", "PRIVACY_POLICY", "PLACEMENT_SERVICE_AGREEMENT"] as const;
+export const AGREEMENT_TYPES = ["PLATFORM_TERMS", "PRIVACY_POLICY", "PLACEMENT_SERVICE_AGREEMENT", ...SUPERSEDED_AGREEMENT_TYPES] as const;
 export type AgreementTypeKey = (typeof AGREEMENT_TYPES)[number];
 
 export const agreementVersionSchema = z.object({
@@ -40,6 +44,8 @@ export async function listAgreementsForAdmin(db: PrismaClient, actor: Actor) {
     const active = versions.find((v) => v.isActive) ?? null;
     return {
       type,
+      superseded: (SUPERSEDED_AGREEMENT_TYPES as readonly string[]).includes(type),
+      unified: type === "PLATFORM_TERMS" || type === "PRIVACY_POLICY",
       requiredForRole: active?.requiredForRole ?? versions[0]?.requiredForRole ?? null,
       active: active ? { id: active.id, version: active.version, title: active.title, effectiveFrom: active.effectiveFrom, bodyMarkdown: active.bodyMarkdown, placeholder: active.bodyMarkdown.includes(PLACEHOLDER_MARK), acceptances: active._count.acceptances, checksum: active.bodyChecksum } : null,
       versions: versions.map((v) => ({ id: v.id, version: v.version, title: v.title, isActive: v.isActive, effectiveFrom: v.effectiveFrom, acceptances: v._count.acceptances, placeholder: v.bodyMarkdown.includes(PLACEHOLDER_MARK) })),
@@ -55,6 +61,8 @@ export async function listAgreementsForAdmin(db: PrismaClient, actor: Actor) {
 export async function publishAgreementVersion(db: PrismaClient, actor: Actor, raw: z.infer<typeof agreementVersionSchema>) {
   authorize(actor, "agreement.manage");
   const input = agreementVersionSchema.parse(raw);
+  if (input.type === "PLATFORM_TERMS" || input.type === "PRIVACY_POLICY") throw new Error("The unified terms are published from the Terms editor, section by section.");
+  if ((SUPERSEDED_AGREEMENT_TYPES as readonly string[]).includes(input.type)) throw new Error("This document was superseded by the Hirewise Connect Terms & Platform Agreement and can no longer be published.");
   const effectiveFrom = new Date(input.effectiveFrom);
   if (Number.isNaN(effectiveFrom.getTime())) throw new Error("Invalid effective date.");
   const body = input.bodyMarkdown.replace(/\r\n/g, "\n");
@@ -84,7 +92,7 @@ export async function launchReadiness(db: PrismaClient, actor: Actor): Promise<{
   // Legal (Q11)
   const active = await db.agreement.findMany({ where: { isActive: true }, select: { type: true, bodyMarkdown: true, version: true } });
   const placeholders = active.filter((a) => a.bodyMarkdown.includes(PLACEHOLDER_MARK)).map((a) => a.type);
-  const missing = AGREEMENT_TYPES.filter((t) => !active.some((a) => a.type === t));
+  const missing = ACTIVE_REQUIRED_TYPES.filter((t) => !active.some((a) => a.type === t));
   add({ key: "agreements", label: "Agreement text approved by counsel", status: placeholders.length || missing.length ? "fail" : "pass", detail: placeholders.length ? `${placeholders.length} active agreement(s) still contain ${PLACEHOLDER_MARK}: ${placeholders.join(", ")}` : missing.length ? `No active version for: ${missing.join(", ")}` : `All ${active.length} agreements have counsel text.`, href: "/staff/agreements" });
 
   // Environment
@@ -145,6 +153,8 @@ export const SETTING_META: Record<SettingKey, { label: string; help: string; kin
   marketplaceAccess: { label: "Marketplace access", help: "GATED: only active, agreement-accepted clients (Q2).", kind: "enum", options: ["GATED", "PUBLIC"] },
   matchWeights: { label: "Match weights", help: "Points per soft rule for requirement matching (Section 10).", kind: "json" },
   onboardingWelcomeVideo: { label: "Welcome video (onboarding)", help: "Configured under Staff → Academy → Onboarding; shown here read-only.", kind: "json" },
+  identity: { label: "Identity and duplicate detection", help: "Fresh profile on rejoining an agency, phone matching, emailing the existing address on a duplicate sign-up, continuation link validity (Identity phase 1).", kind: "json" },
+  terms: { label: "Unified terms", help: "Whether staff accounts must also accept the Terms & Platform Agreement (off by default to avoid locking out the admin on deploy).", kind: "json" },
   agencyApplications: { label: "Agency applications", help: "Re-application cooldown after a rejection (days), document limits, and the review due time (Agency A1). Nothing is hardcoded.", kind: "json" },
   retentionDays: { label: "Retention period (days)", help: "Inactive accounts are anonymised by the retention job after this many days (Q18).", kind: "number" },
   profileViewBurstPerHour: { label: "Profile-view burst threshold", help: "Views per hour by one client before a scraping flag is raised (Section 8.8).", kind: "number" },

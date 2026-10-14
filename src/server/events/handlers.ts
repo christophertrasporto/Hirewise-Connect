@@ -221,6 +221,29 @@ export const EVENT_HANDLERS: { [T in DomainEventType]: EventHandler<T> } = {
     await notifyUser(db, { userId: p.agentUserId, type: "COURSE_PAYMENT_RECORDED", title: `${p.courseTitle} is unlocked`, body: p.waived ? "Hirewise waived the course fee. You can start the course now." : "Your payment was recorded. You can start the course and take the exam.", email: { to: p.agentEmail }, dedupeKey: `CPAID:${p.enrollmentId}` });
   },
 
+  // Identity phase 1
+  DUPLICATE_FLAG_RAISED: async (db, p) => {
+    await notifyStaff(db, ["SUPER_ADMIN", "ADMIN"], { type: "DUPLICATE_FLAG_RAISED", title: `Duplicate sign-up flagged: ${p.attemptedEmail}`, body: `${p.attemptedName} tried to sign up (${p.kind.toLowerCase().replace(/_/g, " ")}) and matched an existing identity: ${p.matchReasons.join(", ")}. Review it under Identity.`, dedupeKey: `DUPFLAG:${p.flagId}` });
+    const existing = await taskRepository.findOpenByRelated(db, "REVIEW_DUPLICATE_FLAG", "DuplicateFlag", p.flagId);
+    if (!existing) await taskRepository.create(db, { type: "REVIEW_DUPLICATE_FLAG", title: `Review duplicate sign-up: ${p.attemptedEmail}`, queueRole: "ADMIN", dueAt: new Date(Date.now() + 2 * 24 * 60 * 60_000), relatedType: "DuplicateFlag", relatedId: p.flagId });
+    if (p.notifyExisting && p.matchedUserId && p.matchedEmail) {
+      await notifyUser(db, { userId: p.matchedUserId, type: "DUPLICATE_SIGNUP_ATTEMPT", title: "Someone tried to sign up with your details", body: "A new Hirewise Connect sign-up matched your email or phone number. If it was you, sign in to your existing account instead. If not, no action is needed: Hirewise is reviewing it.", email: { to: p.matchedEmail }, dedupeKey: `DUPNOTIFY:${p.flagId}` });
+    }
+  },
+  DUPLICATE_FLAG_DECIDED: async (db, p) => {
+    await taskRepository.completeByRelated(db, "REVIEW_DUPLICATE_FLAG", "DuplicateFlag", p.flagId);
+    if (p.decision === "LINKED" && p.matchedEmail) {
+      const existing = await userRepository.findByEmail(db, p.matchedEmail);
+      if (existing) await notifyUser(db, { userId: existing.id, type: "DUPLICATE_SIGNUP_LINKED", title: "Use your existing Hirewise Connect account", body: "Hirewise reviewed a recent sign-up that matched your details and linked it to this account. Sign in with this email; use \"Forgot password\" if you need a new password.", email: { to: p.matchedEmail }, dedupeKey: `DUPLINK:${p.flagId}` });
+    }
+  },
+  TERMS_VERSION_PUBLISHED: async (db, p) => {
+    if (!p.material || !p.requiresReacceptance) return;
+    const users = await userRepository.idsByRole(db, p.roles as Parameters<typeof userRepository.idsByRole>[1]);
+    for (const u of users) {
+      await notifyUser(db, { userId: u.id, type: "TERMS_UPDATED", title: `Updated: ${p.title}`, body: `Hirewise published version ${p.version}. You will be asked to accept it the next time you sign in.`, email: { to: u.email }, dedupeKey: `TERMS:${p.agreementId}:${u.id}` });
+    }
+  },
   AGENCY_APPLICATION_SUBMITTED: async (db, p) => {
     await notifyStaff(db, ["SUPER_ADMIN", "ADMIN"], { type: "AGENCY_APPLICATION_SUBMITTED", title: `${p.resubmission ? "Updated" : "New"} agency application: ${p.agencyName}`, body: `${p.applicantName} ${p.resubmission ? "resubmitted their application" : "applied to run an agency"}. Review it under Agencies → Applications.`, dedupeKey: `AGAPP:${p.applicationId}:${p.resubmission ? "re" : "new"}` });
     const existing = await taskRepository.findOpenByRelated(db, "REVIEW_AGENCY_APPLICATION", "AgencyApplication", p.applicationId);

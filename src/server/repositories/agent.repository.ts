@@ -56,6 +56,11 @@ export const agentRepository = {
     });
   },
 
+  /** Identity phase 1: link the profile to its PlatformIdentity (set once at registration or by the backfill). */
+  setIdentity(db: Db, id: string, platformIdentityId: string) {
+    return db.agentProfile.update({ where: { id }, data: { platformIdentityId }, select: { id: true } });
+  },
+
   findSelf(db: Db, agentProfileId: string) {
     return db.agentProfile.findUnique({ where: { id: agentProfileId, deletedAt: null }, include: agentSelfInclude() });
   },

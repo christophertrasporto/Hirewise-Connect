@@ -45,7 +45,7 @@ export function AuthShell({ children, aside }: { children: ReactNode; aside?: Re
 
         <p className="relative text-[13px] text-ink-400">
           Talent on Hirewise Connect is represented through Hirewise. See our{" "}
-          <Link href="/legal/non-circumvention" className="text-ink-200 underline-offset-4 hover:underline">
+          <Link href="/legal/terms" className="text-ink-200 underline-offset-4 hover:underline">
             Non-Circumvention Policy
           </Link>
           .
