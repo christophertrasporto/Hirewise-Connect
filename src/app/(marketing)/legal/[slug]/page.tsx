@@ -4,15 +4,17 @@ import { AlertTriangle } from "lucide-react";
 import { Eyebrow } from "@/components/ui/Badge";
 import { prisma } from "@/server/db/client";
 import { renderMarkdown } from "@/lib/markdown";
+import { termsForRole } from "@/server/services/terms.service";
+import { TermsDocument } from "@/components/terms/TermsDrawer";
 
 /** Public slug → the agreement type whose active version is shown. Versions are published under Staff → Agreements. */
 const AGREEMENT_BY_SLUG: Record<string, "CLIENT_TOS" | "CLIENT_PRIVACY" | "CLIENT_HIRING_TERMS" | "CLIENT_NON_CIRCUMVENTION" | "CLIENT_COMMUNICATION"> = {
-  terms: "CLIENT_TOS",
-  privacy: "CLIENT_PRIVACY",
   "hiring-terms": "CLIENT_HIRING_TERMS",
   "non-circumvention": "CLIENT_NON_CIRCUMVENTION",
   "communication-policy": "CLIENT_COMMUNICATION",
 };
+/** Identity phase 1: /legal/terms and /legal/privacy are the unified documents, rendered with the section reader. */
+const UNIFIED_BY_SLUG: Record<string, "PLATFORM_TERMS" | "PRIVACY_POLICY"> = { terms: "PLATFORM_TERMS", privacy: "PRIVACY_POLICY" };
 
 export const dynamic = "force-dynamic";
 
@@ -20,13 +22,13 @@ export const dynamic = "force-dynamic";
 // Replace with counsel-approved text before launch. Versions are stored in the Agreement table (Phase 1).
 const docs: Record<string, { title: string; audience: string; sections: string[] }> = {
   terms: {
-    title: "Terms of Service",
-    audience: "Clients and talent",
+    title: "Hirewise Connect Terms & Platform Agreement",
+    audience: "Everyone on Hirewise Connect",
     sections: ["Definitions", "Account eligibility and registration", "Platform use and prohibited conduct", "Intellectual property", "Suspension and termination", "Limitation of liability", "Governing law and disputes"],
   },
   privacy: {
-    title: "Privacy Policy",
-    audience: "Clients and talent",
+    title: "Hirewise Connect Privacy Policy",
+    audience: "Everyone on Hirewise Connect",
     sections: ["Data we collect", "How we use data", "Media recordings and profile content", "Sharing with clients and talent", "Retention and deletion", "Your rights (PH Data Privacy Act, GDPR where applicable)", "Contact"],
   },
   "hiring-terms": {
@@ -56,6 +58,30 @@ export default async function LegalPage({ params }: { params: Promise<{ slug: st
   const { slug } = await params;
   const d = docs[slug];
   if (!d) notFound();
+  const unified = UNIFIED_BY_SLUG[slug];
+  if (unified) {
+    const bundle = await termsForRole(prisma, null).catch(() => null);
+    const doc = unified === "PLATFORM_TERMS" ? bundle?.terms : bundle?.privacy;
+    if (doc) {
+      const placeholderDoc = doc.sections.some((s) => s.bodyMarkdown.includes("LEGAL_PLACEHOLDER"));
+      return (
+        <section className="container-x py-20 lg:py-28">
+          <div className="mx-auto max-w-5xl">
+            <Eyebrow>Policies · Everyone on Hirewise Connect</Eyebrow>
+            <h1 className="mt-4 text-[2.4rem] font-extrabold leading-tight">{doc.title}</h1>
+            <p className="mt-3 text-[14px] text-ink-400">One document for clients, talent, and partner agencies. Accepted with a single checkbox at sign-up; every acceptance is recorded with its version.</p>
+            {placeholderDoc && (
+              <div className="mt-6 flex items-start gap-3 rounded-2xl border border-gold-200 bg-gold-50 p-4 text-[14px] leading-relaxed text-gold-700">
+                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                <p><strong>Placeholder.</strong> Section text is being finalised by counsel. The headings show what the document covers; nothing here is final legal wording yet.</p>
+              </div>
+            )}
+            <div className="mt-8"><TermsDocument doc={doc} highlight={false} /></div>
+          </div>
+        </section>
+      );
+    }
+  }
   const type = AGREEMENT_BY_SLUG[slug];
   const active = type ? await prisma.agreement.findFirst({ where: { type, isActive: true }, orderBy: { version: "desc" } }).catch(() => null) : null;
   const placeholder = !active || active.bodyMarkdown.includes("LEGAL_PLACEHOLDER");

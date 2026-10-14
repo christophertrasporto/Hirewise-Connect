@@ -39,34 +39,39 @@ const client = () => makeActor("CLIENT", { userId: ids.clientUser, clientId: "x"
 describe("agreement versioning (Q11)", () => {
   it("lists every type, flags placeholders, and needs agreement.manage", async () => {
     const rows = await listAgreementsForAdmin(db, admin());
-    expect(rows).toHaveLength(12);
+    expect(rows).toHaveLength(16); // 2 unified + placement + 13 superseded (Identity phase 1)
     const tos = rows.find((r) => r.type === "CLIENT_TOS")!;
     expect(tos.active).toMatchObject({ version: 1, placeholder: true, acceptances: 0 });
+    expect(tos.superseded).toBe(true);
+    expect(rows.find((r) => r.type === "PLATFORM_TERMS")!.unified).toBe(true);
     expect(rows.find((r) => r.type === "AGENT_PRIVACY")!.active).toBeNull();
     await expect(listAgreementsForAdmin(db, sales())).rejects.toThrow(ForbiddenError);
   });
 
-  it("publishing a new version deactivates the old one and re-gates users; old acceptances stay attached", async () => {
-    // Client accepts v1 first.
+  it("publishing a new version deactivates the old one; superseded and unified documents are refused here; old acceptances stay attached", async () => {
+    // Client accepts the (legacy, still active in this fixture) v1 first.
     const v1 = (await agreementsFor(db, client()))[0];
     await acceptAgreement(db, client(), v1.id, { ipAddress: "1.1.1.1" });
     expect(await missingAgreementsFor(db, client())).toEqual([]);
 
-    await expect(publishAgreementVersion(db, sales(), { type: "CLIENT_TOS", title: "Terms of Service (Client)", bodyMarkdown: "x".repeat(60), effectiveFrom: "2026-10-01" })).rejects.toThrow(ForbiddenError);
-    await expect(publishAgreementVersion(db, admin(), { type: "CLIENT_TOS", title: "Terms", bodyMarkdown: "too short", effectiveFrom: "2026-10-01" })).rejects.toThrow();
-    const counsel = "# Terms of Service\n\n## 1. Definitions\n\nIn this agreement, Hirewise means Hirewise Virtual Assistance Services and Client means the company accepting these terms.\n\n## 2. Governing law\n\nThese terms are governed by the laws of the Republic of the Philippines.";
-    const r = await publishAgreementVersion(db, admin(), { type: "CLIENT_TOS", title: "Terms of Service (Client)", bodyMarkdown: counsel, effectiveFrom: "2026-10-01", changeNote: "Counsel review" });
+    const counsel = "# Placement Service Agreement\n\n## 1. Parties\n\nThis agreement is between Hirewise Virtual Assistance Services and {{companyName}}.\n\n## 2. Governing law\n\nThese terms are governed by the laws of the Republic of the Philippines.";
+    await expect(publishAgreementVersion(db, sales(), { type: "PLACEMENT_SERVICE_AGREEMENT", title: "Placement Service Agreement", bodyMarkdown: counsel, effectiveFrom: "2026-10-01" })).rejects.toThrow(ForbiddenError);
+    await expect(publishAgreementVersion(db, admin(), { type: "PLACEMENT_SERVICE_AGREEMENT", title: "Placement", bodyMarkdown: "too short", effectiveFrom: "2026-10-01" })).rejects.toThrow();
+    // Identity phase 1: the per-role documents were superseded by the unified terms, which have their own editor.
+    await expect(publishAgreementVersion(db, admin(), { type: "CLIENT_TOS", title: "Terms of Service (Client)", bodyMarkdown: counsel, effectiveFrom: "2026-10-01" })).rejects.toThrow(/superseded/);
+    await expect(publishAgreementVersion(db, admin(), { type: "PLATFORM_TERMS", title: "Terms", bodyMarkdown: counsel, effectiveFrom: "2026-10-01" })).rejects.toThrow(/Terms editor/);
+    const first = await publishAgreementVersion(db, admin(), { type: "PLACEMENT_SERVICE_AGREEMENT", title: "Placement Service Agreement", bodyMarkdown: counsel, effectiveFrom: "2026-10-01", changeNote: "Counsel review" });
+    expect(first.version).toBe(1);
+    const r = await publishAgreementVersion(db, admin(), { type: "PLACEMENT_SERVICE_AGREEMENT", title: "Placement Service Agreement", bodyMarkdown: counsel + "\n\n## 3. Deposit\n\nAs invoiced.", effectiveFrom: "2026-11-01", changeNote: "Deposit clause" });
     expect(r.version).toBe(2);
-    const rows = await db.agreement.findMany({ where: { type: "CLIENT_TOS" }, orderBy: { version: "asc" } });
+    const rows = await db.agreement.findMany({ where: { type: "PLACEMENT_SERVICE_AGREEMENT" }, orderBy: { version: "asc" } });
     expect(rows.map((x) => [x.version, x.isActive])).toEqual([[1, false], [2, true]]);
-    // The client must accept again; the v1 acceptance is still on record with its checksum.
-    const missing = await missingAgreementsFor(db, client());
-    expect(missing.map((m) => m.version)).toEqual([2]);
+    // The legacy acceptance is still on record with its checksum.
     expect(await db.agreementAcceptance.count({ where: { userId: ids.clientUser } })).toBe(1);
-    expect(await db.auditLog.count({ where: { action: "AGREEMENT_VERSION_PUBLISHED" } })).toBe(1);
+    expect(await db.auditLog.count({ where: { action: "AGREEMENT_VERSION_PUBLISHED" } })).toBe(2);
     const listed = await listAgreementsForAdmin(db, admin());
-    expect(listed.find((x) => x.type === "CLIENT_TOS")!.active).toMatchObject({ version: 2, placeholder: false });
-    expect(listed.find((x) => x.type === "CLIENT_TOS")!.versions.map((v) => v.acceptances)).toEqual([0, 1]);
+    expect(listed.find((x) => x.type === "PLACEMENT_SERVICE_AGREEMENT")!.active).toMatchObject({ version: 2, placeholder: false });
+    expect(listed.find((x) => x.type === "PLACEMENT_SERVICE_AGREEMENT")!.versions.map((v) => v.version)).toEqual([2, 1]);
   });
 });
 

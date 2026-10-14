@@ -29,7 +29,9 @@ export async function resolveActor(db: Db, userId: string): Promise<Actor> {
   const actor: Actor = { userId: u.id, role, permissions: resolvePermissions(role, overrides) };
 
   if (role === "CLIENT" && u.clientContact) actor.clientId = u.clientContact.clientId;
-  if (role === "AGENT" && u.agentProfile) actor.agentProfileId = u.agentProfile.id;
+  const profile = u.agentProfiles[0];
+  if (role === "AGENT" && profile) actor.agentProfileId = profile.id;
+  if (u.platformIdentity) actor.identityId = u.platformIdentity.id;
   if (role === "SALES") actor.salesAssignedClientIds = u.managedClients.map((c) => c.id);
   if (role === "COACH") actor.coachCourseIds = [...new Set([...u.coursesOwned.map((c) => c.id), ...u.courseCoachings.map((c) => c.courseId)])];
 

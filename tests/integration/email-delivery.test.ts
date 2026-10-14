@@ -1,4 +1,5 @@
 import { beforeAll, afterAll, afterEach, beforeEach, describe, expect, it } from "vitest";
+import { seedTerms } from "../setup/terms";
 import { testDb, resetDb } from "../setup/db";
 import { requestEmailVerification, latestVerificationDelivery, verifyEmail, VERIFICATION_RESEND_COOLDOWN_SECONDS } from "@/server/services/auth.service";
 import { registerAgent } from "@/server/services/agent.service";
@@ -39,6 +40,7 @@ beforeAll(async () => {
   resetEnvCache();
   await resetDb(db);
   for (const key of Object.keys(ROLE_NAMES) as RoleKey[]) await db.role.create({ data: { key, name: ROLE_NAMES[key].name } });
+  await seedTerms(db);
   const role = await db.role.findUniqueOrThrow({ where: { key: "AGENT" } });
   ids.user = (await db.user.create({ data: { email: ids.email, roleId: role.id } })).id;
 });
@@ -134,7 +136,7 @@ describe("verification email delivery (sign-up flow steps 3 to 6)", () => {
 
   it("registration survives a broken provider: account and session are created and the gate page can show the reason", async () => {
     setEmailChannelForTests(new FailingChannel(Object.assign(new Error("connect ECONNREFUSED"), { code: "ECONNREFUSED" })));
-    const s = await registerAgent(db, { email: "new.talent@t.example", password: "Str0ngPassw0rd!", displayName: "New T.", fullName: "New Talent", phone: "", locationCity: "Cebu", locationCountry: "Philippines", timezone: "Asia/Manila", primaryRole: "VA", yearsExperience: 1 } as never, meta);
+    const s = await registerAgent(db, { termsAccepted: true, email: "new.talent@t.example", password: "Str0ngPassw0rd!", displayName: "New T.", fullName: "New Talent", phone: "", locationCity: "Cebu", locationCountry: "Philippines", timezone: "Asia/Manila", primaryRole: "VA", yearsExperience: 1 } as never, meta);
     expect(s.token).toBeTruthy();
     const u = await db.user.findUniqueOrThrow({ where: { email: "new.talent@t.example" } });
     expect(u.emailVerifiedAt).toBeNull();

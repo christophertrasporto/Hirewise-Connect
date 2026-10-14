@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { Actor } from "@/server/auth/actor";
-import type { PrismaClient } from "@/server/db/types";
+import type { Db, PrismaClient } from "@/server/db/types";
 import { authorize } from "@/server/policies/authorize";
 import { settingRepository } from "@/server/repositories/setting.repository";
 import { audit } from "@/server/audit/audit";
@@ -31,6 +31,25 @@ export const SETTING_SCHEMAS = {
       reviewDueDays: z.number().int().min(1).max(60).default(3),
     })
     .default(() => ({ reapplyCooldownDays: 30, maxDocuments: 5, maxDocumentBytes: 20 * 1024 * 1024, reviewDueDays: 3 })),
+  /** Identity phase 1: duplicate detection and rejoin behaviour (decision a). */
+  identity: z
+    .object({
+      /** Joining another agency later (or the same one again) creates a fresh talent profile. */
+      rejoinCreatesFreshProfile: z.boolean().default(true),
+      duplicateCheckPhone: z.boolean().default(true),
+      /** Email the existing address when a sign-up matches it. */
+      notifyExistingOnDuplicate: z.boolean().default(true),
+      /** Hours a sign-up continuation link stays valid after Admin approves a flagged sign-up. */
+      continuationLinkHours: z.number().int().min(1).max(720).default(72),
+    })
+    .default(() => ({ rejoinCreatesFreshProfile: true, duplicateCheckPhone: true, notifyExistingOnDuplicate: true, continuationLinkHours: 72 })),
+  /** Identity phase 1: unified terms behaviour (decision b). */
+  terms: z
+    .object({
+      /** Staff accounts are not gated by the terms unless this is on. */
+      gateStaff: z.boolean().default(false),
+    })
+    .default(() => ({ gateStaff: false })),
   /** Section 8.8 thresholds. */
   profileViewBurstPerHour: z.number().int().positive().default(60),
   shortlistChurnPerDay: z.number().int().positive().default(12),
@@ -60,7 +79,7 @@ export const SETTING_SCHEMAS = {
 export type SettingKey = keyof typeof SETTING_SCHEMAS;
 export type SettingValue<K extends SettingKey> = z.infer<(typeof SETTING_SCHEMAS)[K]>;
 
-export async function getSetting<K extends SettingKey>(db: PrismaClient, key: K): Promise<SettingValue<K>> {
+export async function getSetting<K extends SettingKey>(db: Db | PrismaClient, key: K): Promise<SettingValue<K>> {
   const row = await settingRepository.get(db, key);
   const schema = SETTING_SCHEMAS[key];
   return schema.parse(row ? row.value : undefined) as SettingValue<K>;

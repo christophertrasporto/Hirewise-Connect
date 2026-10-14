@@ -608,9 +608,10 @@ export async function listPendingCoursePayments(db: PrismaClient, actor: Actor) 
 export async function syncExternalCompletion(db: PrismaClient, p: { externalCourseId: string; agentEmail: string; examScore: number | null; externalRef: string }) {
   const course = await db.academyCourse.findUnique({ where: { externalId: p.externalCourseId }, include: { coaches: true } });
   if (!course) throw new NotFoundError("Unknown external course");
-  const user = await db.user.findUnique({ where: { email: p.agentEmail }, include: { agentProfile: { select: { id: true, displayName: true } } } });
-  if (!user?.agentProfile) throw new NotFoundError("Unknown agent");
-  const profileId = user.agentProfile.id;
+  const user = await db.user.findUnique({ where: { email: p.agentEmail }, include: { agentProfiles: { where: { archivedAt: null }, take: 1, select: { id: true, displayName: true } } } });
+  const activeProfile = user?.agentProfiles[0];
+  if (!user || !activeProfile) throw new NotFoundError("Unknown agent");
+  const profileId = activeProfile.id;
   const system: Actor = { userId: "system", role: "SUPER_ADMIN", permissions: new Set() };
   await db.$transaction(async (tx) => {
     let e = await academyRepository.findEnrollment(tx, course.id, profileId);
@@ -622,7 +623,7 @@ export async function syncExternalCompletion(db: PrismaClient, p: { externalCour
     await academyRepository.createCompletion(tx, { enrollmentId: e.id, examScore: p.examScore, source: "ACADEMY_SYNC", externalRef: p.externalRef });
     await academyRepository.setEnrollmentStatus(tx, e.id, "COMPLETED");
     await audit(tx, { actor: system, action: "COURSE_COMPLETED", entityType: "CourseEnrollment", entityId: e.id, newValue: { source: "ACADEMY_SYNC", externalRef: p.externalRef, examScore: p.examScore } });
-    await publishEvent(tx, "COURSE_COMPLETED", { courseId: course.id, title: course.title, agentProfileId: profileId, agentUserId: user.id, agentEmail: user.email, displayName: user.agentProfile!.displayName, examScore: p.examScore, coachUserIds: [course.ownerCoachUserId, ...course.coaches.map((c) => c.coachUserId)], coachReviewRequired: course.requiresCoachReview });
+    await publishEvent(tx, "COURSE_COMPLETED", { courseId: course.id, title: course.title, agentProfileId: profileId, agentUserId: user.id, agentEmail: user.email, displayName: activeProfile.displayName, examScore: p.examScore, coachUserIds: [course.ownerCoachUserId, ...course.coaches.map((c) => c.coachUserId)], coachReviewRequired: course.requiresCoachReview });
     await evaluateCertification(tx, system, { agentProfileId: profileId, courseId: course.id, templateId: course.certificationTemplateId, examScore: p.examScore, assessment: null, completed: true });
   });
 }

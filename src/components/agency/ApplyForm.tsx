@@ -6,8 +6,8 @@ import { CheckCircle2, FileText, Trash2, Upload } from "lucide-react";
 import { submitApplicationAction, updateApplicationAction, withdrawApplicationAction, requestApplicationUploadAction, attachApplicationDocumentAction, removeApplicationDocumentAction } from "@/app/(app)/agency-actions";
 import { idle, type ActionResult } from "@/server/http/action-result";
 import { Checkbox, Field, FormAlert, Input, Select, SubmitButton, Textarea } from "@/components/ui/Form";
-import { renderMarkdown } from "@/lib/markdown";
 import { COUNTRIES } from "@/lib/options";
+import { TermsCheckbox, type TermsBundleProp } from "@/components/terms/TermsDrawer";
 import { fmtBytes } from "@/components/academy/lesson-meta";
 
 export const AGENCY_SERVICES = ["Cold Calling", "Appointment Setting", "Sales", "Customer Service", "Virtual Assistance", "Lead Generation", "Technical Support", "Back Office", "Recruitment", "Other"] as const;
@@ -15,14 +15,13 @@ export const AGENCY_SERVICES = ["Cold Calling", "Appointment Setting", "Sales", 
 export type ApplyFormValues = { id?: string; status?: string; applicantFullName: string; applicantPhone: string | null; proposedAgencyName: string; businessRegistration: string | null; country: string; city: string | null; website: string | null; socialLinks: string[]; teamSize: number; yearsExperience: number; services: string[]; description: string; applicantVisibleMessage?: string | null; documents?: Array<{ id: string; name: string }> };
 
 /** The application form: creates a new application, or edits one that is SUBMITTED or NEEDS_MORE_INFO. */
-export function ApplyForm({ values, agreement, defaultEmail }: { values?: ApplyFormValues; agreement: { id: string; title: string; version: number; bodyMarkdown: string }; defaultEmail: string }) {
+export function ApplyForm({ values, agreement, defaultEmail }: { values?: ApplyFormValues; agreement: { id: string; title: string; version: number; bodyMarkdown: string; bundle: TermsBundleProp }; defaultEmail: string }) {
   const router = useRouter();
   const editing = !!values?.id;
   const [createState, createAction] = useActionState(submitApplicationAction, idle as ActionResult<{ id: string }>);
   const [updateState, updateAction] = useActionState(updateApplicationAction, idle);
   const state = editing ? updateState : createState;
   const fe = state.fieldErrors ?? {};
-  const [showAgreement, setShowAgreement] = useState(false);
   useEffect(() => {
     if (state.ok) router.refresh();
   }, [state.ok, router]);
@@ -71,12 +70,10 @@ export function ApplyForm({ values, agreement, defaultEmail }: { values?: ApplyF
       </section>
 
       {!editing && (
-        <section className="space-y-3 rounded-2xl border border-ink-100 bg-ink-50/60 p-4">
+        <section className="space-y-2">
           <p className="text-[14px] font-semibold text-ink-900">{agreement.title} <span className="font-normal text-ink-400">· version {agreement.version}</span></p>
-          <button type="button" onClick={() => setShowAgreement((v) => !v)} className="text-[13px] font-semibold text-brand-600 hover:text-brand-700">{showAgreement ? "Hide the policy" : "Read the policy"}</button>
-          {showAgreement && <div className="max-h-[320px] overflow-y-auto rounded-xl border border-ink-100 bg-white p-4 text-[13.5px] leading-relaxed text-ink-700">{renderMarkdown(agreement.bodyMarkdown)}</div>}
-          <Checkbox name="agreementAccepted" label={<span>I have read and accept the <span className="font-semibold">{agreement.title}</span>. Clients and opportunities introduced through Hirewise Connect are engaged only through Hirewise.</span>} />
-          {fe.agreementAccepted && <p className="text-[12.5px] text-red-600">{fe.agreementAccepted}</p>}
+          <p className="text-[13px] text-ink-500">Applying records your acceptance again in the application context. Clients and opportunities introduced through Hirewise Connect are engaged only through Hirewise.</p>
+          <TermsCheckbox bundle={agreement.bundle} name="agreementAccepted" error={fe.agreementAccepted} />
         </section>
       )}
 

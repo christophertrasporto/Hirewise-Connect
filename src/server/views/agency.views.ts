@@ -62,7 +62,7 @@ export function toApplicationStaffView(a: ApplicationRecord, documents: Applicat
     id: a.id,
     status: a.status,
     ...formFields(a),
-    applicant: { userId: a.applicant.id, email: a.applicant.email, role: a.applicant.role.key, hasAgentProfile: !!a.applicant.agentProfile },
+    applicant: { userId: a.applicant.id, email: a.applicant.email, role: a.applicant.role.key, hasAgentProfile: !!a.applicant.agentProfiles[0] },
     reviewer: a.reviewer ? { userId: a.reviewer.id, label: a.reviewer.email.split("@")[0] } : null,
     reviewNotes: a.reviewNotes,
     applicantVisibleMessage: a.applicantVisibleMessage,

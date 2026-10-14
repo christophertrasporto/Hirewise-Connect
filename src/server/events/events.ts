@@ -41,6 +41,10 @@ export type DomainEventMap = {
   // Agency marketplace (A1)
   AGENCY_APPLICATION_SUBMITTED: { applicationId: string; applicantUserId: string; applicantName: string; agencyName: string; resubmission: boolean };
   AGENCY_APPLICATION_DECIDED: { applicationId: string; applicantUserId: string; applicantEmail: string; agencyName: string; status: "NEEDS_MORE_INFO" | "APPROVED" | "REJECTED"; message: string | null; agencyId: string | null };
+  // Identity phase 1
+  DUPLICATE_FLAG_RAISED: { flagId: string; kind: string; attemptedEmail: string; attemptedName: string; matchReasons: string[]; matchedUserId: string | null; matchedEmail: string | null; notifyExisting: boolean };
+  DUPLICATE_FLAG_DECIDED: { flagId: string; decision: "APPROVED_NEW_PROFILE" | "LINKED" | "REJECTED"; attemptedEmail: string; attemptedName: string; continuationUrl: string | null; matchedEmail: string | null };
+  TERMS_VERSION_PUBLISHED: { agreementId: string; type: "PLATFORM_TERMS" | "PRIVACY_POLICY"; version: number; title: string; material: boolean; requiresReacceptance: boolean; roles: string[] };
   AGENCY_STATUS_CHANGED: { agencyId: string; agencyName: string; status: "ACTIVE" | "SUSPENDED" | "INACTIVE"; reason: string; ownerUserId: string; ownerEmail: string };
   // Course Builder phase 7
   ASSIGNMENT_SUBMITTED: { submissionId: string; lessonId: string; lessonTitle: string; courseId: string; courseTitle: string; agentProfileId: string; displayName: string; coachUserIds: string[]; late: boolean; resubmission: boolean };

@@ -21,7 +21,7 @@ export const incidentSchema = z.object({
   relatedId: z.string().trim().max(60).optional().or(z.literal("")),
 });
 
-const incidentInclude = { subjectUser: { select: { id: true, email: true, status: true, role: { select: { key: true } }, agentProfile: { select: { id: true, displayName: true } }, clientContact: { select: { clientId: true, client: { select: { companyName: true } } } } } }, reportedBy: { select: { email: true } }, resolvedBy: { select: { email: true } } } as const;
+const incidentInclude = { subjectUser: { select: { id: true, email: true, status: true, role: { select: { key: true } }, agentProfiles: { where: { archivedAt: null }, take: 1, select: { id: true, displayName: true } }, clientContact: { select: { clientId: true, client: { select: { companyName: true } } } } } }, reportedBy: { select: { email: true } }, resolvedBy: { select: { email: true } } } as const;
 
 function canSee(actor: Actor, inc: { reportedById: string }) {
   if (actor.permissions.has("incident.read")) return true;
@@ -109,13 +109,14 @@ export async function suspendUser(db: PrismaClient, actor: Actor, userId: string
   authorize(actor, "user.manage");
   if (!reason.trim()) throw new Error("A reason is required to suspend.");
   if (userId === actor.userId) throw new Error("You cannot suspend yourself.");
-  const u = await db.user.findUnique({ where: { id: userId }, include: { agentProfile: { select: { id: true, status: true } }, role: { select: { key: true } } } });
+  const u = await db.user.findUnique({ where: { id: userId }, include: { agentProfiles: { where: { archivedAt: null }, take: 1, select: { id: true, status: true } }, role: { select: { key: true } } } });
   if (!u) throw new NotFoundError();
   if (u.role.key === "SUPER_ADMIN") throw new ForbiddenError("Super Admin accounts cannot be suspended here");
   await db.$transaction(async (tx) => {
     await tx.user.update({ where: { id: userId }, data: { status: "SUSPENDED" } });
     await tx.session.deleteMany({ where: { userId } });
-    if (u.agentProfile && u.agentProfile.status === "APPROVED") await tx.agentProfile.update({ where: { id: u.agentProfile.id }, data: { status: "SUSPENDED", suspendedAt: new Date() } });
+    const profile = u.agentProfiles[0];
+    if (profile && profile.status === "APPROVED") await tx.agentProfile.update({ where: { id: profile.id }, data: { status: "SUSPENDED", suspendedAt: new Date() } });
     await audit(tx, { actor, action: "USER_SUSPENDED", entityType: "User", entityId: userId, previousValue: { status: u.status }, newValue: { status: "SUSPENDED", incidentId: incidentId ?? null }, reason });
     await publishEvent(tx, "USER_SUSPENDED", { userId, email: u.email, reason });
   });
@@ -124,16 +125,17 @@ export async function suspendUser(db: PrismaClient, actor: Actor, userId: string
 export async function reinstateUser(db: PrismaClient, actor: Actor, userId: string, reason: string) {
   authorize(actor, "user.manage");
   if (!reason.trim()) throw new Error("A reason is required.");
-  const u = await db.user.findUnique({ where: { id: userId }, include: { agentProfile: { select: { id: true, status: true } } } });
+  const u = await db.user.findUnique({ where: { id: userId }, include: { agentProfiles: { where: { archivedAt: null }, take: 1, select: { id: true, status: true } } } });
   if (!u || u.status !== "SUSPENDED") throw new NotFoundError();
   await db.$transaction(async (tx) => {
     await tx.user.update({ where: { id: userId }, data: { status: "ACTIVE" } });
-    if (u.agentProfile?.status === "SUSPENDED") await tx.agentProfile.update({ where: { id: u.agentProfile.id }, data: { status: "APPROVED", suspendedAt: null } });
+    const profile = u.agentProfiles[0];
+    if (profile?.status === "SUSPENDED") await tx.agentProfile.update({ where: { id: profile.id }, data: { status: "APPROVED", suspendedAt: null } });
     await audit(tx, { actor, action: "USER_REINSTATED", entityType: "User", entityId: userId, previousValue: { status: "SUSPENDED" }, newValue: { status: "ACTIVE" }, reason });
   });
 }
 
-type Row = { id: string; type: string; severity: string; status: string; description: string; relatedType: string | null; relatedId: string | null; resolution: string | null; createdAt: Date; resolvedAt: Date | null; evidenceDocumentIds: string[]; subjectUser: { id: string; email: string; status: string; role: { key: string }; agentProfile: { id: string; displayName: string } | null; clientContact: { clientId: string; client: { companyName: string } } | null }; reportedBy: { email: string }; resolvedBy: { email: string } | null };
+type Row = { id: string; type: string; severity: string; status: string; description: string; relatedType: string | null; relatedId: string | null; resolution: string | null; createdAt: Date; resolvedAt: Date | null; evidenceDocumentIds: string[]; subjectUser: { id: string; email: string; status: string; role: { key: string }; agentProfiles: Array<{ id: string; displayName: string }>; clientContact: { clientId: string; client: { companyName: string } } | null }; reportedBy: { email: string }; resolvedBy: { email: string } | null };
 
 function view(i: Row) {
   return {
@@ -148,7 +150,7 @@ function view(i: Row) {
     createdAt: i.createdAt,
     resolvedAt: i.resolvedAt,
     evidenceCount: i.evidenceDocumentIds.length,
-    subject: { userId: i.subjectUser.id, email: i.subjectUser.email, status: i.subjectUser.status, role: i.subjectUser.role.key, label: i.subjectUser.agentProfile?.displayName ?? i.subjectUser.clientContact?.client.companyName ?? i.subjectUser.email, agentProfileId: i.subjectUser.agentProfile?.id ?? null, clientId: i.subjectUser.clientContact?.clientId ?? null },
+    subject: { userId: i.subjectUser.id, email: i.subjectUser.email, status: i.subjectUser.status, role: i.subjectUser.role.key, label: i.subjectUser.agentProfiles[0]?.displayName ?? i.subjectUser.clientContact?.client.companyName ?? i.subjectUser.email, agentProfileId: i.subjectUser.agentProfiles[0]?.id ?? null, clientId: i.subjectUser.clientContact?.clientId ?? null },
     reportedBy: i.reportedBy.email,
     resolvedBy: i.resolvedBy?.email ?? null,
   };

@@ -162,7 +162,7 @@ export async function onboardingFor(db: PrismaClient, actor: Actor, opts: { live
   const required = videoRequiredFor(cfg, u.createdAt);
   const progress = required ? await onboardingRepository.progress(db, u.id, cfg.videoKey) : null;
   const emailVerified = !!u.emailVerifiedAt;
-  const profileDone = profileComplete(u.agentProfile, opts.liveProfilePercent);
+  const profileDone = profileComplete((u.agentProfiles[0] ?? null), opts.liveProfilePercent);
   const videoDone = !!progress?.completedAt;
   const steps: OnboardingStep[] = [
     { key: "email", label: "Verify your email", done: emailVerified, href: "/verify-email", detail: emailVerified ? "Verified" : "Open the link we emailed you", required: true },
@@ -261,12 +261,12 @@ export async function onboardingAdminList(db: PrismaClient, actor: Actor, q?: st
     const row: OnboardingAdminRow = {
       userId: u.id,
       email: u.email,
-      displayName: u.agentProfile?.displayName ?? null,
-      agentProfileId: u.agentProfile?.id ?? null,
+      displayName: (u.agentProfiles[0] ?? null)?.displayName ?? null,
+      agentProfileId: (u.agentProfiles[0] ?? null)?.id ?? null,
       createdAt: u.createdAt,
       emailVerified: !!u.emailVerifiedAt,
-      profileDone: profileComplete(u.agentProfile),
-      profileStatus: u.agentProfile?.status ?? null,
+      profileDone: profileComplete((u.agentProfiles[0] ?? null)),
+      profileStatus: (u.agentProfiles[0] ?? null)?.status ?? null,
       videoRequired,
       videoPercent: p?.percent ?? 0,
       videoCompletedAt: p?.completedAt ?? null,

@@ -8,6 +8,7 @@ import { readSessionCookie } from "./cookies";
 import { MFA_REQUIRED_ROLES } from "@/server/policies/permissions";
 import { userRepository } from "@/server/repositories/user.repository";
 import { missingAgreementsFor } from "@/server/services/agreement.service";
+import { termsStatusFor } from "@/server/services/terms.service";
 
 export type CurrentAuth = {
   actor: Actor;
@@ -18,6 +19,8 @@ export type CurrentAuth = {
   mfaEnrolled: boolean;
   mfaPassed: boolean;
   missingAgreements: number;
+  /** Identity phase 1: the unified terms (or a material new version) still need the single-checkbox acceptance. */
+  termsRequired: boolean;
 };
 
 /**
@@ -37,7 +40,7 @@ export const getCurrentAuth = cache(async (): Promise<CurrentAuth | null> => {
   }
   const flags = await userRepository.authFlags(prisma, session.userId);
   const mfaRequired = MFA_REQUIRED_ROLES.includes(actor.role);
-  const missing = await missingAgreementsFor(prisma, actor);
+  const [missing, terms] = await Promise.all([missingAgreementsFor(prisma, actor), termsStatusFor(prisma, actor)]);
   return {
     actor,
     sessionId: session.id,
@@ -46,7 +49,8 @@ export const getCurrentAuth = cache(async (): Promise<CurrentAuth | null> => {
     mfaRequired,
     mfaEnrolled: !!flags?.mfaEnabled,
     mfaPassed: session.mfaPassed,
-    missingAgreements: missing.length,
+    missingAgreements: missing.length + (terms.required ? 1 : 0),
+    termsRequired: terms.required,
   };
 });
 

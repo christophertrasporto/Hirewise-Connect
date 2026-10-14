@@ -154,8 +154,8 @@ describe("incidents and suspension", () => {
     await expect(suspendUser(db, sales(), ids.agentUser, "x")).rejects.toThrow(ForbiddenError);
     await expect(suspendUser(db, admin(), ids.agentUser, " ")).rejects.toThrow(/reason/);
     await suspendUser(db, admin(), ids.agentUser, "Off-platform contact confirmed", incidentId);
-    const u = await db.user.findUniqueOrThrow({ where: { id: ids.agentUser }, include: { agentProfile: true, sessions: true } });
-    expect([u.status, u.agentProfile?.status, u.sessions.length]).toEqual(["SUSPENDED", "SUSPENDED", 0]);
+    const u = await db.user.findUniqueOrThrow({ where: { id: ids.agentUser }, include: { agentProfiles: true, sessions: true } });
+    expect([u.status, u.agentProfiles[0]?.status, u.sessions.length]).toEqual(["SUSPENDED", "SUSPENDED", 0]);
     await expect(getCandidateForClient(db, clientA(), ids.agent)).rejects.toThrow(NotFoundError);
     expect((await incidentsForUser(db, admin(), ids.agentUser)).length).toBe(1);
     await runWorkerOnce(db);
@@ -265,12 +265,12 @@ describe("export, analytics, anonymisation, retention", () => {
     await expect(anonymiseUser(db, admin(), ids.agentUser, "Deletion request #1")).rejects.toThrow(/open placement/);
     await expect(anonymiseUser(db, sales(), ids.agent2User, "x")).rejects.toThrow(ForbiddenError);
     await anonymiseUser(db, admin(), ids.agent2User, "Deletion request #2");
-    const u = await db.user.findUniqueOrThrow({ where: { id: ids.agent2User }, include: { agentProfile: { include: { privateContact: true } } } });
+    const u = await db.user.findUniqueOrThrow({ where: { id: ids.agent2User }, include: { agentProfiles: { include: { privateContact: true } } } });
     expect(u.email).toMatch(/@anonymised\.invalid$/);
     expect(u.status).toBe("DEACTIVATED");
-    expect(u.agentProfile?.displayName).toBe("Former talent");
-    expect(u.agentProfile?.privateContact?.phone).toBeNull();
-    expect(u.agentProfile?.privateContact?.fullLegalName).toBe("Anonymised");
+    expect(u.agentProfiles[0]?.displayName).toBe("Former talent");
+    expect(u.agentProfiles[0]?.privateContact?.phone).toBeNull();
+    expect(u.agentProfiles[0]?.privateContact?.fullLegalName).toBe("Anonymised");
     expect(await db.auditLog.count({ where: { action: "USER_ANONYMISED" } })).toBe(1);
 
     const stale = await db.user.create({ data: { email: "old@t.example", roleId: (await db.role.findUniqueOrThrow({ where: { key: "AGENT" } })).id, status: "DEACTIVATED" } });

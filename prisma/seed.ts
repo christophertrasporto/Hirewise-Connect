@@ -103,7 +103,7 @@ async function main() {
     create: { email: "maria@talent.example", roleId: roleIds.get("AGENT")!, passwordHash, emailVerifiedAt: new Date() },
     update: { passwordHash, emailVerifiedAt: new Date() },
   });
-  let agent = await prisma.agentProfile.findUnique({ where: { userId: agentUser.id } });
+  let agent = await prisma.agentProfile.findFirst({ where: { archivedAt: null, userId: agentUser.id } });
   if (!agent) {
     agent = await prisma.agentProfile.create({
       data: {
@@ -152,7 +152,7 @@ async function main() {
       const exists = await prisma.agreementAcceptance.findFirst({ where: { agreementId: agreementIds[t], userId: u.id, placementId: null } });
       if (!exists) await prisma.agreementAcceptance.create({ data: { agreementId: agreementIds[t], userId: u.id, bodyChecksum: checksum("seed"), ipAddress: "127.0.0.1", userAgent: "seed" } });
     }
-    const existing = await prisma.agentProfile.findUnique({ where: { userId: u.id } });
+    const existing = await prisma.agentProfile.findFirst({ where: { archivedAt: null, userId: u.id } });
     if (existing) continue;
     await prisma.agentProfile.create({
       data: {
@@ -372,7 +372,7 @@ async function main() {
     const role = ROLES[i % ROLES.length];
     const u = await prisma.user.upsert({ where: { email }, create: { email, roleId: roleIds.get("AGENT")!, passwordHash, emailVerifiedAt: new Date() }, update: { passwordHash } });
     await accept(u.id, agentAgreements);
-    let p = await prisma.agentProfile.findUnique({ where: { userId: u.id } });
+    let p = await prisma.agentProfile.findFirst({ where: { archivedAt: null, userId: u.id } });
     if (!p) {
       const years = 1 + Math.floor(rng() * 8);
       const level = years <= 1 ? "ENTRY" : years <= 3 ? "JUNIOR" : years <= 5 ? "MID" : years <= 7 ? "SENIOR" : "LEAD";

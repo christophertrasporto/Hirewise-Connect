@@ -57,6 +57,10 @@ enum RequirementStatus {
 }
 
 enum AgentProfileStatus {
+  /// Identity phase 1: membership ended; the profile is read-only until archived.
+  FORMER_AGENCY_AGENT
+  /// Identity phase 1: archived; history only. A new profile may be active for the same identity.
+  ARCHIVED
   DRAFT
   SUBMITTED
   UNDER_REVIEW
@@ -155,6 +159,10 @@ enum DocumentVisibility {
 }
 
 enum AgreementType {
+  /// The one unified "Hirewise Connect Terms & Platform Agreement" (Identity phase 1).
+  PLATFORM_TERMS
+  /// Privacy Policy, accepted with the same checkbox (combined) or acknowledged separately.
+  PRIVACY_POLICY
   /// Accepted when applying to run an agency (Agency A1).
   AGENCY_NON_CIRCUMVENTION
   /// Accepted on every candidate submission (Agency A5).
@@ -184,6 +192,8 @@ enum AuthTokenKind {
   MAGIC_LINK
   EMAIL_VERIFY
   PASSWORD_RESET
+  /// Lets a sign-up that a duplicate flag blocked continue after Admin approval (Identity phase 1).
+  SIGNUP_CONTINUATION
 }
 
 enum TaskStatus {
@@ -383,34 +393,36 @@ model User {
   incidentsReported         Incident[]          @relation("IncidentReporter")
   incidentsResolved         Incident[]          @relation("IncidentResolver")
 
-  permissionOverrides     UserPermissionOverride[]  @relation("OverrideSubject")
+  permissionOverrides     UserPermissionOverride[]   @relation("OverrideSubject")
   onboardingVideoProgress OnboardingVideoProgress[]
-  grantedOverrides        UserPermissionOverride[]  @relation("OverrideGrantor")
+  grantedOverrides        UserPermissionOverride[]   @relation("OverrideGrantor")
   clientContact           ClientContact?
-  agentProfile            AgentProfile?
+  agentProfiles           AgentProfile[]
+  platformIdentity        PlatformIdentity?
+  duplicateFlagsReviewed  DuplicateFlag[]            @relation("DuplicateFlagReviewer")
   agreementAcceptances    AgreementAcceptance[]
   notifications           Notification[]
   notificationPrefs       NotificationPreference[]
-  managedClients          Client[]                  @relation("AccountManager")
-  assignedRequirements    ClientRequirement[]       @relation("RequirementSales")
-  reservationsMade        Reservation[]             @relation("ReservedBy")
-  availabilityChanges     AgentAvailability[]       @relation("AvailabilitySetBy")
-  documentsUploaded       Document[]                @relation("DocumentUploader")
-  profilesApproved        AgentProfile[]            @relation("ProfileApprover")
-  videosReviewed          Video[]                   @relation("VideoReviewer")
-  recordingsReviewed      Recording[]               @relation("RecordingReviewer")
-  portfoliosReviewed      Portfolio[]               @relation("PortfolioReviewer")
-  settingsUpdated         Setting[]                 @relation("SettingUpdater")
+  managedClients          Client[]                   @relation("AccountManager")
+  assignedRequirements    ClientRequirement[]        @relation("RequirementSales")
+  reservationsMade        Reservation[]              @relation("ReservedBy")
+  availabilityChanges     AgentAvailability[]        @relation("AvailabilitySetBy")
+  documentsUploaded       Document[]                 @relation("DocumentUploader")
+  profilesApproved        AgentProfile[]             @relation("ProfileApprover")
+  videosReviewed          Video[]                    @relation("VideoReviewer")
+  recordingsReviewed      Recording[]                @relation("RecordingReviewer")
+  portfoliosReviewed      Portfolio[]                @relation("PortfolioReviewer")
+  settingsUpdated         Setting[]                  @relation("SettingUpdater")
+  // Agency marketplace (A1)
+  agencyApplications      AgencyApplication[]        @relation("Applicant")
+  reviewedApplications    AgencyApplication[]        @relation("ApplicationReviewer")
+  applicationHistory      AgencyApplicationHistory[] @relation("ApplicationHistoryActor")
+  ownedAgencies           Agency[]                   @relation("AgencyOwner")
+  agencyUsers             AgencyUser[]
+  membershipApprovals     AgencyMembership[]         @relation("MembershipApprover")
 
   @@index([roleId])
   @@index([status])
-  // Agency marketplace (A1)
-  agencyApplications    AgencyApplication[]        @relation("Applicant")
-  reviewedApplications  AgencyApplication[]        @relation("ApplicationReviewer")
-  applicationHistory    AgencyApplicationHistory[] @relation("ApplicationHistoryActor")
-  ownedAgencies         Agency[]                   @relation("AgencyOwner")
-  agencyUsers           AgencyUser[]
-  membershipApprovals   AgencyMembership[]         @relation("MembershipApprover")
 }
 
 model Role {
@@ -560,10 +572,16 @@ model ClientRequirement {
 // 4.3 Agents
 // ---------------------------------------------------------------------------
 
+/// The spec's TalentProfile (Identity phase 1): one non-archived profile per user and per PlatformIdentity
+/// (partial unique indexes in the migration). Archived profiles keep history for Hirewise only.
 model AgentProfile {
   id                   String             @id @default(cuid())
-  userId               String             @unique
+  userId               String
   user                 User               @relation(fields: [userId], references: [id])
+  platformIdentityId   String?
+  platformIdentity     PlatformIdentity?  @relation(fields: [platformIdentityId], references: [id])
+  talentType           TalentType         @default(HIREWISE_DIRECT)
+  archivedAt           DateTime?
   displayName          String
   headline             String?
   primaryRole          String?
@@ -625,10 +643,12 @@ model AgentProfile {
   courseProgress        CourseProgress[]
   /// Current primary agency (null = Hirewise Direct). History lives in AgencyMembership (Agency A1).
   primaryAgencyId       String?
-  primaryAgency         Agency?                @relation("PrimaryAgencyAgents", fields: [primaryAgencyId], references: [id])
+  primaryAgency         Agency?                     @relation("PrimaryAgencyAgents", fields: [primaryAgencyId], references: [id])
   agencyMemberships     AgencyMembership[]
 
   @@index([status])
+  @@index([userId])
+  @@index([platformIdentityId])
   @@index([primaryAgencyId])
   @@index([availabilityStatus])
   @@index([verificationLevel])
@@ -839,40 +859,55 @@ model Document {
 // ---------------------------------------------------------------------------
 
 model Agreement {
-  id              String                @id @default(cuid())
-  type            AgreementType
-  version         Int
-  title           String
-  bodyMarkdown    String
-  bodyChecksum    String
-  effectiveFrom   DateTime
-  isActive        Boolean               @default(true)
-  requiredForRole RoleKey?
-  createdAt       DateTime              @default(now())
-  updatedAt       DateTime              @updatedAt
-  acceptances     AgreementAcceptance[]
+  id                   String                @id @default(cuid())
+  type                 AgreementType
+  version              Int
+  title                String
+  bodyMarkdown         String
+  bodyChecksum         String
+  effectiveFrom        DateTime
+  isActive             Boolean               @default(true)
+  requiredForRole      RoleKey?
+  /// Identity phase 1: the unified terms are required for several roles at once.
+  requiredForRoles     RoleKey[]             @default([])
+  /// Ordered sections: { key, title, audiences[], bodyMarkdown }. bodyMarkdown is their concatenation.
+  sections             Json?
+  isMaterialChange     Boolean               @default(false)
+  requiresReacceptance Boolean               @default(true)
+  privacyPolicyMode    PrivacyPolicyMode?
+  changeNote           String?
+  publishedById        String?
+  publishedAt          DateTime?
+  supersedesId         String?
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
+  acceptances          AgreementAcceptance[]
 
   @@unique([type, version])
   @@index([isActive, requiredForRole])
 }
 
 model AgreementAcceptance {
-  id           String    @id @default(cuid())
-  agreementId  String
-  agreement    Agreement @relation(fields: [agreementId], references: [id])
-  userId       String
-  user         User      @relation(fields: [userId], references: [id])
-  acceptedAt   DateTime  @default(now())
-  ipAddress    String?
-  userAgent    String?
-  bodyChecksum String
-  placementId  String?
+  id            String            @id @default(cuid())
+  agreementId   String
+  agreement     Agreement         @relation(fields: [agreementId], references: [id])
+  userId        String
+  user          User              @relation(fields: [userId], references: [id])
+  acceptedAt    DateTime          @default(now())
+  ipAddress     String?
+  userAgent     String?
+  bodyChecksum  String
+  placementId   String?
   /// Why the acceptance was recorded (Agency A1). PLACEMENT acceptances also carry placementId.
   context       AcceptanceContext @default(GENERAL)
   applicationId String?
   submissionId  String?
+  /// Identity phase 1: the role and agency at acceptance time.
+  role          RoleKey?
+  agencyId      String?
 
   @@unique([agreementId, userId, placementId])
+  @@index([agreementId, acceptedAt])
   @@index([applicationId])
   @@index([userId])
 }
@@ -2181,6 +2216,9 @@ enum AgencyMembershipStatus {
 }
 
 enum AcceptanceContext {
+  SIGNUP
+  INDEPENDENT_REAPPLICATION
+  REACCEPTANCE
   GENERAL
   PLACEMENT
   AGENCY_APPLICATION
@@ -2314,4 +2352,118 @@ model AgencyMembership {
 
   @@index([agentProfileId, status])
   @@index([agencyId, status])
+}
+
+// ---------------------------------------------------------------------------
+// Identity phase 1: Platform Identity, duplicate detection, unified terms support
+// ---------------------------------------------------------------------------
+
+enum TalentType {
+  HIREWISE_DIRECT
+  AGENCY_AGENT
+  INDEPENDENT_FREELANCER
+}
+
+enum IdentityStatus {
+  ACTIVE
+  MERGED
+  BLOCKED
+}
+
+enum IdentityContactKind {
+  EMAIL
+  PHONE
+}
+
+enum IdentityContactSource {
+  SIGNUP
+  PRIVATE_CONTACT
+  ADMIN
+  BACKFILL
+}
+
+enum DuplicateFlagKind {
+  SIGNUP
+  AGENCY_APPLICATION
+  INVITE_JOIN
+  INDEPENDENT_REAPPLY
+}
+
+enum DuplicateFlagStatus {
+  OPEN
+  APPROVED_NEW_PROFILE
+  LINKED
+  REJECTED
+}
+
+enum PrivacyPolicyMode {
+  COMBINED
+  SEPARATE
+}
+
+/// Permanent, Hirewise-only record of a person. Never serialised to clients or agencies (FORBIDDEN_FOR_CLIENT / FORBIDDEN_FOR_AGENCY).
+model PlatformIdentity {
+  id                 String         @id @default(cuid())
+  userId             String         @unique
+  user               User           @relation(fields: [userId], references: [id])
+  status             IdentityStatus @default(ACTIVE)
+  primaryEmail       String         @db.Citext
+  verifiedAt         DateTime?
+  /// Encrypted-at-rest references only; never raw document numbers.
+  idVerificationRefs Json?
+  /// Hirewise-only notes.
+  notes              String?
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+
+  contacts       PlatformIdentityContact[]
+  profiles       AgentProfile[]
+  duplicateFlags DuplicateFlag[]           @relation("DuplicateFlagMatch")
+
+  @@index([primaryEmail])
+  @@index([status])
+}
+
+/// Normalised emails and phones used for duplicate detection. Not unique: a match raises a DuplicateFlag.
+model PlatformIdentityContact {
+  id              String                @id @default(cuid())
+  identityId      String
+  identity        PlatformIdentity      @relation(fields: [identityId], references: [id], onDelete: Cascade)
+  kind            IdentityContactKind
+  valueNormalized String
+  valueDisplay    String
+  verifiedAt      DateTime?
+  source          IdentityContactSource @default(SIGNUP)
+  createdAt       DateTime              @default(now())
+
+  @@unique([identityId, kind, valueNormalized])
+  @@index([kind, valueNormalized])
+}
+
+/// A sign-up or application that matched an existing identity. No account is created until Admin decides.
+model DuplicateFlag {
+  id                  String              @id @default(cuid())
+  kind                DuplicateFlagKind
+  attemptedEmail      String              @db.Citext
+  attemptedPhone      String?
+  attemptedName       String
+  /// The rest of the attempted form, never a password.
+  attemptedData       Json?
+  matchedIdentityId   String?
+  matchedIdentity     PlatformIdentity?   @relation("DuplicateFlagMatch", fields: [matchedIdentityId], references: [id])
+  matchedUserId       String?
+  /// EMAIL, PHONE, IDENTITY, ACTIVE_MEMBERSHIP, INDEPENDENT_PROFILE
+  matchReasons        String[]
+  status              DuplicateFlagStatus @default(OPEN)
+  reviewedById        String?
+  reviewedBy          User?               @relation("DuplicateFlagReviewer", fields: [reviewedById], references: [id])
+  reviewedAt          DateTime?
+  decisionNote        String?
+  continuationTokenId String?
+  ipAddress           String?
+  createdAt           DateTime            @default(now())
+
+  @@index([status, createdAt])
+  @@index([attemptedEmail])
+  @@index([matchedIdentityId])
 }

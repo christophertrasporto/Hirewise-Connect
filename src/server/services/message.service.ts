@@ -73,7 +73,7 @@ export async function listMessages(db: PrismaClient, actor: Actor, requestId: st
     const a = authors.get(m.authorUserId);
     const isStaff = !["CLIENT", "AGENT"].includes(m.authorRole);
     // Names: Hirewise staff appear as "Hirewise"; clients see agent display names; agents see the company only via the request view.
-    const authorLabel = isStaff ? "Hirewise" : m.authorRole === "AGENT" ? (a?.agentProfile?.displayName ?? "Candidate") : who === "STAFF" ? (a?.clientContact?.name ?? "Client") : "Client";
+    const authorLabel = isStaff ? "Hirewise" : m.authorRole === "AGENT" ? (a?.agentProfiles[0]?.displayName ?? "Candidate") : who === "STAFF" ? (a?.clientContact?.name ?? "Client") : "Client";
     return { id: m.id, body: m.body, authorRole: m.authorRole, authorLabel, mine: m.authorUserId === actor.userId, visibleTo: m.visibleTo, heldForReview: m.heldForReview, blocked: !!m.blockedAt, createdAt: m.createdAt };
   });
 }

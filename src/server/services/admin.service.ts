@@ -91,11 +91,11 @@ export async function broadcastNotification(db: PrismaClient, actor: Actor, inpu
 export async function anonymiseUser(db: PrismaClient, actor: Actor, userId: string, reason: string) {
   authorize(actor, "user.manage");
   if (!reason.trim()) throw new Error("A reason is required (e.g. deletion request reference).");
-  const u = await db.user.findUnique({ where: { id: userId }, include: { role: { select: { key: true } }, agentProfile: { include: { privateContact: true, videos: true, recordings: true, portfolioItems: true } }, clientContact: true } });
+  const u = await db.user.findUnique({ where: { id: userId }, include: { role: { select: { key: true } }, agentProfiles: { include: { privateContact: true, videos: true, recordings: true, portfolioItems: true } }, clientContact: true } });
   if (!u) throw new NotFoundError();
   if (u.role.key === "SUPER_ADMIN") throw new ForbiddenError("Super Admin accounts cannot be anonymised here");
-  if (u.agentProfile) {
-    const open = await db.placement.count({ where: { agentProfileId: u.agentProfile.id, status: { in: ["AWAITING_AGREEMENT", "AWAITING_DEPOSIT", "DEPLOYMENT_PREP", "ACTIVE", "PAUSED"] } } });
+  if (u.agentProfiles.length) {
+    const open = await db.placement.count({ where: { agentProfileId: { in: u.agentProfiles.map((p) => p.id) }, status: { in: ["AWAITING_AGREEMENT", "AWAITING_DEPOSIT", "DEPLOYMENT_PREP", "ACTIVE", "PAUSED"] } } });
     if (open > 0) throw new Error("The agent has an open placement. Complete or cancel it first.");
   }
   const keys: string[] = [];
@@ -105,8 +105,7 @@ export async function anonymiseUser(db: PrismaClient, actor: Actor, userId: stri
     await tx.session.deleteMany({ where: { userId } });
     await tx.authToken.deleteMany({ where: { userId } });
     await tx.user.update({ where: { id: userId }, data: { email: scrubbedEmail, passwordHash: null, mfaEnabled: false, mfaSecretEnc: null, status: "DEACTIVATED", deletedAt: now } });
-    if (u.agentProfile) {
-      const p = u.agentProfile;
+    for (const p of u.agentProfiles) {
       await tx.agentProfile.update({ where: { id: p.id }, data: { displayName: "Former talent", headline: null, summary: null, photoKey: null, locationCity: null, equipmentSummary: null, internetSummary: null, status: "HIDDEN", hiddenAt: now, availabilityStatus: "UNAVAILABLE", deletedAt: now } });
       if (p.privateContact) await tx.agentPrivateContact.update({ where: { id: p.privateContact.id }, data: { fullLegalName: "Anonymised", personalEmail: null, phone: null, addressLine: null, resumeKey: null, governmentIdRefs: undefined } });
       await tx.experience.updateMany({ where: { agentProfileId: p.id }, data: { company: null, description: null } });

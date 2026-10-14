@@ -13,7 +13,8 @@ export const userRepository = {
         permissionOverrides: { select: { expiresAt: true, permission: { select: { key: true } } } },
         agencyUsers: { take: 1, orderBy: { createdAt: "asc" }, select: { agencyId: true, role: true, permissions: true, agency: { select: { status: true } } } },
         clientContact: { select: { clientId: true } },
-        agentProfile: { select: { id: true } },
+        agentProfiles: { where: { archivedAt: null, deletedAt: null }, take: 1, select: { id: true, platformIdentityId: true } },
+        platformIdentity: { select: { id: true } },
         managedClients: { select: { id: true } },
         coursesOwned: { select: { id: true } },
         courseCoachings: { select: { courseId: true } },
@@ -43,7 +44,7 @@ export const userRepository = {
 
   /** For agency approval and direct creation: the account, its role, and whether it has a talent profile. */
   findForAgency(db: Db, where: { id?: string; email?: string }) {
-    return db.user.findFirst({ where: { ...(where.id ? { id: where.id } : {}), ...(where.email ? { email: where.email } : {}), deletedAt: null }, select: { id: true, email: true, status: true, role: { select: { key: true } }, agentProfile: { select: { id: true, displayName: true } }, agencyUsers: { select: { agencyId: true } } } });
+    return db.user.findFirst({ where: { ...(where.id ? { id: where.id } : {}), ...(where.email ? { email: where.email } : {}), deletedAt: null }, select: { id: true, email: true, status: true, role: { select: { key: true } }, agentProfiles: { where: { archivedAt: null }, take: 1, select: { id: true, displayName: true } }, agencyUsers: { select: { agencyId: true } } } });
   },
 
   setPassword(db: Db, userId: string, passwordHash: string) {
@@ -67,7 +68,7 @@ export const userRepository = {
   },
 
   search(db: Db, q?: string, take = 50) {
-    return db.user.findMany({ where: q ? { email: { contains: q, mode: "insensitive" } } : {}, select: { id: true, email: true, status: true, deletedAt: true, createdAt: true, lastLoginAt: true, role: { select: { key: true } }, agentProfile: { select: { id: true, displayName: true } }, clientContact: { select: { clientId: true, client: { select: { companyName: true } } } } }, orderBy: { createdAt: "desc" }, take });
+    return db.user.findMany({ where: q ? { email: { contains: q, mode: "insensitive" } } : {}, select: { id: true, email: true, status: true, deletedAt: true, createdAt: true, lastLoginAt: true, role: { select: { key: true } }, agentProfiles: { where: { archivedAt: null }, take: 1, select: { id: true, displayName: true } }, clientContact: { select: { clientId: true, client: { select: { companyName: true } } } } }, orderBy: { createdAt: "desc" }, take });
   },
 
   idsByRole(db: Db, keys: Array<"SUPER_ADMIN" | "ADMIN" | "SALES" | "RECRUITER" | "COACH" | "OPERATIONS">) {

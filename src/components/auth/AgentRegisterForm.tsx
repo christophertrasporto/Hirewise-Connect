@@ -6,9 +6,11 @@ import { ArrowLeft, ArrowRight } from "lucide-react";
 import { registerAgentAction } from "@/app/(auth)/actions";
 import { idle } from "@/server/http/action-result";
 import { Field, Input, Select, SubmitButton, FormAlert } from "@/components/ui/Form";
+import { TermsCheckbox, type TermsBundleProp } from "@/components/terms/TermsDrawer";
+
 import { AGENT_ROLES, COUNTRIES, TIMEZONES } from "@/lib/options";
 
-export function AgentRegisterForm() {
+export function AgentRegisterForm({ terms, continuation }: { terms: TermsBundleProp; continuation?: { token: string; email: string } | null }) {
   const [state, action] = useActionState(registerAgentAction, idle);
   const fe = state.fieldErrors ?? {};
   return (
@@ -23,7 +25,7 @@ export function AgentRegisterForm() {
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="Full legal name" htmlFor="fullName" error={fe.fullName} hint="Private. Only Hirewise sees this."><Input id="fullName" name="fullName" autoComplete="name" required invalid={!!fe.fullName} /></Field>
           <Field label="Professional name" htmlFor="displayName" error={fe.displayName} hint="Shown to clients, e.g. “Maria S.”"><Input id="displayName" name="displayName" required invalid={!!fe.displayName} /></Field>
-          <Field label="Email" htmlFor="email" error={fe.email}><Input id="email" name="email" type="email" autoComplete="email" required invalid={!!fe.email} /></Field>
+          <Field label="Email" htmlFor="email" error={fe.email}><Input id="email" name="email" type="email" autoComplete="email" required invalid={!!fe.email} defaultValue={continuation?.email ?? ""} readOnly={!!continuation} /></Field>
           <Field label="Phone" htmlFor="phone" error={fe.phone} hint="Optional. Never shown to clients."><Input id="phone" name="phone" type="tel" autoComplete="tel" invalid={!!fe.phone} /></Field>
           <Field label="Password" htmlFor="password" error={fe.password} hint="At least 10 characters, mixing lower case with upper case or digits." className="sm:col-span-2"><Input id="password" name="password" type="password" autoComplete="new-password" required invalid={!!fe.password} /></Field>
           <Field label="City" htmlFor="locationCity" error={fe.locationCity}><Input id="locationCity" name="locationCity" required invalid={!!fe.locationCity} /></Field>
@@ -46,9 +48,11 @@ export function AgentRegisterForm() {
           <Field label="Years of experience" htmlFor="yearsExperience" error={fe.yearsExperience} className="sm:col-span-2"><Input id="yearsExperience" name="yearsExperience" type="number" min={0} max={50} defaultValue={1} required invalid={!!fe.yearsExperience} /></Field>
         </div>
 
-        {state.error && <FormAlert>{state.error}</FormAlert>}
+        {continuation && <input type="hidden" name="continuationToken" value={continuation.token} />}
+        <TermsCheckbox bundle={terms} error={fe.termsAccepted} />
+        {state.error && !fe.termsAccepted && <FormAlert>{state.error}</FormAlert>}
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <p className="text-[12.5px] text-ink-400">Next: verify your email, then accept the talent agreements.</p>
+          <p className="text-[12.5px] text-ink-400">Next: verify your email.</p>
           <SubmitButton pendingText="Creating account…">Create account <ArrowRight className="h-4 w-4" /></SubmitButton>
         </div>
       </form>

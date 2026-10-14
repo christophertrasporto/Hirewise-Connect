@@ -27,6 +27,15 @@ function button(href: string, label: string) {
 }
 
 export const templates = {
+  /** Identity phase 1: Admin approved a flagged sign-up; the person continues with a one-time link. */
+  signupContinuation(url: string, name: string, hours: number) {
+    const safe = name.replace(/[<>&"]/g, "");
+    return {
+      subject: "Continue your Hirewise Connect sign-up",
+      text: `Hi ${safe}, Hirewise reviewed your sign-up and you can continue here: ${url}\n\nThis link expires in ${hours} hours.`,
+      html: layout("Continue your sign-up", `<p>Hi ${safe}, Hirewise reviewed your sign-up and approved a new account. Use the button below to continue; the link expires in ${hours} hours.</p>${button(url, "Continue sign-up")}`),
+    };
+  },
   magicLink(url: string) {
     return {
       subject: "Your Hirewise Connect sign-in link",

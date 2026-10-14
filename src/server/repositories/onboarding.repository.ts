@@ -14,7 +14,7 @@ export const onboardingRepository = {
   },
 
   userBasics(db: Db, userId: string) {
-    return db.user.findUnique({ where: { id: userId }, select: { id: true, email: true, createdAt: true, emailVerifiedAt: true, agentProfile: { select: { id: true, status: true, submittedAt: true, profileCompletion: true } } } });
+    return db.user.findUnique({ where: { id: userId }, select: { id: true, email: true, createdAt: true, emailVerifiedAt: true, agentProfiles: { where: { archivedAt: null }, take: 1, select: { id: true, status: true, submittedAt: true, profileCompletion: true } } } });
   },
 
   /** Talent accounts with the fields the onboarding status list needs. */
@@ -27,7 +27,7 @@ export const onboardingRepository = {
         createdAt: true,
         emailVerifiedAt: true,
         lastLoginAt: true,
-        agentProfile: { select: { id: true, displayName: true, status: true, submittedAt: true, profileCompletion: true } },
+        agentProfiles: { where: { archivedAt: null }, take: 1, select: { id: true, displayName: true, status: true, submittedAt: true, profileCompletion: true } },
         onboardingVideoProgress: { where: { videoKey }, select: { percent: true, completedAt: true, watchedSeconds: true, updatedAt: true } },
       },
       orderBy: { createdAt: "desc" },

@@ -1,11 +1,12 @@
 import { z } from "zod";
+import { termsForRole, acceptTermsTx, requireTermsAccepted } from "@/server/services/terms.service";
+import { guardSignup, ensureIdentity } from "@/server/services/identity.service";
 import { randomUUID } from "node:crypto";
 import type { PrismaClient } from "@/server/db/types";
 import type { Actor } from "@/server/auth/actor";
 import type { RequestMeta } from "@/server/auth/session";
 import { authorize, ForbiddenError, NotFoundError } from "@/server/policies/authorize";
 import { agencyRepository, type ApplicationWrite } from "@/server/repositories/agency.repository";
-import { agreementRepository } from "@/server/repositories/agreement.repository";
 import { userRepository } from "@/server/repositories/user.repository";
 import { audit } from "@/server/audit/audit";
 import { publishEvent } from "@/server/events/outbox";
@@ -71,9 +72,9 @@ async function documentsOf(db: PrismaClient, applicationId: string) {
 
 /** The agreement an applicant must accept, with its text, for the apply form. */
 export async function agencyAgreement(db: PrismaClient) {
-  const a = await agreementRepository.activeByType(db, "AGENCY_NON_CIRCUMVENTION");
-  if (!a) throw new Error("The agency agreement is not configured. Ask Hirewise to publish it.");
-  return { id: a.id, title: a.title, version: a.version, bodyMarkdown: a.bodyMarkdown };
+  const bundle = await termsForRole(db, "AGENCY_OWNER");
+  if (!bundle.terms) throw new Error("The Hirewise Connect Terms & Platform Agreement is not published. Ask Hirewise to publish it.");
+  return { id: bundle.terms.id, title: bundle.terms.title, version: bundle.terms.version, bodyMarkdown: bundle.terms.sections.map((s) => `## ${s.number}. ${s.title}\n\n${s.bodyMarkdown}`).join("\n\n"), checkboxLabel: bundle.checkboxLabel, bundle };
 }
 
 /** Whether this actor may apply right now, and if not, why. Used by the apply page and by submitApplication. */
@@ -91,18 +92,17 @@ export async function submitApplication(db: PrismaClient, actor: Actor, raw: App
   const e = await applicationEligibility(db, actor);
   if (!e.canApply) throw new ForbiddenError(e.reason ?? "You cannot apply right now.");
   const input = applicationSchema.parse(raw);
-  if (!raw.agreementAccepted) throw Object.assign(new Error("Accept the Non-Circumvention Policy to apply."), { name: "UploadRejectedError", field: "agreementAccepted" });
-  const agreement = await agreementRepository.activeByType(db, "AGENCY_NON_CIRCUMVENTION");
-  if (!agreement) throw new Error("The agency agreement is not configured. Ask Hirewise to publish it.");
+  if (!raw.agreementAccepted) throw Object.assign(new Error("Accept the Hirewise Connect Terms & Platform Agreement to apply."), { name: "UploadRejectedError", field: "agreementAccepted" });
   const flags = await userRepository.authFlags(db, actor.userId);
   if (!flags) throw new NotFoundError();
   rateLimit(`agency-apply:${actor.userId}`, 5, 24 * 60 * 60_000);
   return db.$transaction(async (tx) => {
     const app = await agencyRepository.createApplication(tx, actor.userId, toWrite(input, flags.email));
-    const acceptance = await agreementRepository.recordContextualAcceptance(tx, { agreementId: agreement.id, userId: actor.userId, bodyChecksum: agreement.bodyChecksum, context: "AGENCY_APPLICATION", applicationId: app.id, ipAddress: meta.ipAddress, userAgent: meta.userAgent });
-    await agencyRepository.updateApplication(tx, app.id, { agreementAcceptanceId: acceptance.id });
+    // Identity phase 1: the unified terms are accepted again in the application context (one checkbox, same document).
+    const accepted = await acceptTermsTx(tx, { userId: actor.userId, role: actor.role, agencyId: null, context: "AGENCY_APPLICATION", applicationId: app.id, meta, actor });
+    await agencyRepository.updateApplication(tx, app.id, { agreementAcceptanceId: accepted.termsAcceptanceId });
     await agencyRepository.addHistory(tx, { applicationId: app.id, previousStatus: null, newStatus: "SUBMITTED", changedById: actor.userId, notes: null });
-    await audit(tx, { actor, action: "AGENCY_AGREEMENT_ACCEPTED", entityType: "Agreement", entityId: agreement.id, newValue: { type: agreement.type, version: agreement.version, checksum: agreement.bodyChecksum, applicationId: app.id }, ipAddress: meta.ipAddress ?? undefined });
+    await audit(tx, { actor, action: "AGENCY_AGREEMENT_ACCEPTED", entityType: "Agreement", entityId: accepted.termsAgreementId, newValue: { type: "PLATFORM_TERMS", version: accepted.termsVersion, applicationId: app.id }, ipAddress: meta.ipAddress ?? undefined });
     await audit(tx, { actor, action: "AGENCY_APPLICATION_SUBMITTED", entityType: "AgencyApplication", entityId: app.id, newValue: { proposedAgencyName: input.proposedAgencyName, country: input.country, teamSize: input.teamSize }, ipAddress: meta.ipAddress ?? undefined });
     await publishEvent(tx, "AGENCY_APPLICATION_SUBMITTED", { applicationId: app.id, applicantUserId: actor.userId, applicantName: input.applicantFullName, agencyName: input.proposedAgencyName, resubmission: false });
     return app.id;
@@ -298,7 +298,7 @@ export async function approveApplication(db: PrismaClient, actor: Actor, applica
   const app = await forReview(db, actor, applicationId);
   const input = decisionSchema.parse(raw);
   assertApplicationTransition(actor, app.applicantUserId, app.status, "APPROVED");
-  if (app.applicant.agentProfile === null && app.applicant.role.key !== "APPLICANT" && app.applicant.role.key !== "CLIENT") {
+  if (app.applicant.agentProfiles.length === 0 && app.applicant.role.key !== "APPLICANT" && app.applicant.role.key !== "CLIENT") {
     // Staff accounts never become agency owners.
     if (STAFF_ROLES.has(app.applicant.role.key)) throw new ForbiddenError("A Hirewise staff account cannot own an agency.");
   }
@@ -316,19 +316,24 @@ export async function approveApplication(db: PrismaClient, actor: Actor, applica
 // Public sign-up for people who are neither talent nor clients (decision D2)
 // ---------------------------------------------------------------------------
 
-export const applicantRegistrationSchema = z.object({ fullName: z.string().trim().min(2, "Enter your full name.").max(120), email: emailSchema, password: passwordSchema });
+export const applicantRegistrationSchema = z.object({
+  termsAccepted: z.boolean().default(false),
+  continuationToken: z.string().trim().optional().or(z.literal("")), fullName: z.string().trim().min(2, "Enter your full name.").max(120), email: emailSchema, password: passwordSchema });
 export type ApplicantRegistrationInput = z.infer<typeof applicantRegistrationSchema>;
 
 /** Creates an APPLICANT account (no permissions), a session, and the email-verification gate, exactly like talent registration. */
 export async function registerApplicant(db: PrismaClient, input: ApplicantRegistrationInput, meta: RequestMeta) {
   rateLimit(`register:${meta.ipAddress ?? "unknown"}`, 10, 60 * 60_000);
-  if (await userRepository.findByEmail(db, input.email)) throw Object.assign(new Error("An account with this email already exists. Sign in and apply from your dashboard."), { name: "RegistrationError", field: "email" });
+  requireTermsAccepted(input.termsAccepted);
+  await guardSignup(db, { kind: "AGENCY_APPLICATION", email: input.email, fullName: input.fullName, data: { fullName: input.fullName }, continuationToken: input.continuationToken || null, meta });
   const passwordHash = await hashPassword(input.password);
   const role = await userRepository.roleIdByKey(db, "APPLICANT");
   const userId = await db.$transaction(async (tx) => {
     const user = await userRepository.create(tx, { email: input.email, passwordHash, roleId: role.id });
     const actor: Actor = { userId: user.id, role: "APPLICANT", permissions: new Set() };
     await audit(tx, { actor, action: "USER_CREATED", entityType: "User", entityId: user.id, newValue: { role: "APPLICANT", fullName: input.fullName }, ipAddress: meta.ipAddress ?? undefined });
+    await ensureIdentity(tx, actor, { userId: user.id, email: input.email });
+    await acceptTermsTx(tx, { userId: user.id, role: "APPLICANT", context: "SIGNUP", meta, actor });
     await publishEvent(tx, "USER_CREATED", { userId: user.id, role: "APPLICANT", email: input.email });
     return user.id;
   });
