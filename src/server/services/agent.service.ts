@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { joinAgencyTx } from "@/server/services/seat.service";
 import { acceptTermsTx, requireTermsAccepted } from "@/server/services/terms.service";
 import { guardSignup, ensureIdentity, syncIdentityContact } from "@/server/services/identity.service";
 import { logger } from "@/server/logger";
@@ -97,11 +98,14 @@ export const experienceSchema = z.object({
 // Registration (Section 8.2)
 // ---------------------------------------------------------------------------
 
-export async function registerAgent(db: PrismaClient, input: AgentRegistrationInput, meta: RequestMeta) {
+/** v2 phase 2: a registration that came from an agency invitation also creates the membership and takes one seat. */
+export type JoinViaInvite = { agencyId: string; source: "UNIQUE_LINK" | "EMAIL_INVITE"; emailInviteId: string | null; linkId: string | null; invitedEmail: string | null };
+
+export async function registerAgent(db: PrismaClient, input: AgentRegistrationInput, meta: RequestMeta, join?: JoinViaInvite) {
   rateLimit(`register:${meta.ipAddress ?? "unknown"}`, 10, 60 * 60_000);
   requireTermsAccepted(input.termsAccepted);
   // Identity phase 1: duplicate detection runs before anything is created; a match raises a flag and stops here.
-  await guardSignup(db, { kind: "SIGNUP", email: input.email, phone: input.phone || null, fullName: input.fullName, data: { fullName: input.fullName, displayName: input.displayName, locationCity: input.locationCity, locationCountry: input.locationCountry, primaryRole: input.primaryRole }, continuationToken: input.continuationToken || null, meta });
+  await guardSignup(db, { kind: join ? "INVITE_JOIN" : "SIGNUP", email: input.email, phone: input.phone || null, fullName: input.fullName, data: { fullName: input.fullName, displayName: input.displayName, locationCity: input.locationCity, locationCountry: input.locationCountry, primaryRole: input.primaryRole, joinAgencyId: join?.agencyId ?? "" }, continuationToken: input.continuationToken || null, meta });
   const passwordHash = await hashPassword(input.password);
   const role = await userRepository.roleIdByKey(db, "AGENT");
 
@@ -123,6 +127,7 @@ export async function registerAgent(db: PrismaClient, input: AgentRegistrationIn
     const identityId = await ensureIdentity(tx, actor, { userId: user.id, email: input.email, phone: input.phone || null });
     await agentRepository.setIdentity(tx, profile.id, identityId);
     await acceptTermsTx(tx, { userId: user.id, role: "AGENT", context: "SIGNUP", meta, actor });
+    if (join) await joinAgencyTx(tx, actor, { agencyId: join.agencyId, agentProfileId: profile.id, platformIdentityId: identityId, status: "PENDING_VERIFICATION", source: join.source, invitedEmail: join.invitedEmail, emailInviteId: join.emailInviteId, linkId: join.linkId, approvedById: null });
     await audit(tx, { actor, action: "AGENT_REGISTERED", entityType: "AgentProfile", entityId: profile.id, newValue: { displayName: input.displayName, primaryRole: input.primaryRole }, ipAddress: meta.ipAddress ?? undefined });
     await publishEvent(tx, "USER_CREATED", { userId: user.id, role: "AGENT", email: input.email });
     await publishEvent(tx, "AGENT_REGISTERED", { agentProfileId: profile.id, userId: user.id, displayName: input.displayName, email: input.email });

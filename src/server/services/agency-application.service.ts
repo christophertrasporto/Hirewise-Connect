@@ -41,6 +41,8 @@ export const applicationSchema = z.object({
   yearsExperience: z.coerce.number().int().min(0).max(60),
   services: z.array(z.string().trim().min(1).max(60)).max(20).default([]),
   description: z.string().trim().min(40, "Tell us about your team and why you want to join, in at least 40 characters.").max(4000),
+  /** v2 phase 2: the plan the applicant would like; Hirewise confirms it at approval. */
+  preferredPlanKey: z.string().trim().max(40).optional().or(z.literal("")),
 });
 export type ApplicationInput = z.input<typeof applicationSchema>;
 type ApplicationParsed = z.infer<typeof applicationSchema>;
@@ -54,6 +56,7 @@ function toWrite(input: ApplicationParsed, email: string): ApplicationWrite {
     applicantPhone: input.applicantPhone || null,
     proposedAgencyName: input.proposedAgencyName,
     proposedLogoKey: null,
+    preferredPlanKey: input.preferredPlanKey || null,
     businessRegistration: input.businessRegistration || null,
     country: input.country,
     city: input.city || null,

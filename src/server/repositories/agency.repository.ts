@@ -16,10 +16,11 @@ export type ApplicationWrite = {
   yearsExperience: number;
   services: string[];
   description: string;
+  preferredPlanKey: string | null;
 };
 
 export const applicationInclude = {
-  applicant: { select: { id: true, email: true, role: { select: { key: true } }, agentProfiles: { where: { archivedAt: null }, take: 1, select: { id: true } } } },
+  applicant: { select: { id: true, email: true, role: { select: { key: true } }, agentProfiles: { where: { archivedAt: null }, take: 1, select: { id: true, platformIdentityId: true } } } },
   reviewer: { select: { id: true, email: true } },
   history: { orderBy: { changedAt: "asc" }, include: { changedBy: { select: { id: true, email: true } } } },
 } satisfies Prisma.AgencyApplicationInclude;
@@ -122,25 +123,7 @@ export const agencyRepository = {
     return db.agencyUser.findFirst({ where: { userId }, include: { agency: { select: { id: true, status: true } } } });
   },
 
-  // ---- agent memberships (history)
-  activeMembership(db: Db, agentProfileId: string) {
-    return db.agencyMembership.findFirst({ where: { agentProfileId, status: "ACTIVE", isPrimary: true }, orderBy: { joinedAt: "desc" } });
-  },
-
-  async startMembership(db: Db, d: { agentProfileId: string; agencyId: string | null; approvedById: string | null }) {
-    const now = new Date();
-    await db.agencyMembership.updateMany({ where: { agentProfileId: d.agentProfileId, status: "ACTIVE", isPrimary: true }, data: { status: "ENDED", leftAt: now, endReason: "Moved to another agency" } });
-    const m = await db.agencyMembership.create({ data: { agentProfileId: d.agentProfileId, agencyId: d.agencyId, approvedById: d.approvedById, isPrimary: true, status: "ACTIVE" } });
-    await db.agentProfile.update({ where: { id: d.agentProfileId }, data: { primaryAgencyId: d.agencyId } });
-    return m;
-  },
-
-  async endMembership(db: Db, membershipId: string, reason: string | null) {
-    const m = await db.agencyMembership.update({ where: { id: membershipId }, data: { status: "ENDED", leftAt: new Date(), endReason: reason } });
-    if (m.isPrimary) await db.agentProfile.update({ where: { id: m.agentProfileId }, data: { primaryAgencyId: null } });
-    return m;
-  },
-
+  // ---- agent memberships (history; writes live in membership.repository since v2 phase 2)
   membershipHistory(db: Db, agentProfileId: string) {
     return db.agencyMembership.findMany({ where: { agentProfileId }, orderBy: { joinedAt: "desc" }, include: { agency: { select: { id: true, name: true } } } });
   },

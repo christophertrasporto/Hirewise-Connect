@@ -244,6 +244,32 @@ export const EVENT_HANDLERS: { [T in DomainEventType]: EventHandler<T> } = {
       await notifyUser(db, { userId: u.id, type: "TERMS_UPDATED", title: `Updated: ${p.title}`, body: `Hirewise published version ${p.version}. You will be asked to accept it the next time you sign in.`, email: { to: u.email }, dedupeKey: `TERMS:${p.agreementId}:${u.id}` });
     }
   },
+  // v2 phase 2: Agent Seats and invitations
+  AGENCY_MEMBER_JOINED: async (db, p) => {
+    await notifyUser(db, { userId: p.ownerUserId, type: "AGENCY_MEMBER_JOINED", title: `${p.displayName} joined ${p.agencyName}`, body: p.status === "ACTIVE" ? "They are an active member and hold one Agent Seat." : "They hold one Agent Seat and become active once they verify their email.", dedupeKey: `JOIN:${p.membershipId}` });
+  },
+  AGENCY_SEATS_CHANGED: async (db, p) => {
+    if (p.changeType === "CONSUMED" || p.changeType === "RELEASED") return;
+    await notifyUser(db, { userId: p.ownerUserId, type: "AGENCY_SEATS_CHANGED", title: `Agent Seats updated for ${p.agencyName}`, body: `${p.reason}. You now have ${p.total} seat(s), ${p.available} available.`, email: { to: p.ownerEmail }, dedupeKey: `SEATS:${p.agencyId}:${p.changeType}:${p.quantity}:${p.total}:${Date.now()}` });
+  },
+  SEAT_REQUEST_SUBMITTED: async (db, p) => {
+    await notifyStaff(db, ["SUPER_ADMIN", "ADMIN"], { type: "SEAT_REQUEST_SUBMITTED", title: `${p.agencyName} requests ${p.requestedSeats} Agent Seat(s)`, body: p.note ?? "Review it under Agencies → Seat requests.", dedupeKey: `SEATREQ:${p.requestId}` });
+    const existing = await taskRepository.findOpenByRelated(db, "REVIEW_SEAT_REQUEST", "SeatRequest", p.requestId);
+    if (!existing) await taskRepository.create(db, { type: "REVIEW_SEAT_REQUEST", title: `Seat request: ${p.agencyName} (${p.requestedSeats})`, queueRole: "ADMIN", dueAt: new Date(Date.now() + 3 * 24 * 60 * 60_000), relatedType: "SeatRequest", relatedId: p.requestId });
+  },
+  SEAT_REQUEST_DECIDED: async (db, p) => {
+    await taskRepository.completeByRelated(db, "REVIEW_SEAT_REQUEST", "SeatRequest", p.requestId);
+    await notifyUser(db, { userId: p.ownerUserId, type: "SEAT_REQUEST_DECIDED", title: p.decision === "APPROVED" ? `${p.grantedSeats} Agent Seat(s) added to ${p.agencyName}` : `Seat request for ${p.agencyName} was not approved`, body: `${p.note ?? (p.decision === "APPROVED" ? "Hirewise approved your request." : "Hirewise did not approve this request.")} You now have ${p.available} seat(s) available.`, email: { to: p.ownerEmail }, dedupeKey: `SEATDEC:${p.requestId}` });
+  },
+  SEAT_PURCHASE_CREATED: async (db, p) => {
+    await notifyStaff(db, ["SUPER_ADMIN", "ADMIN"], { type: "SEAT_PURCHASE_CREATED", title: `${p.agencyName} wants to buy ${p.seatCount} Agent Seat(s)`, body: "Record the payment or waive it under Agencies → Purchases.", dedupeKey: `SEATBUY:${p.purchaseId}` });
+    const existing = await taskRepository.findOpenByRelated(db, "RECORD_SEAT_PURCHASE", "SeatPurchase", p.purchaseId);
+    if (!existing) await taskRepository.create(db, { type: "RECORD_SEAT_PURCHASE", title: `Seat purchase: ${p.agencyName} (${p.seatCount})`, queueRole: "ADMIN", dueAt: new Date(Date.now() + 3 * 24 * 60 * 60_000), relatedType: "SeatPurchase", relatedId: p.purchaseId });
+  },
+  SEAT_PURCHASE_RECORDED: async (db, p) => {
+    await taskRepository.completeByRelated(db, "RECORD_SEAT_PURCHASE", "SeatPurchase", p.purchaseId);
+    await notifyUser(db, { userId: p.ownerUserId, type: "SEAT_PURCHASE_RECORDED", title: p.outcome === "CANCELLED" ? `Seat purchase for ${p.agencyName} was cancelled` : `${p.seatCount} Agent Seat(s) added to ${p.agencyName}`, body: p.outcome === "CANCELLED" ? "Hirewise cancelled this purchase. Contact Hirewise if this is unexpected." : `Hirewise recorded the purchase as ${p.outcome.toLowerCase()}. You now have ${p.available} seat(s) available.`, email: { to: p.ownerEmail }, dedupeKey: `SEATREC:${p.purchaseId}` });
+  },
   AGENCY_APPLICATION_SUBMITTED: async (db, p) => {
     await notifyStaff(db, ["SUPER_ADMIN", "ADMIN"], { type: "AGENCY_APPLICATION_SUBMITTED", title: `${p.resubmission ? "Updated" : "New"} agency application: ${p.agencyName}`, body: `${p.applicantName} ${p.resubmission ? "resubmitted their application" : "applied to run an agency"}. Review it under Agencies → Applications.`, dedupeKey: `AGAPP:${p.applicationId}:${p.resubmission ? "re" : "new"}` });
     const existing = await taskRepository.findOpenByRelated(db, "REVIEW_AGENCY_APPLICATION", "AgencyApplication", p.applicationId);

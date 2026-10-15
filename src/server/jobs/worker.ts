@@ -68,6 +68,11 @@ export async function runMaintenance(prisma: PrismaClient, now = new Date()): Pr
   const expired = await expireReservations(prisma, now);
   const expiring = await notifyExpiringReservations(prisma, now);
   const certs = await expireCertifications(prisma, now);
+  // v2 phase 2: unverified joins give their seat back; email invites expire.
+  const { expireUnverifiedJoins } = await import("@/server/services/seat.service");
+  const { expireEmailInvites } = await import("@/server/services/invite.service");
+  await expireUnverifiedJoins(prisma, now);
+  await expireEmailInvites(prisma, now);
   return { expired, expiring, certificationsExpired: certs.expired, certificationsExpiring: certs.expiring };
 }
 

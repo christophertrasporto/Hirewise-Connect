@@ -44,7 +44,7 @@ export const userRepository = {
 
   /** For agency approval and direct creation: the account, its role, and whether it has a talent profile. */
   findForAgency(db: Db, where: { id?: string; email?: string }) {
-    return db.user.findFirst({ where: { ...(where.id ? { id: where.id } : {}), ...(where.email ? { email: where.email } : {}), deletedAt: null }, select: { id: true, email: true, status: true, role: { select: { key: true } }, agentProfiles: { where: { archivedAt: null }, take: 1, select: { id: true, displayName: true } }, agencyUsers: { select: { agencyId: true } } } });
+    return db.user.findFirst({ where: { ...(where.id ? { id: where.id } : {}), ...(where.email ? { email: where.email } : {}), deletedAt: null }, select: { id: true, email: true, status: true, role: { select: { key: true } }, agentProfiles: { where: { archivedAt: null }, take: 1, select: { id: true, displayName: true, platformIdentityId: true } }, agencyUsers: { select: { agencyId: true } } } });
   },
 
   setPassword(db: Db, userId: string, passwordHash: string) {

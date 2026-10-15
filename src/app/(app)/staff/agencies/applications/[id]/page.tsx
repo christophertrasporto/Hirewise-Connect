@@ -42,6 +42,7 @@ export default async function ApplicationReviewPage({ params }: { params: Promis
               {row("Website", app.website ? <a href={app.website} target="_blank" rel="noopener noreferrer" className="text-brand-600">{app.website}</a> : null)}
               {row("Social links", app.socialLinks.length ? app.socialLinks.map((l) => <a key={l} href={l} target="_blank" rel="noopener noreferrer" className="block text-brand-600">{l}</a>) : null)}
               {row("Team size", String(app.teamSize))}
+              {row("Preferred plan", app.preferredPlanKey ? app.preferredPlanKey.toLowerCase() : "decide at approval")}
               {row("Years of experience", String(app.yearsExperience))}
               {row("Services", app.services.join(", "))}
               {row("Agreement", app.agreementAccepted ? "Non-circumvention accepted" : "Not accepted")}

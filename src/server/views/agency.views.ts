@@ -24,6 +24,7 @@ const formFields = (a: ApplicationRecord) => ({
   applicantEmail: a.applicantEmail,
   applicantPhone: a.applicantPhone,
   proposedAgencyName: a.proposedAgencyName,
+  preferredPlanKey: a.preferredPlanKey,
   hasLogo: !!a.proposedLogoKey,
   businessRegistration: a.businessRegistration,
   country: a.country,

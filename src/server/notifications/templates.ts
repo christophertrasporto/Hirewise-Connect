@@ -27,6 +27,15 @@ function button(href: string, label: string) {
 }
 
 export const templates = {
+  /** v2 phase 2: an agency invites someone to join on Hirewise Connect. */
+  agencyInvite(url: string, agencyName: string, days: number) {
+    const safe = agencyName.replace(/[<>&"]/g, "");
+    return {
+      subject: `${safe} invites you to join them on Hirewise Connect`,
+      text: `${safe} invites you to join their team on Hirewise Connect. Create your talent account or sign in here: ${url}\n\nThis invitation expires in ${days} days.`,
+      html: layout(`Join ${safe} on Hirewise Connect`, `<p>${safe} invites you to join their team on Hirewise Connect, where Hirewise trains, certifies, and places talent with clients.</p><p>Create your talent account (or sign in if you already have one) from the button below. The invitation expires in ${days} days.</p>${button(url, "Join the team")}`),
+    };
+  },
   /** Identity phase 1: Admin approved a flagged sign-up; the person continues with a one-time link. */
   signupContinuation(url: string, name: string, hours: number) {
     const safe = name.replace(/[<>&"]/g, "");

@@ -45,6 +45,13 @@ export type DomainEventMap = {
   DUPLICATE_FLAG_RAISED: { flagId: string; kind: string; attemptedEmail: string; attemptedName: string; matchReasons: string[]; matchedUserId: string | null; matchedEmail: string | null; notifyExisting: boolean };
   DUPLICATE_FLAG_DECIDED: { flagId: string; decision: "APPROVED_NEW_PROFILE" | "LINKED" | "REJECTED"; attemptedEmail: string; attemptedName: string; continuationUrl: string | null; matchedEmail: string | null };
   TERMS_VERSION_PUBLISHED: { agreementId: string; type: "PLATFORM_TERMS" | "PRIVACY_POLICY"; version: number; title: string; material: boolean; requiresReacceptance: boolean; roles: string[] };
+  // v2 phase 2: Agent Seats and invitations
+  AGENCY_MEMBER_JOINED: { agencyId: string; agencyName: string; ownerUserId: string; membershipId: string; agentProfileId: string; displayName: string; status: "PENDING_VERIFICATION" | "ACTIVE"; source: string };
+  AGENCY_SEATS_CHANGED: { agencyId: string; agencyName: string; ownerUserId: string; ownerEmail: string; changeType: string; quantity: number; reason: string; total: number; available: number };
+  SEAT_REQUEST_SUBMITTED: { requestId: string; agencyId: string; agencyName: string; requestedSeats: number; note: string | null };
+  SEAT_REQUEST_DECIDED: { requestId: string; agencyId: string; agencyName: string; ownerUserId: string; ownerEmail: string; decision: "APPROVED" | "REJECTED"; grantedSeats: number | null; note: string | null; available: number };
+  SEAT_PURCHASE_CREATED: { purchaseId: string; agencyId: string; agencyName: string; seatCount: number; amountMinor: number; currency: string };
+  SEAT_PURCHASE_RECORDED: { purchaseId: string; agencyId: string; agencyName: string; ownerUserId: string; ownerEmail: string; outcome: "PAID" | "WAIVED" | "CANCELLED"; seatCount: number; available: number };
   AGENCY_STATUS_CHANGED: { agencyId: string; agencyName: string; status: "ACTIVE" | "SUSPENDED" | "INACTIVE"; reason: string; ownerUserId: string; ownerEmail: string };
   // Course Builder phase 7
   ASSIGNMENT_SUBMITTED: { submissionId: string; lessonId: string; lessonTitle: string; courseId: string; courseTitle: string; agentProfileId: string; displayName: string; coachUserIds: string[]; late: boolean; resubmission: boolean };

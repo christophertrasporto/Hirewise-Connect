@@ -2211,7 +2211,12 @@ enum AgencyUserRole {
 }
 
 enum AgencyMembershipStatus {
+  INVITED
+  PENDING_VERIFICATION
   ACTIVE
+  EXIT_REQUESTED
+  REMOVAL_REQUESTED
+  ENDING
   ENDED
 }
 
@@ -2228,6 +2233,8 @@ enum AcceptanceContext {
 
 /// One active application per user. Approval is the only path (besides Super Admin) that creates an Agency.
 model AgencyApplication {
+  /// v2 phase 2: the plan the applicant would like; Hirewise confirms it at approval.
+  preferredPlanKey        String?
   id                      String                     @id @default(cuid())
   applicantUserId         String
   applicant               User                       @relation("Applicant", fields: [applicantUserId], references: [id])
@@ -2286,32 +2293,39 @@ model AgencyApplicationHistory {
 
 /// A partner agency. Created only from an approved AgencyApplication or by a Super Admin (agency.create_direct).
 model Agency {
-  id                String             @id @default(cuid())
+  id                String              @id @default(cuid())
   name              String
   logoKey           String?
   ownerUserId       String
-  owner             User               @relation("AgencyOwner", fields: [ownerUserId], references: [id])
+  owner             User                @relation("AgencyOwner", fields: [ownerUserId], references: [id])
   description       String?
   contactEmail      String
   contactPhone      String?
   country           String
   city              String?
   website           String?
-  status            AgencyStatus       @default(ACTIVE)
+  status            AgencyStatus        @default(ACTIVE)
   statusReason      String?
-  /// Configurable plan (A6). Null until plans exist.
+  /// Membership plan (v2 phase 2). Null until Hirewise assigns one; invites open only then.
   planId            String?
-  trainingAccess    Boolean            @default(true)
-  opportunityAccess Boolean            @default(true)
-  joinedAt          DateTime           @default(now())
+  plan              Plan?               @relation(fields: [planId], references: [id])
+  planStartedAt     DateTime?
+  trainingAccess    Boolean             @default(true)
+  opportunityAccess Boolean             @default(true)
+  joinedAt          DateTime            @default(now())
   suspendedAt       DateTime?
   deactivatedAt     DateTime?
-  createdAt         DateTime           @default(now())
-  updatedAt         DateTime           @updatedAt
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
   application       AgencyApplication?
   users             AgencyUser[]
   memberships       AgencyMembership[]
-  primaryAgents     AgentProfile[]     @relation("PrimaryAgencyAgents")
+  primaryAgents     AgentProfile[]      @relation("PrimaryAgencyAgents")
+  seatLedger        AgencySeatLedger[]
+  seatPurchases     SeatPurchase[]
+  seatRequests      SeatRequest[]
+  inviteLinks       AgencyInviteLink[]
+  emailInvites      AgencyEmailInvite[]
 
   @@index([status])
   @@index([ownerUserId])
@@ -2334,24 +2348,31 @@ model AgencyUser {
   @@index([userId])
 }
 
-/// Membership history. agencyId null = Hirewise Direct. One ACTIVE primary membership per agent at a time.
+/// Membership history (v2 phase 2): one open membership per platform identity (partial unique index in the migration).
+/// Hirewise Direct is the absence of an open membership; agencyId stays nullable only for historical rows.
 model AgencyMembership {
-  id             String                 @id @default(cuid())
-  agentProfileId String
-  agentProfile   AgentProfile           @relation(fields: [agentProfileId], references: [id], onDelete: Cascade)
-  agencyId       String?
-  agency         Agency?                @relation(fields: [agencyId], references: [id])
-  isPrimary      Boolean                @default(true)
-  status         AgencyMembershipStatus @default(ACTIVE)
-  joinedAt       DateTime               @default(now())
-  leftAt         DateTime?
-  approvedById   String?
-  approvedBy     User?                  @relation("MembershipApprover", fields: [approvedById], references: [id])
-  endReason      String?
-  createdAt      DateTime               @default(now())
+  id                 String                 @id @default(cuid())
+  agentProfileId     String
+  agentProfile       AgentProfile           @relation(fields: [agentProfileId], references: [id], onDelete: Cascade)
+  agencyId           String?
+  agency             Agency?                @relation(fields: [agencyId], references: [id])
+  isPrimary          Boolean                @default(true)
+  status             AgencyMembershipStatus @default(ACTIVE)
+  joinedAt           DateTime               @default(now())
+  leftAt             DateTime?
+  approvedById       String?
+  approvedBy         User?                  @relation("MembershipApprover", fields: [approvedById], references: [id])
+  endReason          String?
+  platformIdentityId String?
+  invitationSource   InvitationSource       @default(ADMIN)
+  seatLedgerEntryId  String?
+  endedById          String?
+  invitedEmail       String?
+  createdAt          DateTime               @default(now())
 
   @@index([agentProfileId, status])
   @@index([agencyId, status])
+  @@index([platformIdentityId, status])
 }
 
 // ---------------------------------------------------------------------------
@@ -2466,4 +2487,188 @@ model DuplicateFlag {
   @@index([status, createdAt])
   @@index([attemptedEmail])
   @@index([matchedIdentityId])
+}
+
+// ---------------------------------------------------------------------------
+// v2 phase 2: plans, Agent Seats, invitations
+// ---------------------------------------------------------------------------
+
+enum InvitationSource {
+  UNIQUE_LINK
+  EMAIL_INVITE
+  ADMIN
+  OWNER
+}
+
+enum BillingPeriod {
+  MONTHLY
+  ANNUAL
+}
+
+/// Capacity types add or remove seats; usage types record a seat taken or given back by a membership.
+enum SeatLedgerType {
+  PLAN_BASE
+  PURCHASE
+  PROMO_GRANT
+  ADMIN_ADD
+  ADMIN_REMOVE
+  OVERRIDE
+  CONSUMED
+  RELEASED
+  PENDING_RELEASE
+}
+
+enum SeatPurchaseStatus {
+  PENDING
+  PAID
+  WAIVED
+  CANCELLED
+}
+
+enum SeatRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum EmailInviteStatus {
+  PENDING
+  ACCEPTED
+  REVOKED
+  EXPIRED
+}
+
+/// Membership plans. Prices are data (minor units), never code; Enterprise has no base seats (Admin adds them).
+model Plan {
+  id                String        @id @default(cuid())
+  key               String        @unique
+  name              String
+  baseAgentSeats    Int?
+  priceMinor        Int           @default(0)
+  currency          String        @default("USD") @db.Char(3)
+  billingPeriod     BillingPeriod @default(MONTHLY)
+  trainingAccess    Boolean       @default(true)
+  opportunityAccess Boolean       @default(true)
+  features          String[]      @default([])
+  isActive          Boolean       @default(true)
+  sortOrder         Int           @default(0)
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+
+  agencies      Agency[]
+  ledgerEntries AgencySeatLedger[]
+}
+
+model SeatPackage {
+  id         String   @id @default(cuid())
+  name       String
+  seatCount  Int
+  priceMinor Int      @default(0)
+  currency   String   @default("USD") @db.Char(3)
+  isActive   Boolean  @default(true)
+  sortOrder  Int      @default(0)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  purchases SeatPurchase[]
+}
+
+/// Append-only (a trigger rejects UPDATE and DELETE). Totals are always computed from these rows.
+model AgencySeatLedger {
+  id                    String         @id @default(cuid())
+  agencyId              String
+  agency                Agency         @relation(fields: [agencyId], references: [id], onDelete: Cascade)
+  changeType            SeatLedgerType
+  /// Always positive; changeType carries the direction.
+  quantity              Int
+  reason                String?
+  relatedAgentProfileId String?
+  relatedMembershipId   String?
+  seatPurchaseId        String?
+  planId                String?
+  plan                  Plan?          @relation(fields: [planId], references: [id])
+  effectiveAt           DateTime       @default(now())
+  createdById           String?
+  createdAt             DateTime       @default(now())
+
+  @@index([agencyId, createdAt])
+  @@index([relatedMembershipId])
+}
+
+model SeatPurchase {
+  id               String             @id @default(cuid())
+  agencyId         String
+  agency           Agency             @relation(fields: [agencyId], references: [id], onDelete: Cascade)
+  packageId        String
+  package          SeatPackage        @relation(fields: [packageId], references: [id])
+  seatCount        Int
+  amountMinor      Int
+  currency         String             @db.Char(3)
+  status           SeatPurchaseStatus @default(PENDING)
+  paymentReference String?
+  paidAt           DateTime?
+  recordedById     String?
+  ledgerEntryId    String?
+  note             String?
+  requestedById    String
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+
+  @@index([agencyId, status])
+  @@index([status, createdAt])
+}
+
+model SeatRequest {
+  id             String            @id @default(cuid())
+  agencyId       String
+  agency         Agency            @relation(fields: [agencyId], references: [id], onDelete: Cascade)
+  requestedSeats Int
+  note           String?
+  status         SeatRequestStatus @default(PENDING)
+  requestedById  String
+  reviewedById   String?
+  decisionNote   String?
+  grantedSeats   Int?
+  ledgerEntryId  String?
+  reviewedAt     DateTime?
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+
+  @@index([agencyId, status])
+  @@index([status, createdAt])
+}
+
+/// The agency's own sign-up link. Agent-facing only; never shown to clients.
+model AgencyInviteLink {
+  id          String    @id @default(cuid())
+  agencyId    String
+  agency      Agency    @relation(fields: [agencyId], references: [id], onDelete: Cascade)
+  token       String    @unique
+  label       String
+  active      Boolean   @default(true)
+  createdById String
+  uses        Int       @default(0)
+  expiresAt   DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([agencyId, active])
+}
+
+model AgencyEmailInvite {
+  id                   String            @id @default(cuid())
+  agencyId             String
+  agency               Agency            @relation(fields: [agencyId], references: [id], onDelete: Cascade)
+  email                String            @db.Citext
+  token                String            @unique
+  status               EmailInviteStatus @default(PENDING)
+  invitedById          String
+  expiresAt            DateTime
+  acceptedMembershipId String?
+  acceptedAt           DateTime?
+  createdAt            DateTime          @default(now())
+  updatedAt            DateTime          @updatedAt
+
+  @@index([agencyId, status])
+  @@index([email, status])
 }

@@ -12,10 +12,10 @@ import { fmtBytes } from "@/components/academy/lesson-meta";
 
 export const AGENCY_SERVICES = ["Cold Calling", "Appointment Setting", "Sales", "Customer Service", "Virtual Assistance", "Lead Generation", "Technical Support", "Back Office", "Recruitment", "Other"] as const;
 
-export type ApplyFormValues = { id?: string; status?: string; applicantFullName: string; applicantPhone: string | null; proposedAgencyName: string; businessRegistration: string | null; country: string; city: string | null; website: string | null; socialLinks: string[]; teamSize: number; yearsExperience: number; services: string[]; description: string; applicantVisibleMessage?: string | null; documents?: Array<{ id: string; name: string }> };
+export type ApplyFormValues = { id?: string; status?: string; applicantFullName: string; applicantPhone: string | null; proposedAgencyName: string; businessRegistration: string | null; country: string; city: string | null; website: string | null; socialLinks: string[]; teamSize: number; yearsExperience: number; services: string[]; description: string; applicantVisibleMessage?: string | null; documents?: Array<{ id: string; name: string }>; preferredPlanKey?: string | null };
 
 /** The application form: creates a new application, or edits one that is SUBMITTED or NEEDS_MORE_INFO. */
-export function ApplyForm({ values, agreement, defaultEmail }: { values?: ApplyFormValues; agreement: { id: string; title: string; version: number; bodyMarkdown: string; bundle: TermsBundleProp }; defaultEmail: string }) {
+export function ApplyForm({ values, agreement, defaultEmail, plans = [] }: { values?: ApplyFormValues; plans?: Array<{ key: string; name: string; baseAgentSeats: number | null; priceLabel: string }>; agreement: { id: string; title: string; version: number; bodyMarkdown: string; bundle: TermsBundleProp }; defaultEmail: string }) {
   const router = useRouter();
   const editing = !!values?.id;
   const [createState, createAction] = useActionState(submitApplicationAction, idle as ActionResult<{ id: string }>);
@@ -50,6 +50,11 @@ export function ApplyForm({ values, agreement, defaultEmail }: { values?: ApplyF
           <Field label="Proposed agency name" htmlFor="ap-agency" error={fe.proposedAgencyName} className="sm:col-span-2"><Input id="ap-agency" name="proposedAgencyName" defaultValue={values?.proposedAgencyName ?? ""} required invalid={!!fe.proposedAgencyName} placeholder="e.g. ABC Virtual Assistants" /></Field>
           <Field label="Business registration (optional)" htmlFor="ap-reg" error={fe.businessRegistration} hint="Registration or tax number if you have one."><Input id="ap-reg" name="businessRegistration" defaultValue={values?.businessRegistration ?? ""} /></Field>
           <Field label="Current team size" htmlFor="ap-team" error={fe.teamSize}><Input id="ap-team" name="teamSize" type="number" min={0} max={10000} defaultValue={values?.teamSize ?? 0} /></Field>
+          {plans.length > 0 && (
+            <Field label="Preferred membership plan (optional)" htmlFor="ap-plan" hint="Plans set how many agent seats your agency starts with. Hirewise confirms the plan at approval." error={fe.preferredPlanKey}>
+              <Select id="ap-plan" name="preferredPlanKey" defaultValue={values?.preferredPlanKey ?? ""}><option value="">Decide later with Hirewise</option>{plans.map((p) => <option key={p.key} value={p.key}>{p.name} · {p.baseAgentSeats === null ? "custom seats" : `${p.baseAgentSeats} agent seats`} · {p.priceLabel}</option>)}</Select>
+            </Field>
+          )}
           <Field label="Country" htmlFor="ap-country" error={fe.country}>
             <Select id="ap-country" name="country" defaultValue={values?.country ?? "Philippines"} invalid={!!fe.country}>{COUNTRIES.map((c) => <option key={c}>{c}</option>)}</Select>
           </Field>

@@ -19,7 +19,7 @@ function applicationInput(fd: FormData) {
     city: formString(fd, "city"),
     website: formString(fd, "website"),
     socialLinks: formString(fd, "socialLinks").split(/\r?\n|,/).map((s) => s.trim()).filter(Boolean),
-    teamSize: formString(fd, "teamSize") || "0",
+    preferredPlanKey: formString(fd, "preferredPlanKey"), teamSize: formString(fd, "teamSize") || "0",
     yearsExperience: formString(fd, "yearsExperience") || "0",
     services: formList(fd, "services"),
     description: formString(fd, "description"),

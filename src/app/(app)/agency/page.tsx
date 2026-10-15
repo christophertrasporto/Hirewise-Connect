@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Users, GraduationCap, Briefcase, Handshake } from "lucide-react";
+import { Users, GraduationCap, Briefcase, Handshake, Armchair } from "lucide-react";
 import { prisma } from "@/server/db/client";
 import { requireActor } from "@/server/auth/require-actor";
 import { myAgency, agencyAgents } from "@/server/services/agency.service";
+import { seatSummary } from "@/server/services/seat.service";
 import { Card } from "@/components/app/ui";
 
 export const metadata: Metadata = { title: "My agency" };
@@ -11,17 +12,18 @@ export const metadata: Metadata = { title: "My agency" };
 /** Overview: the numbers an owner checks first. Training, opportunities, and placements fill in with phases A3 to A5. */
 export default async function AgencyOverviewPage() {
   const actor = await requireActor();
-  const [agency, agents] = await Promise.all([myAgency(prisma, actor), actor.permissions.has("agency.team.read") ? agencyAgents(prisma, actor) : Promise.resolve([])]);
+  const [agency, agents, seats] = await Promise.all([myAgency(prisma, actor), actor.permissions.has("agency.team.read") ? agencyAgents(prisma, actor) : Promise.resolve([]), seatSummary(prisma, actor)]);
   const available = agents.filter((a) => a.availabilityStatus === "AVAILABLE" || a.availabilityStatus === "AVAILABLE_SOON").length;
   const tiles = [
-    { icon: Users, label: "Agents", value: agency.agentCount, href: "/agency/team", note: `${available} available` },
+    { icon: Users, label: "Agents", value: agents.length || agency.agentCount, href: "/agency/team", note: `${available} available` },
+    { icon: Armchair, label: "Agent Seats", value: `${seats.totals.used} / ${seats.totals.total}`, href: "/agency/settings#seats", note: seats.plan ? `${seats.totals.available} available${seats.totals.pendingRelease ? ` · ${seats.totals.pendingRelease} pending release` : ""}` : "No plan assigned yet" },
     { icon: GraduationCap, label: "In training", value: "—", href: "/agency/training", note: "Training marketplace arrives in phase A3" },
     { icon: Briefcase, label: "Open opportunities", value: "—", href: "/agency/opportunities", note: "Opportunities arrive in phase A4" },
     { icon: Handshake, label: "Active placements", value: "—", href: "/agency/opportunities", note: "Placements arrive in phase A5" },
   ];
   return (
     <div className="space-y-5">
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
         {tiles.map((t) => (
           <Link key={t.label} href={t.href} className="rounded-3xl border border-ink-100 bg-white p-5 shadow-soft transition hover:-translate-y-0.5 hover:shadow-lift">
             <p className="inline-flex items-center gap-2 text-[12px] font-semibold uppercase tracking-[0.12em] text-ink-400"><t.icon className="h-4 w-4 text-brand-600" /> {t.label}</p>

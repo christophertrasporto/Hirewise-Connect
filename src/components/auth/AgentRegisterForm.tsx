@@ -10,7 +10,7 @@ import { TermsCheckbox, type TermsBundleProp } from "@/components/terms/TermsDra
 
 import { AGENT_ROLES, COUNTRIES, TIMEZONES } from "@/lib/options";
 
-export function AgentRegisterForm({ terms, continuation }: { terms: TermsBundleProp; continuation?: { token: string; email: string } | null }) {
+export function AgentRegisterForm({ terms, continuation, join }: { terms: TermsBundleProp; continuation?: { token: string; email: string } | null; join?: { token: string; agencyName: string; email: string | null } | null }) {
   const [state, action] = useActionState(registerAgentAction, idle);
   const fe = state.fieldErrors ?? {};
   return (
@@ -18,14 +18,14 @@ export function AgentRegisterForm({ terms, continuation }: { terms: TermsBundleP
       <Link href="/register" className="inline-flex items-center gap-1.5 text-[13.5px] font-medium text-ink-500 hover:text-ink-900">
         <ArrowLeft className="h-4 w-4" /> Choose a different account type
       </Link>
-      <h1 className="mt-6 text-[2rem] font-bold leading-tight">Apply as talent</h1>
-      <p className="mt-2 text-[15px] text-ink-500">Create your account first. You will complete your full profile, résumé, video, and voice sample from your dashboard.</p>
+      <h1 className="mt-6 text-[2rem] font-bold leading-tight">{join ? `Join ${join.agencyName} on Hirewise Connect` : "Apply as talent"}</h1>
+      <p className="mt-2 text-[15px] text-ink-500">{join ? `Create your talent account; you join ${join.agencyName} as soon as it exists and take one of their Agent Seats. Already have a talent account? Sign in first and open this link again.` : "Create your account first. You will complete your full profile, résumé, video, and voice sample from your dashboard."}</p>
 
       <form action={action} className="mt-8 space-y-6" noValidate>
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="Full legal name" htmlFor="fullName" error={fe.fullName} hint="Private. Only Hirewise sees this."><Input id="fullName" name="fullName" autoComplete="name" required invalid={!!fe.fullName} /></Field>
           <Field label="Professional name" htmlFor="displayName" error={fe.displayName} hint="Shown to clients, e.g. “Maria S.”"><Input id="displayName" name="displayName" required invalid={!!fe.displayName} /></Field>
-          <Field label="Email" htmlFor="email" error={fe.email}><Input id="email" name="email" type="email" autoComplete="email" required invalid={!!fe.email} defaultValue={continuation?.email ?? ""} readOnly={!!continuation} /></Field>
+          <Field label="Email" htmlFor="email" error={fe.email}><Input id="email" name="email" type="email" autoComplete="email" required invalid={!!fe.email} defaultValue={continuation?.email ?? join?.email ?? ""} readOnly={!!continuation || !!join?.email} /></Field>
           <Field label="Phone" htmlFor="phone" error={fe.phone} hint="Optional. Never shown to clients."><Input id="phone" name="phone" type="tel" autoComplete="tel" invalid={!!fe.phone} /></Field>
           <Field label="Password" htmlFor="password" error={fe.password} hint="At least 10 characters, mixing lower case with upper case or digits." className="sm:col-span-2"><Input id="password" name="password" type="password" autoComplete="new-password" required invalid={!!fe.password} /></Field>
           <Field label="City" htmlFor="locationCity" error={fe.locationCity}><Input id="locationCity" name="locationCity" required invalid={!!fe.locationCity} /></Field>
@@ -49,6 +49,7 @@ export function AgentRegisterForm({ terms, continuation }: { terms: TermsBundleP
         </div>
 
         {continuation && <input type="hidden" name="continuationToken" value={continuation.token} />}
+        {join && <input type="hidden" name="inviteToken" value={join.token} />}
         <TermsCheckbox bundle={terms} error={fe.termsAccepted} />
         {state.error && !fe.termsAccepted && <FormAlert>{state.error}</FormAlert>}
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
