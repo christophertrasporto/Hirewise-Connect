@@ -62,6 +62,17 @@ export const SETTING_SCHEMAS = {
       unverifiedJoinTtlDays: z.number().int().min(1).max(365).default(14),
     })
     .default(() => ({ seatReleaseRule: "IMMEDIATE" as const, inviteLinkTtlDays: 0, emailInviteTtlDays: 14, unverifiedJoinTtlDays: 14 })),
+  /** v2 phase 3: exit flows. */
+  agencyExit: z
+    .object({
+      /** Days an agency has to answer a leave request before Hirewise takes it over. */
+      ownerResponseDays: z.number().int().min(1).max(60).default(5),
+      /** Hirewise reviews every exit, not only those with an active client assignment. */
+      adminReviewAlways: z.boolean().default(false),
+      /** Days after an exit before the former profile is archived. */
+      archiveAfterDays: z.number().int().min(0).max(3650).default(30),
+    })
+    .default(() => ({ ownerResponseDays: 5, adminReviewAlways: false, archiveAfterDays: 30 })),
   /** Section 8.8 thresholds. */
   profileViewBurstPerHour: z.number().int().positive().default(60),
   shortlistChurnPerDay: z.number().int().positive().default(12),

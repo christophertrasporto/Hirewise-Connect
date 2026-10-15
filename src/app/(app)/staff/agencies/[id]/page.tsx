@@ -10,6 +10,8 @@ import { PageHeader, Card, StatusBadge, EmptyState, Banner, fmtDate } from "@/co
 import { AgencyStatusForm, SetAgentAgencyForm } from "@/components/agency/ReviewPanel";
 import { AdminSeatChangeForm, AssignPlanForm } from "@/components/agency/AdminSeatForms";
 import { seatSummary, activePlans } from "@/server/services/seat.service";
+import { exitRequestsForAgency } from "@/server/services/exit.service";
+import { ExitRequestSummary } from "@/components/agency/ExitForms";
 
 export const metadata: Metadata = { title: "Agency" };
 
@@ -28,7 +30,7 @@ export default async function AgencyStaffPage({ params }: { params: Promise<{ id
   }
   const manages = can(actor, "agency.manage");
   const managesSeats = can(actor, "agency.seats.manage");
-  const [agencies, seats, plans] = await Promise.all([manages ? listAgencies(prisma, actor).then((rows) => rows.map((a) => ({ id: a.id, name: a.name }))) : Promise.resolve([]), seatSummary(prisma, actor, id), activePlans(prisma)]);
+  const [agencies, seats, plans, exits] = await Promise.all([manages ? listAgencies(prisma, actor).then((rows) => rows.map((a) => ({ id: a.id, name: a.name }))) : Promise.resolve([]), seatSummary(prisma, actor, id), activePlans(prisma), exitRequestsForAgency(prisma, actor, id)]);
   const t = seats.totals;
 
   return (
@@ -76,6 +78,11 @@ export default async function AgencyStaffPage({ params }: { params: Promise<{ id
           </Card>
         </div>
         <div className="space-y-5">
+          {exits.length > 0 && (
+            <Card title={`Exit requests (${exits.length})`} description="Decided under Agencies → Exit requests.">
+              <ul className="divide-y divide-ink-100">{exits.slice(0, 10).map((r) => <li key={r.id} className="flex items-start justify-between gap-3 py-2"><ExitRequestSummary r={r} audience="STAFF" /><StatusBadge status={r.status} /></li>)}</ul>
+            </Card>
+          )}
           <Card title="Seats"><ul className="space-y-1 text-[13.5px]">{agency.seats.map((s) => <li key={s.userId} className="flex justify-between"><span className="text-ink-800">{s.email}</span><span className="text-ink-400">{s.role === "OWNER" ? "Owner" : "Manager"}</span></li>)}</ul></Card>
           {manages && <Card title="Status" description="Suspended agencies keep read access and all their data; invites, purchases, and submissions pause. Deactivation is the same but signals the agency has left."><AgencyStatusForm agencyId={agency.id} status={agency.status} /></Card>}
         </div>

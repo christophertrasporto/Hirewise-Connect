@@ -582,6 +582,9 @@ model AgentProfile {
   platformIdentity     PlatformIdentity?  @relation(fields: [platformIdentityId], references: [id])
   talentType           TalentType         @default(HIREWISE_DIRECT)
   archivedAt           DateTime?
+  /// v2 phase 3: set when the agency membership ended (status FORMER_AGENCY_AGENT), cleared on rejoin or reactivation.
+  formerAgencyId       String?
+  formerAt             DateTime?
   displayName          String
   headline             String?
   primaryRole          String?
@@ -2368,6 +2371,12 @@ model AgencyMembership {
   seatLedgerEntryId  String?
   endedById          String?
   invitedEmail       String?
+  /// v2 phase 3: the exit that ended (or is ending) this membership, when it ends, how and when the seat is released.
+  exitRequestId      String?
+  effectiveEndAt     DateTime?
+  seatReleaseRule    SeatReleaseRule?
+  seatReleasedAt     DateTime?
+  exitRequests       ExitRequest[]
   createdAt          DateTime               @default(now())
 
   @@index([agentProfileId, status])
@@ -2671,4 +2680,74 @@ model AgencyEmailInvite {
 
   @@index([agencyId, status])
   @@index([email, status])
+}
+
+// ---------------------------------------------------------------------------
+// v2 phase 3: exit requests
+// ---------------------------------------------------------------------------
+
+enum ExitRequestType {
+  AGENT_REQUESTED_LEAVE
+  AGENCY_REQUESTED_REMOVAL
+}
+
+enum ExitEffectiveOption {
+  IMMEDIATE
+  END_OF_ASSIGNMENT
+  END_OF_BILLING_PERIOD
+}
+
+enum ExitRequestStatus {
+  PENDING_AGENCY
+  PENDING_ADMIN
+  APPROVED
+  DECLINED
+  CANCELLED
+  COMPLETED
+}
+
+enum ExitDecision {
+  APPROVED
+  DECLINED
+}
+
+enum SeatReleaseRule {
+  IMMEDIATE
+  AFTER_BILLING_PERIOD
+  AFTER_ASSIGNMENT_ENDS
+}
+
+/// Request to Leave (agent) or Remove Agent (agency). One open request per membership (partial unique index in the migration).
+model ExitRequest {
+  id                     String              @id @default(cuid())
+  membershipId           String
+  membership             AgencyMembership    @relation(fields: [membershipId], references: [id], onDelete: Cascade)
+  agencyId               String
+  agentProfileId         String
+  platformIdentityId     String?
+  type                   ExitRequestType
+  reason                 String
+  effectiveOption        ExitEffectiveOption @default(IMMEDIATE)
+  requestedEffectiveDate DateTime?
+  status                 ExitRequestStatus   @default(PENDING_AGENCY)
+  requestedById          String
+  agencyDecision         ExitDecision?
+  agencyDecidedById      String?
+  agencyDecisionNote     String?
+  agencyDecidedAt        DateTime?
+  adminRequired          Boolean             @default(false)
+  adminRequiredReason    String?
+  adminDecision          ExitDecision?
+  adminDecidedById       String?
+  adminDecisionNote      String?
+  adminDecidedAt         DateTime?
+  escalatedAt            DateTime?
+  effectiveAt            DateTime?
+  completedAt            DateTime?
+  createdAt              DateTime            @default(now())
+  updatedAt              DateTime            @updatedAt
+
+  @@index([agencyId, status])
+  @@index([agentProfileId, status])
+  @@index([status, createdAt])
 }

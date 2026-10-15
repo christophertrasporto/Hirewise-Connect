@@ -291,11 +291,13 @@ describe("seat requests, purchases, admin changes, plan changes", () => {
     await setAgentAgency(db, admin(), ids.directProfile, ids.agencyB, "Transferred at the owners' request");
     expect((await seatTotals(db, ids.agencyA)).used).toBe(before.used - 1);
     expect((await seatTotals(db, ids.agencyB)).used).toBe(1);
-    const m = await db.agencyMembership.findFirstOrThrow({ where: { agentProfileId: ids.directProfile, status: "ACTIVE" } });
+    // v2 phase 3: leaving A made the old profile a former profile, so the move created a fresh profile for the same person.
+    const m = await db.agencyMembership.findFirstOrThrow({ where: { status: "ACTIVE", agentProfile: { userId: ids.directUser } } });
     expect(m).toMatchObject({ agencyId: ids.agencyB, invitationSource: "ADMIN" });
-    await setAgentAgency(db, admin(), ids.directProfile, null, "Back to Hirewise Direct");
-    expect(await db.agencyMembership.count({ where: { agentProfileId: ids.directProfile, status: "ACTIVE" } })).toBe(0);
-    expect((await db.agentProfile.findUniqueOrThrow({ where: { id: ids.directProfile } })).talentType).toBe("HIREWISE_DIRECT");
+    expect(m.agentProfileId).not.toBe(ids.directProfile);
+    await setAgentAgency(db, admin(), m.agentProfileId, null, "Back to Hirewise Direct");
+    expect(await db.agencyMembership.count({ where: { agentProfile: { userId: ids.directUser }, status: "ACTIVE" } })).toBe(0);
+    expect((await db.agentProfile.findUniqueOrThrow({ where: { id: m.agentProfileId } })).status).toBe("FORMER_AGENCY_AGENT");
     expect((await seatTotals(db, ids.agencyB)).used).toBe(0);
   });
 

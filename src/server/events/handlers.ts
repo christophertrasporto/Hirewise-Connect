@@ -270,6 +270,31 @@ export const EVENT_HANDLERS: { [T in DomainEventType]: EventHandler<T> } = {
     await taskRepository.completeByRelated(db, "RECORD_SEAT_PURCHASE", "SeatPurchase", p.purchaseId);
     await notifyUser(db, { userId: p.ownerUserId, type: "SEAT_PURCHASE_RECORDED", title: p.outcome === "CANCELLED" ? `Seat purchase for ${p.agencyName} was cancelled` : `${p.seatCount} Agent Seat(s) added to ${p.agencyName}`, body: p.outcome === "CANCELLED" ? "Hirewise cancelled this purchase. Contact Hirewise if this is unexpected." : `Hirewise recorded the purchase as ${p.outcome.toLowerCase()}. You now have ${p.available} seat(s) available.`, email: { to: p.ownerEmail }, dedupeKey: `SEATREC:${p.purchaseId}` });
   },
+  // v2 phase 3: exits
+  EXIT_REQUESTED: async (db, p) => {
+    if (p.type === "AGENT_REQUESTED_LEAVE") {
+      await notifyUser(db, { userId: p.ownerUserId, type: "EXIT_REQUESTED", title: `${p.displayName} asked to leave ${p.agencyName}`, body: `Reason: ${p.reason}. Review it under My team → Exit requests. Hirewise reviews it too when the agent has an active client assignment.`, dedupeKey: `EXITREQ:${p.exitRequestId}` });
+    } else if (p.agentUserId) {
+      await notifyUser(db, { userId: p.agentUserId, type: "EXIT_REQUESTED", title: `${p.agencyName} asked to end your membership`, body: `Reason: ${p.reason}. Timing: ${p.effectiveOption.toLowerCase().replace(/_/g, " ")}. Hirewise reviews the removal when you have an active client assignment.`, email: { to: p.agentEmail }, dedupeKey: `EXITREQ:${p.exitRequestId}` });
+    }
+  },
+  EXIT_ESCALATED: async (db, p) => {
+    await notifyStaff(db, ["SUPER_ADMIN", "ADMIN"], { type: "EXIT_ESCALATED", title: `Exit review needed: ${p.displayName} at ${p.agencyName}`, body: `${p.why}. Decide it under Agencies → Exit requests.`, dedupeKey: `EXITESC:${p.exitRequestId}` });
+    const existing = await taskRepository.findOpenByRelated(db, "REVIEW_EXIT_REQUEST", "ExitRequest", p.exitRequestId);
+    if (!existing) await taskRepository.create(db, { type: "REVIEW_EXIT_REQUEST", title: `Exit review: ${p.displayName} (${p.agencyName})`, queueRole: "ADMIN", dueAt: new Date(Date.now() + 3 * 24 * 60 * 60_000), relatedType: "ExitRequest", relatedId: p.exitRequestId });
+  },
+  EXIT_DECIDED: async (db, p) => {
+    await taskRepository.completeByRelated(db, "REVIEW_EXIT_REQUEST", "ExitRequest", p.exitRequestId);
+    const when = p.effectiveAt ? ` Effective ${new Date(p.effectiveAt).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })}.` : p.decision === "APPROVED" ? " Effective when the current assignment ends." : "";
+    const byLabel = p.by === "ADMIN" ? "Hirewise" : p.by === "AGENCY" ? p.agencyName : p.displayName;
+    if (p.agentUserId && p.by !== "AGENT") await notifyUser(db, { userId: p.agentUserId, type: "EXIT_DECIDED", title: p.decision === "APPROVED" ? `Your exit from ${p.agencyName} is approved` : `Your exit request was declined`, body: `${byLabel} ${p.decision === "APPROVED" ? "approved" : "declined"} the request.${p.note ? ` Note: ${p.note}.` : ""}${when}`, email: { to: p.agentEmail }, dedupeKey: `EXITDEC:${p.exitRequestId}:${p.decision}` });
+    if (p.by !== "AGENCY") await notifyUser(db, { userId: p.ownerUserId, type: "EXIT_DECIDED", title: `${p.displayName}: exit ${p.decision.toLowerCase()}`, body: `${byLabel} ${p.decision === "APPROVED" ? "approved" : p.decision === "DECLINED" ? "declined" : "cancelled"} the request.${p.note ? ` Note: ${p.note}.` : ""}${when}`, dedupeKey: `EXITDECO:${p.exitRequestId}:${p.decision}` });
+  },
+  AGENCY_EXIT_COMPLETED: async (db, p) => {
+    if (p.exitRequestId) await taskRepository.completeByRelated(db, "REVIEW_EXIT_REQUEST", "ExitRequest", p.exitRequestId);
+    if (p.agentUserId) await notifyUser(db, { userId: p.agentUserId, type: "AGENCY_EXIT_COMPLETED", title: `Your membership of ${p.agencyName} has ended`, body: "Your profile is now a former agency profile. Agency-sponsored training and certifications stop counting for platform use; independent reapplication opens in the next phase.", dedupeKey: `EXITDONE:${p.membershipId}` });
+    await notifyUser(db, { userId: p.ownerUserId, type: "AGENCY_EXIT_COMPLETED", title: `${p.displayName} left ${p.agencyName}`, body: `${p.reason}. Their Agent Seat is released per your seat release rule.`, dedupeKey: `EXITDONEO:${p.membershipId}` });
+  },
   AGENCY_APPLICATION_SUBMITTED: async (db, p) => {
     await notifyStaff(db, ["SUPER_ADMIN", "ADMIN"], { type: "AGENCY_APPLICATION_SUBMITTED", title: `${p.resubmission ? "Updated" : "New"} agency application: ${p.agencyName}`, body: `${p.applicantName} ${p.resubmission ? "resubmitted their application" : "applied to run an agency"}. Review it under Agencies → Applications.`, dedupeKey: `AGAPP:${p.applicationId}:${p.resubmission ? "re" : "new"}` });
     const existing = await taskRepository.findOpenByRelated(db, "REVIEW_AGENCY_APPLICATION", "AgencyApplication", p.applicationId);

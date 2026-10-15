@@ -12,7 +12,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const { actor } = auth;
 
   const nav: NavItem[] = [{ href: "/dashboard", label: "Dashboard", icon: <LayoutDashboard /> }];
-  if (actor.role === "AGENT") {
+  if (actor.role === "AGENT" && actor.agentProfileId) {
     nav.push({ href: "/profile", label: "My profile", icon: <UserCircle /> });
     nav.push({ href: "/profile/media", label: "Video & voice", icon: <Film /> });
     nav.push({ href: "/interviews", label: "Interviews", icon: <CalendarClock /> });

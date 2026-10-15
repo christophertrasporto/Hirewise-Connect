@@ -52,6 +52,11 @@ export type DomainEventMap = {
   SEAT_REQUEST_DECIDED: { requestId: string; agencyId: string; agencyName: string; ownerUserId: string; ownerEmail: string; decision: "APPROVED" | "REJECTED"; grantedSeats: number | null; note: string | null; available: number };
   SEAT_PURCHASE_CREATED: { purchaseId: string; agencyId: string; agencyName: string; seatCount: number; amountMinor: number; currency: string };
   SEAT_PURCHASE_RECORDED: { purchaseId: string; agencyId: string; agencyName: string; ownerUserId: string; ownerEmail: string; outcome: "PAID" | "WAIVED" | "CANCELLED"; seatCount: number; available: number };
+  // v2 phase 3: exits
+  EXIT_REQUESTED: { exitRequestId: string; type: "AGENT_REQUESTED_LEAVE" | "AGENCY_REQUESTED_REMOVAL"; agencyId: string; agencyName: string; ownerUserId: string; agentUserId: string; agentEmail: string; displayName: string; reason: string; effectiveOption: string };
+  EXIT_DECIDED: { exitRequestId: string; type: "AGENT_REQUESTED_LEAVE" | "AGENCY_REQUESTED_REMOVAL"; decision: "APPROVED" | "DECLINED" | "CANCELLED"; by: "AGENCY" | "ADMIN" | "AGENT"; agencyId: string; agencyName: string; ownerUserId: string; agentUserId: string; agentEmail: string; displayName: string; note: string | null; effectiveAt: string | null };
+  EXIT_ESCALATED: { exitRequestId: string; type: "AGENT_REQUESTED_LEAVE" | "AGENCY_REQUESTED_REMOVAL"; agencyId: string; agencyName: string; displayName: string; why: string };
+  AGENCY_EXIT_COMPLETED: { membershipId: string; exitRequestId: string | null; agencyId: string; agencyName: string; ownerUserId: string; agentProfileId: string; agentUserId: string; displayName: string; reason: string };
   AGENCY_STATUS_CHANGED: { agencyId: string; agencyName: string; status: "ACTIVE" | "SUSPENDED" | "INACTIVE"; reason: string; ownerUserId: string; ownerEmail: string };
   // Course Builder phase 7
   ASSIGNMENT_SUBMITTED: { submissionId: string; lessonId: string; lessonTitle: string; courseId: string; courseTitle: string; agentProfileId: string; displayName: string; coachUserIds: string[]; late: boolean; resubmission: boolean };
