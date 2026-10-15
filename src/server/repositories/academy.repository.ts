@@ -93,8 +93,8 @@ export const academyRepository = {
   },
 
   // Enrollments
-  enroll(db: Db, d: { courseId: string; agentProfileId: string; priceCents: number; source?: "INTERNAL" | "ACADEMY_SYNC" }) {
-    return db.courseEnrollment.create({ data: { courseId: d.courseId, agentProfileId: d.agentProfileId, priceCents: d.priceCents, paymentStatus: d.priceCents > 0 ? "PENDING" : "NOT_REQUIRED", source: d.source ?? "INTERNAL" } });
+  enroll(db: Db, d: { courseId: string; agentProfileId: string; priceCents: number; source?: "INTERNAL" | "ACADEMY_SYNC"; credentialSource?: "INDEPENDENT_PURCHASE" | "HIREWISE_DIRECT" | "ADMIN_ASSIGNMENT" }) {
+    return db.courseEnrollment.create({ data: { courseId: d.courseId, agentProfileId: d.agentProfileId, priceCents: d.priceCents, paymentStatus: d.priceCents > 0 ? "PENDING" : "NOT_REQUIRED", source: d.source ?? "INTERNAL", credentialSource: d.credentialSource ?? (d.priceCents > 0 ? "INDEPENDENT_PURCHASE" : "HIREWISE_DIRECT") } });
   },
 
   findEnrollment(db: Db, courseId: string, agentProfileId: string) {

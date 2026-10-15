@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { sourceForSelfEnrolment, accessRevoked } from "@/server/services/credential.service";
+import { trainingRepository } from "@/server/repositories/training.repository";
 import type { Db, PrismaClient } from "@/server/db/types";
 import type { Actor } from "@/server/auth/actor";
 import { authorize, ForbiddenError, NotFoundError } from "@/server/policies/authorize";
@@ -547,8 +549,8 @@ export async function enrol(db: PrismaClient, actor: Actor, courseId: string) {
   const lock = await coursesLockedFor(db, actor);
   if (lock.locked) throw new ForbiddenError(lock.reason ?? "Finish your onboarding checklist before enrolling.");
   await db.$transaction(async (tx) => {
-    const e = await academyRepository.enroll(tx, { courseId, agentProfileId: profileId, priceCents: c.priceCents });
-    await audit(tx, { actor, action: "COURSE_ENROLLED", entityType: "CourseEnrollment", entityId: e.id, newValue: { courseId, priceCents: c.priceCents, paymentStatus: e.paymentStatus } });
+    const e = await academyRepository.enroll(tx, { courseId, agentProfileId: profileId, priceCents: c.priceCents, credentialSource: sourceForSelfEnrolment(c.priceCents) });
+    await audit(tx, { actor, action: "COURSE_ENROLLED", entityType: "CourseEnrollment", entityId: e.id, newValue: { courseId, priceCents: c.priceCents, paymentStatus: e.paymentStatus, credentialSource: e.credentialSource } });
     await publishEvent(tx, "COURSE_ENROLLED", { courseId, title: c.title, agentProfileId: profileId, agentUserId: actor.userId, coachUserIds: [c.ownerCoachUserId, ...c.coaches.map((x) => x.coachUserId)], paymentRequired: c.priceCents > 0, priceCents: c.priceCents });
   });
 }
@@ -563,9 +565,11 @@ export async function getEnrollmentForAgent(db: PrismaClient, actor: Actor, cour
     const c = await academyRepository.findCourse(db, courseId);
     if (!c || c.status !== "PUBLISHED") throw new NotFoundError();
     const lock = await coursesLockedFor(db, actor);
-    return { course: toCourseAgentView(c), enrollment: null, lessonProgress: {} as LessonProgressMap, submissions: {} as Record<string, SubmissionLearnerView>, lockedLessons: {} as Record<string, string>, courseProgress: null, locked: lock.locked ? { reason: lock.reason ?? "Finish your onboarding checklist first.", href: "/onboarding/welcome-video" } : null };
+    return { course: toCourseAgentView(c), enrollment: null, lessonProgress: {} as LessonProgressMap, submissions: {} as Record<string, SubmissionLearnerView>, lockedLessons: {} as Record<string, string>, courseProgress: null, locked: lock.locked ? { kind: "ONBOARDING" as const, reason: lock.reason ?? "Finish your onboarding checklist first.", href: "/onboarding/welcome-video" } : null };
   }
-  const unlocked = e.paymentStatus === "NOT_REQUIRED" || e.paymentStatus === "PAID" || e.paymentStatus === "WAIVED";
+  // v2 phase 4: agency-sponsored access ends with the membership.
+  const revoked = accessRevoked(e);
+  const unlocked = !revoked && (e.paymentStatus === "NOT_REQUIRED" || e.paymentStatus === "PAID" || e.paymentStatus === "WAIVED");
   const lessonIds = e.course.modules.flatMap((m) => m.lessons.map((l) => l.id));
   const progressRows = unlocked && lessonIds.length ? await db.lessonProgress.findMany({ where: { agentProfileId: profileId, lessonId: { in: lessonIds } } }) : [];
   const courseProgress = await db.courseProgress.findUnique({ where: { courseId_agentProfileId: { courseId: e.courseId, agentProfileId: profileId } } });
@@ -575,7 +579,7 @@ export async function getEnrollmentForAgent(db: PrismaClient, actor: Actor, cour
   return {
     submissions,
     lockedLessons,
-    locked: null as null | { reason: string; href: string },
+    locked: revoked ? { kind: "REVOKED" as const, reason: e.revokeReason ?? "Access to this course ended with your agency membership.", href: "/courses" } : (null as null | { kind: "ONBOARDING" | "REVOKED"; reason: string; href: string }),
     course: toCourseAgentView(e.course, unlocked),
     enrollment: toEnrollmentAgentView(e),
     lessonProgress: Object.fromEntries(progressRows.map((p) => [p.lessonId, { status: p.status, completedAt: p.completedAt, mediaPercent: p.mediaPercent, lastPositionSec: p.lastPositionSec, mediaCompletedAt: p.mediaCompletedAt }])) as LessonProgressMap,
@@ -594,6 +598,8 @@ export async function recordCoursePayment(db: PrismaClient, actor: Actor, enroll
   if (!p.waived && (paidCents ?? 0) < e.priceCents) throw new Error(`Payment must cover the course price (${(e.priceCents / 100).toFixed(2)} USD).`);
   await db.$transaction(async (tx) => {
     await academyRepository.recordPayment(tx, e.id, { paidCents, paymentReference: p.reference?.trim() || null, waived: p.waived, recordedById: actor.userId });
+    // v2 phase 4: a waived payment is a Hirewise assignment, not an independent purchase.
+    if (p.waived) await trainingRepository.setEnrollmentSource(tx, e.id, "ADMIN_ASSIGNMENT");
     await audit(tx, { actor, action: "COURSE_PAYMENT_RECORDED", entityType: "CourseEnrollment", entityId: e.id, newValue: { paidCents, waived: p.waived, reference: p.reference ?? null, currency: "USD" }, reason: p.reason });
     await publishEvent(tx, "COURSE_PAYMENT_RECORDED", { enrollmentId: e.id, courseTitle: e.course.title, agentUserId: e.agentProfile.userId, agentEmail: e.agentProfile.user.email, waived: p.waived });
   });

@@ -88,16 +88,17 @@ export async function joinAgencyTx(tx: Db, actor: Actor, p: JoinInput): Promise<
   }
   if (!p.allowOverCapacity) await assertCapacity(tx, p.agencyId);
   // v2 phase 3: a former or archived profile rejoins with a fresh profile (setting) or is reactivated.
+  // v2 phase 4 (decision 7): an independent freelancer joining an agency also starts a fresh agency profile.
   let agentProfileId = p.agentProfileId;
   let platformIdentityId = p.platformIdentityId;
   const basics = await exitRepository.profileBasics(tx, p.agentProfileId);
-  if (basics && (basics.status === "FORMER_AGENCY_AGENT" || basics.status === "ARCHIVED")) {
+  if (basics && (basics.status === "FORMER_AGENCY_AGENT" || basics.status === "ARCHIVED" || basics.talentType === "INDEPENDENT_FREELANCER")) {
     platformIdentityId = platformIdentityId ?? basics.platformIdentityId;
     const identitySettings = await getSetting(tx, "identity");
     if (identitySettings.rejoinCreatesFreshProfile) {
       if (!basics.archivedAt) {
         await exitRepository.archive(tx, basics.id);
-        await audit(tx, { actor, action: "PROFILE_ARCHIVED", entityType: "AgentProfile", entityId: basics.id, newValue: { reason: "Rejoined an agency; a fresh profile starts" } });
+        await audit(tx, { actor, action: "PROFILE_ARCHIVED", entityType: "AgentProfile", entityId: basics.id, newValue: { reason: basics.talentType === "INDEPENDENT_FREELANCER" ? "Independent freelancer joined an agency; a fresh agency profile starts" : "Rejoined an agency; a fresh profile starts" } });
       }
       const fresh = await exitRepository.createFreshProfile(tx, basics.id, platformIdentityId, basics.userId);
       agentProfileId = fresh.id;

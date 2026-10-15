@@ -57,6 +57,13 @@ export type DomainEventMap = {
   EXIT_DECIDED: { exitRequestId: string; type: "AGENT_REQUESTED_LEAVE" | "AGENCY_REQUESTED_REMOVAL"; decision: "APPROVED" | "DECLINED" | "CANCELLED"; by: "AGENCY" | "ADMIN" | "AGENT"; agencyId: string; agencyName: string; ownerUserId: string; agentUserId: string; agentEmail: string; displayName: string; note: string | null; effectiveAt: string | null };
   EXIT_ESCALATED: { exitRequestId: string; type: "AGENT_REQUESTED_LEAVE" | "AGENCY_REQUESTED_REMOVAL"; agencyId: string; agencyName: string; displayName: string; why: string };
   AGENCY_EXIT_COMPLETED: { membershipId: string; exitRequestId: string | null; agencyId: string; agencyName: string; ownerUserId: string; agentProfileId: string; agentUserId: string; displayName: string; reason: string };
+  // v2 phase 4: credential sources, Course Seats, independent access
+  COURSE_PURCHASE_CREATED: { purchaseId: string; agencyId: string; agencyName: string; courseTitle: string; seatCount: number; amountMinor: number; currency: string };
+  COURSE_PURCHASE_RECORDED: { purchaseId: string; agencyId: string; agencyName: string; ownerUserId: string; ownerEmail: string; courseTitle: string; seatCount: number; outcome: "PAID" | "WAIVED" | "CANCELLED" };
+  COURSE_SEAT_ASSIGNED: { assignmentId: string; agencyId: string; agencyName: string; courseTitle: string; agentUserId: string; agentEmail: string; displayName: string };
+  CREDENTIALS_REVOKED: { agencyId: string; agencyName: string; agentProfileId: string; agentUserId: string; ownerUserId: string; displayName: string; courses: string[]; certifications: string[]; assessments: number; seatsReturned: number };
+  INDEPENDENT_APPLIED: { accessId: string; userId: string; email: string; feeMinor: number; currency: string; pendingPayment: boolean };
+  INDEPENDENT_ACTIVATED: { accessId: string; userId: string; email: string; profileId: string };
   AGENCY_STATUS_CHANGED: { agencyId: string; agencyName: string; status: "ACTIVE" | "SUSPENDED" | "INACTIVE"; reason: string; ownerUserId: string; ownerEmail: string };
   // Course Builder phase 7
   ASSIGNMENT_SUBMITTED: { submissionId: string; lessonId: string; lessonTitle: string; courseId: string; courseTitle: string; agentProfileId: string; displayName: string; coachUserIds: string[]; late: boolean; resubmission: boolean };

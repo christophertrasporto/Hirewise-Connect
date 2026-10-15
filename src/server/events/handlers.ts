@@ -292,8 +292,41 @@ export const EVENT_HANDLERS: { [T in DomainEventType]: EventHandler<T> } = {
   },
   AGENCY_EXIT_COMPLETED: async (db, p) => {
     if (p.exitRequestId) await taskRepository.completeByRelated(db, "REVIEW_EXIT_REQUEST", "ExitRequest", p.exitRequestId);
+    // v2 phase 4: agency-sponsored credentials stop counting; course seats return to the agency.
+    const { revokeAgencySponsoredOnExit } = await import("@/server/services/credential.service");
+    await revokeAgencySponsoredOnExit(db, { agencyId: p.agencyId, agencyName: p.agencyName, agentProfileId: p.agentProfileId, agentUserId: p.agentUserId, ownerUserId: p.ownerUserId, displayName: p.displayName, membershipId: p.membershipId, reason: p.reason });
     if (p.agentUserId) await notifyUser(db, { userId: p.agentUserId, type: "AGENCY_EXIT_COMPLETED", title: `Your membership of ${p.agencyName} has ended`, body: "Your profile is now a former agency profile. Agency-sponsored training and certifications stop counting for platform use; independent reapplication opens in the next phase.", dedupeKey: `EXITDONE:${p.membershipId}` });
     await notifyUser(db, { userId: p.ownerUserId, type: "AGENCY_EXIT_COMPLETED", title: `${p.displayName} left ${p.agencyName}`, body: `${p.reason}. Their Agent Seat is released per your seat release rule.`, dedupeKey: `EXITDONEO:${p.membershipId}` });
+  },
+  // v2 phase 4
+  COURSE_PURCHASE_CREATED: async (db, p) => {
+    await notifyStaff(db, ["SUPER_ADMIN", "ADMIN"], { type: "COURSE_PURCHASE_CREATED", title: `${p.agencyName} wants ${p.seatCount} Course Seat(s) for ${p.courseTitle}`, body: "Record the payment or waive it under Agencies → Seat requests and purchases → Course purchases.", dedupeKey: `CPURCH:${p.purchaseId}` });
+    const existing = await taskRepository.findOpenByRelated(db, "RECORD_COURSE_PURCHASE", "CoursePurchase", p.purchaseId);
+    if (!existing) await taskRepository.create(db, { type: "RECORD_COURSE_PURCHASE", title: `Course purchase: ${p.agencyName} (${p.seatCount} × ${p.courseTitle})`, queueRole: "ADMIN", dueAt: new Date(Date.now() + 3 * 24 * 60 * 60_000), relatedType: "CoursePurchase", relatedId: p.purchaseId });
+  },
+  COURSE_PURCHASE_RECORDED: async (db, p) => {
+    await taskRepository.completeByRelated(db, "RECORD_COURSE_PURCHASE", "CoursePurchase", p.purchaseId);
+    await notifyUser(db, { userId: p.ownerUserId, type: "COURSE_PURCHASE_RECORDED", title: p.outcome === "CANCELLED" ? `Course purchase for ${p.courseTitle} was cancelled` : `${p.seatCount} Course Seat(s) for ${p.courseTitle} are ready`, body: p.outcome === "CANCELLED" ? "Hirewise cancelled this purchase. Contact Hirewise if this is unexpected." : `Hirewise recorded the purchase as ${p.outcome.toLowerCase()}. Assign the seats to your members under Training.`, email: { to: p.ownerEmail }, dedupeKey: `CPREC:${p.purchaseId}` });
+  },
+  COURSE_SEAT_ASSIGNED: async (db, p) => {
+    await notifyUser(db, { userId: p.agentUserId, type: "COURSE_SEAT_ASSIGNED", title: `${p.agencyName} enrolled you in ${p.courseTitle}`, body: "Your agency sponsors this course. Open Courses to start; the certification you earn is linked to this sponsorship.", email: { to: p.agentEmail }, dedupeKey: `CSEAT:${p.assignmentId}` });
+  },
+  CREDENTIALS_REVOKED: async (db, p) => {
+    const what = [p.courses.length ? `${p.courses.length} course(s)` : null, p.certifications.length ? `${p.certifications.length} certification(s)` : null, p.assessments ? `${p.assessments} assessment(s)` : null].filter(Boolean).join(", ");
+    if (p.agentUserId) await notifyUser(db, { userId: p.agentUserId, type: "CREDENTIALS_REVOKED", title: `Agency-sponsored training from ${p.agencyName} no longer counts`, body: `${what || "Sponsored items"} were sponsored by ${p.agencyName} and stop counting for platform use now that the membership ended. Training you paid for yourself or earned through Hirewise is unchanged.`, dedupeKey: `CREV:${p.agentProfileId}:${p.agencyId}` });
+    await notifyUser(db, { userId: p.ownerUserId, type: "CREDENTIALS_REVOKED", title: `${p.displayName}: sponsored training closed`, body: `${what || "Sponsored items"} closed.${p.seatsReturned ? ` ${p.seatsReturned} Course Seat(s) returned to your pool.` : ""}`, dedupeKey: `CREVO:${p.agentProfileId}:${p.agencyId}` });
+  },
+  INDEPENDENT_APPLIED: async (db, p) => {
+    if (p.pendingPayment) {
+      await notifyStaff(db, ["SUPER_ADMIN", "ADMIN"], { type: "INDEPENDENT_APPLIED", title: `Independent access fee to record: ${p.email}`, body: "Record the fee under Agencies → Seat requests and purchases → Independent access.", dedupeKey: `INDAPP:${p.accessId}` });
+      const existing = await taskRepository.findOpenByRelated(db, "RECORD_INDEPENDENT_ACCESS", "IndependentAccess", p.accessId);
+      if (!existing) await taskRepository.create(db, { type: "RECORD_INDEPENDENT_ACCESS", title: `Independent access: ${p.email}`, queueRole: "ADMIN", dueAt: new Date(Date.now() + 3 * 24 * 60 * 60_000), relatedType: "IndependentAccess", relatedId: p.accessId });
+      await notifyUser(db, { userId: p.userId, type: "INDEPENDENT_APPLIED", title: "Independent access requested", body: "Hirewise will record your access fee; your fresh independent profile opens as soon as it does.", email: { to: p.email }, dedupeKey: `INDAPPU:${p.accessId}` });
+    }
+  },
+  INDEPENDENT_ACTIVATED: async (db, p) => {
+    await taskRepository.completeByRelated(db, "RECORD_INDEPENDENT_ACCESS", "IndependentAccess", p.accessId);
+    await notifyUser(db, { userId: p.userId, type: "INDEPENDENT_ACTIVATED", title: "Welcome back as an independent freelancer", body: "Your fresh profile is ready. Complete your profile, buy courses, take assessments, and earn independent certifications to become eligible for opportunities.", email: { to: p.email }, dedupeKey: `INDACT:${p.accessId}` });
   },
   AGENCY_APPLICATION_SUBMITTED: async (db, p) => {
     await notifyStaff(db, ["SUPER_ADMIN", "ADMIN"], { type: "AGENCY_APPLICATION_SUBMITTED", title: `${p.resubmission ? "Updated" : "New"} agency application: ${p.agencyName}`, body: `${p.applicantName} ${p.resubmission ? "resubmitted their application" : "applied to run an agency"}. Review it under Agencies → Applications.`, dedupeKey: `AGAPP:${p.applicationId}:${p.resubmission ? "re" : "new"}` });

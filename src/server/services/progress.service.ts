@@ -65,6 +65,9 @@ async function loadCourseLite(db: Db, courseId: string) {
 
 /** Refuses any learner action on a lesson that sequential unlock has not opened yet. */
 export async function assertLessonUnlocked(db: Db, lesson: { id: string; module: { courseId: string } }, agentProfileId: string): Promise<void> {
+  // v2 phase 4: revoked (agency-sponsored) access never opens a lesson.
+  const access = await db.courseEnrollment.findUnique({ where: { courseId_agentProfileId: { courseId: lesson.module.courseId, agentProfileId } }, select: { status: true, accessRevokedAt: true, revokeReason: true } });
+  if (access && (access.status === "REVOKED" || access.accessRevokedAt)) throw new ForbiddenError(access.revokeReason ?? "Access to this course ended with your agency membership.");
   const course = await loadCourseLite(db, lesson.module.courseId);
   if (!course?.sequentialUnlock) return;
   const done = await doneLessonIds(db, orderedLessons(course).map((l) => l.id), agentProfileId);

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { inheritedSource } from "@/server/services/credential.service";
 import type { Db, PrismaClient } from "@/server/db/types";
 import type { Actor } from "@/server/auth/actor";
 import { authorize, NotFoundError } from "@/server/policies/authorize";
@@ -72,7 +73,8 @@ export async function evaluateCertification(db: Db, systemActor: Actor, p: { age
   // Coach-reviewed certifications are approved directly by the coach's recommendation;
   // exam-only certifications go to Admin review when the template asks for it (minResultLabelRank without coach review).
   const status: "PENDING_REVIEW" | "APPROVED" = template.requiresCoachReview ? "APPROVED" : "APPROVED";
-  const cert = await certificationRepository.create(db, { agentProfileId: p.agentProfileId, templateId: template.id, origin: "ACADEMY", issuedById: null, assessmentId: p.assessment?.id ?? null, courseId: p.courseId, status, expiresAt: expiryFor(template.validityMonths) });
+  const inherited = await inheritedSource(db, p.courseId, p.agentProfileId);
+  const cert = await certificationRepository.create(db, { agentProfileId: p.agentProfileId, templateId: template.id, origin: "ACADEMY", issuedById: null, assessmentId: p.assessment?.id ?? null, courseId: p.courseId, status, expiresAt: expiryFor(template.validityMonths), credentialSource: inherited.credentialSource, sponsoringAgencyId: inherited.sponsoringAgencyId });
   await audit(db, { actor: systemActor, action: "CERTIFICATION_ISSUED", entityType: "Certification", entityId: cert.id, newValue: { templateId: template.id, courseId: p.courseId, status, origin: "ACADEMY" } });
   await publishEvent(db, "CERTIFICATION_APPROVED", { certificationId: cert.id, templateName: template.name, agentProfileId: p.agentProfileId, agentUserId: cert.agentProfile.userId, agentEmail: cert.agentProfile.user.email, expiresAt: cert.expiresAt?.toISOString() ?? null });
   await recomputeVerification(db, p.agentProfileId, systemActor);
@@ -87,7 +89,7 @@ export async function issueCertification(db: PrismaClient, actor: Actor, p: { ag
   if (!p.reason.trim()) throw new Error("A reason is required.");
   await db.$transaction(async (tx) => {
     if (await certificationRepository.findExisting(tx, p.agentProfileId, template.id, null)) throw new Error("This agent already holds that certification.");
-    const cert = await certificationRepository.create(tx, { agentProfileId: p.agentProfileId, templateId: template.id, origin: "ADMIN_ISSUED", issuedById: actor.userId, assessmentId: null, courseId: null, status: "APPROVED", expiresAt: expiryFor(template.validityMonths), approvedById: actor.userId });
+    const cert = await certificationRepository.create(tx, { agentProfileId: p.agentProfileId, templateId: template.id, origin: "ADMIN_ISSUED", issuedById: actor.userId, assessmentId: null, courseId: null, status: "APPROVED", expiresAt: expiryFor(template.validityMonths), approvedById: actor.userId, credentialSource: "ADMIN_ASSIGNMENT" });
     await audit(tx, { actor, action: "CERTIFICATION_ISSUED", entityType: "Certification", entityId: cert.id, newValue: { templateId: template.id, origin: "ADMIN_ISSUED" }, reason: p.reason });
     await publishEvent(tx, "CERTIFICATION_APPROVED", { certificationId: cert.id, templateName: template.name, agentProfileId: p.agentProfileId, agentUserId: cert.agentProfile.userId, agentEmail: cert.agentProfile.user.email, expiresAt: cert.expiresAt?.toISOString() ?? null });
     await recomputeVerification(tx, p.agentProfileId, actor);

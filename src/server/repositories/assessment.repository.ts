@@ -10,10 +10,11 @@ export const assessmentRepository = {
     return db.assessmentResultLabel.upsert({ where: { key: d.key }, create: d, update: { label: d.label, rank: d.rank, isActive: d.isActive } });
   },
 
-  create(db: Db, d: { courseId: string | null; agentProfileId: string; coachUserId: string; type: AssessmentType; examScore: number | null; practicalScore: number | null; roleplayScore: number | null; communicationScore: number | null; skillScores: Prisma.InputJsonValue | null; comments: string | null; strengths: string | null; areasForImprovement: string | null; resultLabelId: string | null; certificationRecommended: boolean; status: "DRAFT" | "FINAL" }) {
+  create(db: Db, d: { courseId: string | null; agentProfileId: string; coachUserId: string; type: AssessmentType; examScore: number | null; practicalScore: number | null; roleplayScore: number | null; communicationScore: number | null; skillScores: Prisma.InputJsonValue | null; comments: string | null; strengths: string | null; areasForImprovement: string | null; resultLabelId: string | null; certificationRecommended: boolean; status: "DRAFT" | "FINAL"; credentialSource?: "AGENCY_SPONSORED" | "INDEPENDENT_PURCHASE" | "HIREWISE_DIRECT" | "ADMIN_ASSIGNMENT"; sponsoringAgencyId?: string | null }) {
     return db.assessment.create({
       data: {
         courseId: d.courseId ?? undefined, agentProfileId: d.agentProfileId, coachUserId: d.coachUserId, type: d.type,
+        credentialSource: d.credentialSource ?? "HIREWISE_DIRECT", sponsoringAgencyId: d.sponsoringAgencyId ?? undefined,
         examScore: d.examScore ?? undefined, practicalScore: d.practicalScore ?? undefined, roleplayScore: d.roleplayScore ?? undefined, communicationScore: d.communicationScore ?? undefined,
         skillScores: d.skillScores ?? undefined, comments: d.comments ?? undefined, strengths: d.strengths ?? undefined, areasForImprovement: d.areasForImprovement ?? undefined,
         resultLabelId: d.resultLabelId ?? undefined, certificationRecommended: d.certificationRecommended, status: d.status,

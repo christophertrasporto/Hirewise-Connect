@@ -1256,6 +1256,8 @@ enum EnrollmentStatus {
   IN_PROGRESS
   COMPLETED
   DROPPED
+  /// v2 phase 4: agency-sponsored access withdrawn at exit.
+  REVOKED
 }
 
 enum EnrollmentSource {
@@ -1293,6 +1295,8 @@ enum AssessmentStatus {
   DRAFT
   SUBMITTED
   FINAL
+  /// v2 phase 4: agency-sponsored assessment no longer counts after exit.
+  HISTORICAL
 }
 
 enum CertificationOrigin {
@@ -1305,9 +1309,12 @@ enum CertificationStatus {
   APPROVED
   REVOKED
   EXPIRED
+  /// v2 phase 4: agency-sponsored certification no longer counts for platform use after exit (not a revocation for cause).
+  INACTIVE_FOR_PLATFORM_USE
 }
 
 model AcademyCourse {
+  coursePurchases                   CoursePurchase[]
   id                                String                 @id @default(cuid())
   code                              String                 @unique
   title                             String
@@ -1696,22 +1703,28 @@ model CourseCoach {
 }
 
 model CourseEnrollment {
-  id                  String              @id @default(cuid())
-  courseId            String
-  course              AcademyCourse       @relation(fields: [courseId], references: [id], onDelete: Cascade)
-  agentProfileId      String
-  agentProfile        AgentProfile        @relation(fields: [agentProfileId], references: [id], onDelete: Cascade)
-  status              EnrollmentStatus    @default(ENROLLED)
-  source              EnrollmentSource    @default(INTERNAL)
-  paymentStatus       CoursePaymentStatus @default(NOT_REQUIRED)
+  id                     String              @id @default(cuid())
+  courseId               String
+  course                 AcademyCourse       @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  agentProfileId         String
+  agentProfile           AgentProfile        @relation(fields: [agentProfileId], references: [id], onDelete: Cascade)
+  status                 EnrollmentStatus    @default(ENROLLED)
+  source                 EnrollmentSource    @default(INTERNAL)
+  paymentStatus          CoursePaymentStatus @default(NOT_REQUIRED)
   /// Snapshot of the course price at enrollment, USD cents.
-  priceCents          Int                 @default(0)
-  paidCents           Int?
-  paymentReference    String?
-  paidAt              DateTime?
-  paymentRecordedById String?
-  enrolledAt          DateTime            @default(now())
-  updatedAt           DateTime            @updatedAt
+  priceCents             Int                 @default(0)
+  paidCents              Int?
+  paymentReference       String?
+  paidAt                 DateTime?
+  paymentRecordedById    String?
+  /// v2 phase 4: who funded this access. Agency-sponsored access ends with the membership.
+  credentialSource       CredentialSource    @default(HIREWISE_DIRECT)
+  sponsoringAgencyId     String?
+  courseSeatAssignmentId String?
+  accessRevokedAt        DateTime?
+  revokeReason           String?
+  enrolledAt             DateTime            @default(now())
+  updatedAt              DateTime            @updatedAt
 
   completion CourseCompletion?
   attempts   ExamAttempt[]
@@ -1815,6 +1828,9 @@ model Assessment {
   resultLabelId            String?
   resultLabel              AssessmentResultLabel? @relation(fields: [resultLabelId], references: [id])
   certificationRecommended Boolean                @default(false)
+  credentialSource         CredentialSource       @default(HIREWISE_DIRECT)
+  sponsoringAgencyId       String?
+  historicalAt             DateTime?
   status                   AssessmentStatus       @default(DRAFT)
   assessedAt               DateTime               @default(now())
   createdAt                DateTime               @default(now())
@@ -1869,28 +1885,32 @@ model CertificationTemplate {
 
 /// Never agent-writable (INV-I1).
 model Certification {
-  id                String                @id @default(cuid())
-  agentProfileId    String
-  agentProfile      AgentProfile          @relation(fields: [agentProfileId], references: [id], onDelete: Cascade)
-  templateId        String
-  template          CertificationTemplate @relation(fields: [templateId], references: [id])
-  origin            CertificationOrigin
-  issuedById        String?
-  issuedAt          DateTime              @default(now())
-  expiresAt         DateTime?
-  assessmentId      String?
-  assessment        Assessment?           @relation(fields: [assessmentId], references: [id])
-  courseId          String?
-  status            CertificationStatus   @default(PENDING_REVIEW)
-  approvedById      String?
-  approvedAt        DateTime?
-  revokedReason     String?
+  id                 String                @id @default(cuid())
+  agentProfileId     String
+  agentProfile       AgentProfile          @relation(fields: [agentProfileId], references: [id], onDelete: Cascade)
+  templateId         String
+  template           CertificationTemplate @relation(fields: [templateId], references: [id])
+  origin             CertificationOrigin
+  issuedById         String?
+  issuedAt           DateTime              @default(now())
+  expiresAt          DateTime?
+  assessmentId       String?
+  assessment         Assessment?           @relation(fields: [assessmentId], references: [id])
+  courseId           String?
+  status             CertificationStatus   @default(PENDING_REVIEW)
+  approvedById       String?
+  approvedAt         DateTime?
+  revokedReason      String?
+  credentialSource   CredentialSource      @default(HIREWISE_DIRECT)
+  sponsoringAgencyId String?
+  inactivatedAt      DateTime?
+  inactiveReason     String?
   /// Printed on the certificate; HC-YYYY-NNNNNN.
-  certificateNumber String?               @unique
+  certificateNumber  String?               @unique
   /// Opaque code for public verification.
-  verificationCode  String?               @unique
-  createdAt         DateTime              @default(now())
-  updatedAt         DateTime              @updatedAt
+  verificationCode   String?               @unique
+  createdAt          DateTime              @default(now())
+  updatedAt          DateTime              @updatedAt
 
   @@unique([agentProfileId, templateId, courseId])
   @@index([agentProfileId, status])
@@ -2296,39 +2316,41 @@ model AgencyApplicationHistory {
 
 /// A partner agency. Created only from an approved AgencyApplication or by a Super Admin (agency.create_direct).
 model Agency {
-  id                String              @id @default(cuid())
-  name              String
-  logoKey           String?
-  ownerUserId       String
-  owner             User                @relation("AgencyOwner", fields: [ownerUserId], references: [id])
-  description       String?
-  contactEmail      String
-  contactPhone      String?
-  country           String
-  city              String?
-  website           String?
-  status            AgencyStatus        @default(ACTIVE)
-  statusReason      String?
+  id                    String                 @id @default(cuid())
+  name                  String
+  logoKey               String?
+  ownerUserId           String
+  owner                 User                   @relation("AgencyOwner", fields: [ownerUserId], references: [id])
+  description           String?
+  contactEmail          String
+  contactPhone          String?
+  country               String
+  city                  String?
+  website               String?
+  status                AgencyStatus           @default(ACTIVE)
+  statusReason          String?
   /// Membership plan (v2 phase 2). Null until Hirewise assigns one; invites open only then.
-  planId            String?
-  plan              Plan?               @relation(fields: [planId], references: [id])
-  planStartedAt     DateTime?
-  trainingAccess    Boolean             @default(true)
-  opportunityAccess Boolean             @default(true)
-  joinedAt          DateTime            @default(now())
-  suspendedAt       DateTime?
-  deactivatedAt     DateTime?
-  createdAt         DateTime            @default(now())
-  updatedAt         DateTime            @updatedAt
-  application       AgencyApplication?
-  users             AgencyUser[]
-  memberships       AgencyMembership[]
-  primaryAgents     AgentProfile[]      @relation("PrimaryAgencyAgents")
-  seatLedger        AgencySeatLedger[]
-  seatPurchases     SeatPurchase[]
-  seatRequests      SeatRequest[]
-  inviteLinks       AgencyInviteLink[]
-  emailInvites      AgencyEmailInvite[]
+  planId                String?
+  plan                  Plan?                  @relation(fields: [planId], references: [id])
+  planStartedAt         DateTime?
+  trainingAccess        Boolean                @default(true)
+  opportunityAccess     Boolean                @default(true)
+  joinedAt              DateTime               @default(now())
+  suspendedAt           DateTime?
+  deactivatedAt         DateTime?
+  createdAt             DateTime               @default(now())
+  updatedAt             DateTime               @updatedAt
+  application           AgencyApplication?
+  users                 AgencyUser[]
+  memberships           AgencyMembership[]
+  primaryAgents         AgentProfile[]         @relation("PrimaryAgencyAgents")
+  seatLedger            AgencySeatLedger[]
+  seatPurchases         SeatPurchase[]
+  seatRequests          SeatRequest[]
+  inviteLinks           AgencyInviteLink[]
+  emailInvites          AgencyEmailInvite[]
+  coursePurchases       CoursePurchase[]
+  courseSeatAssignments CourseSeatAssignment[]
 
   @@index([status])
   @@index([ownerUserId])
@@ -2749,5 +2771,95 @@ model ExitRequest {
 
   @@index([agencyId, status])
   @@index([agentProfileId, status])
+  @@index([status, createdAt])
+}
+
+// ---------------------------------------------------------------------------
+// v2 phase 4: credential sources, Course Seats, independent access
+// ---------------------------------------------------------------------------
+
+enum CredentialSource {
+  AGENCY_SPONSORED
+  INDEPENDENT_PURCHASE
+  HIREWISE_DIRECT
+  ADMIN_ASSIGNMENT
+}
+
+enum CoursePurchaseStatus {
+  PENDING
+  PAID
+  WAIVED
+  CANCELLED
+}
+
+enum IndependentAccessStatus {
+  PENDING_PAYMENT
+  ACTIVE
+  CANCELLED
+}
+
+/// Course Seats bought by an agency for one course (distinct from Agent Seats). Recorded by Hirewise.
+model CoursePurchase {
+  id               String               @id @default(cuid())
+  agencyId         String
+  agency           Agency               @relation(fields: [agencyId], references: [id], onDelete: Cascade)
+  courseId         String
+  course           AcademyCourse        @relation(fields: [courseId], references: [id])
+  seatCount        Int
+  amountMinor      Int
+  currency         String               @db.Char(3)
+  status           CoursePurchaseStatus @default(PENDING)
+  paymentReference String?
+  paidAt           DateTime?
+  recordedById     String?
+  requestedById    String
+  note             String?
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime             @updatedAt
+
+  assignments CourseSeatAssignment[]
+
+  @@index([agencyId, status])
+  @@index([status, createdAt])
+}
+
+/// One Course Seat given to one member; the enrollment it created is agency-sponsored.
+model CourseSeatAssignment {
+  id               String          @id @default(cuid())
+  coursePurchaseId String?
+  coursePurchase   CoursePurchase? @relation(fields: [coursePurchaseId], references: [id])
+  agencyId         String
+  agency           Agency          @relation(fields: [agencyId], references: [id], onDelete: Cascade)
+  courseId         String
+  agentProfileId   String
+  enrollmentId     String?
+  assignedById     String
+  assignedAt       DateTime        @default(now())
+  revokedAt        DateTime?
+  revokeReason     String?
+
+  @@index([agencyId, courseId])
+  @@index([agentProfileId])
+  @@index([coursePurchaseId])
+}
+
+/// Independent reapplication (former agency agents). The fresh independent profile is created when access is active.
+model IndependentAccess {
+  id                 String                  @id @default(cuid())
+  userId             String
+  platformIdentityId String?
+  status             IndependentAccessStatus @default(PENDING_PAYMENT)
+  amountMinor        Int                     @default(0)
+  currency           String                  @default("USD") @db.Char(3)
+  paymentReference   String?
+  paidAt             DateTime?
+  recordedById       String?
+  profileId          String?
+  fromProfileId      String?
+  note               String?
+  createdAt          DateTime                @default(now())
+  updatedAt          DateTime                @updatedAt
+
+  @@index([userId, status])
   @@index([status, createdAt])
 }

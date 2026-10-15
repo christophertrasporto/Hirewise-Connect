@@ -2,7 +2,7 @@ import type { Prisma } from "@/server/db/types";
 import type { courseInclude } from "@/server/repositories/academy.repository";
 
 type CourseRecord = Prisma.AcademyCourseGetPayload<{ include: ReturnType<typeof courseInclude> }>;
-type EnrollmentRecord = { id: string; status: string; paymentStatus: string; priceCents: number; paidCents: number | null; paymentReference: string | null; paidAt: Date | null; enrolledAt: Date; completion: { completedAt: Date; examScore: number | null } | null; attempts: Array<{ id: string; status: string; scorePercent: number | null; passed: boolean | null; submittedAt: Date | null }> };
+type EnrollmentRecord = { id: string; status: string; paymentStatus: string; priceCents: number; paidCents: number | null; paymentReference: string | null; paidAt: Date | null; credentialSource: string; sponsoringAgencyId: string | null; accessRevokedAt: Date | null; revokeReason: string | null; enrolledAt: Date; completion: { completedAt: Date; examScore: number | null } | null; attempts: Array<{ id: string; status: string; scorePercent: number | null; passed: boolean | null; submittedAt: Date | null }> };
 
 type LessonRecord = CourseRecord["modules"][number]["lessons"][number];
 
@@ -65,6 +65,10 @@ export function toEnrollmentAgentView(e: EnrollmentRecord) {
     priceCents: e.priceCents,
     priceLabel: priceLabel(e.priceCents),
     paidAt: e.paidAt,
+    credentialSource: e.credentialSource,
+    sponsoringAgencyId: e.sponsoringAgencyId,
+    accessRevokedAt: e.accessRevokedAt,
+    revokeReason: e.revokeReason,
     enrolledAt: e.enrolledAt,
     completedAt: e.completion?.completedAt ?? null,
     examScore: e.completion?.examScore ?? null,

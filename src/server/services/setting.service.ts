@@ -73,6 +73,15 @@ export const SETTING_SCHEMAS = {
       archiveAfterDays: z.number().int().min(0).max(3650).default(30),
     })
     .default(() => ({ ownerResponseDays: 5, adminReviewAlways: false, archiveAfterDays: 30 })),
+  /** v2 phase 4: independent reapplication (decision 4). */
+  independentAccess: z
+    .object({
+      enabled: z.boolean().default(true),
+      /** Minor units; 0 = no fee, the fresh profile is created at once. */
+      feeMinor: z.number().int().min(0).max(100_000_000).default(0),
+      currency: z.string().length(3).default("USD"),
+    })
+    .default(() => ({ enabled: true, feeMinor: 0, currency: "USD" })),
   /** Section 8.8 thresholds. */
   profileViewBurstPerHour: z.number().int().positive().default(60),
   shortlistChurnPerDay: z.number().int().positive().default(12),

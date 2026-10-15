@@ -6,6 +6,11 @@ import { requestLeaveAction, cancelLeaveAction } from "@/app/(app)/exit-actions"
 import { idle } from "@/server/http/action-result";
 import { Field, FormAlert, Input, Select, SubmitButton, Textarea } from "@/components/ui/Form";
 import type { ExitRequestView } from "@/server/views/exit.views";
+import { ApplyIndependentForm } from "@/components/agency/TrainingPanels";
+import type { TermsBundleProp } from "@/components/terms/TermsDrawer";
+import type { IndependentEligibility } from "@/server/services/independent.service";
+
+export type IndependentProps = { eligibility: IndependentEligibility; terms: TermsBundleProp } | null;
 
 type Membership =
   | { kind: "MEMBER"; membershipId: string; agencyName: string; status: string; joinedAt: Date; effectiveEndAt: Date | null; exit: ExitRequestView | null }
@@ -18,7 +23,7 @@ function fmt(d: Date | string | null | undefined) {
 }
 
 /** The agent's "My agency" card: membership status, the request to leave, or the former-agent notice. */
-export function AgentAgencyCard({ membership }: { membership: Membership }) {
+export function AgentAgencyCard({ membership, independent = null }: { membership: Membership; independent?: IndependentProps }) {
   const [open, setOpen] = useState(false);
   const [state, action] = useActionState(requestLeaveAction, idle);
   const [cancel, cancelAction] = useActionState(cancelLeaveAction, idle);
@@ -28,7 +33,8 @@ export function AgentAgencyCard({ membership }: { membership: Membership }) {
       <div className="rounded-3xl border border-ink-100 bg-white p-5 shadow-soft">
         <p className="inline-flex items-center gap-2 text-[12px] font-semibold uppercase tracking-[0.12em] text-ink-400"><Building2 className="h-4 w-4 text-brand-600" /> Former agency agent</p>
         <p className="mt-2 text-[15px] text-ink-800">You left <span className="font-semibold">{membership.agencyName}</span>{membership.formerAt ? ` on ${fmt(membership.formerAt)}` : ""}. Your profile is kept as a former agency profile; agency-sponsored training and certifications no longer count for platform use.</p>
-        <p className="mt-1 text-[13.5px] text-ink-500">Applying as an independent freelancer, or joining another agency through its invitation link, opens in the next phase.</p>
+        <p className="mt-1 text-[13.5px] text-ink-500">You can join another agency through its invitation link, or apply as an independent freelancer and start a fresh profile.</p>
+        {independent && <div className="mt-4">{independent.eligibility.eligible || independent.eligibility.pending ? <ApplyIndependentForm terms={independent.terms} feeLabel={independent.eligibility.feeLabel} pending={independent.eligibility.pending} /> : <p className="text-[13px] text-ink-500">{independent.eligibility.reason}</p>}</div>}
       </div>
     );
   }
@@ -77,14 +83,15 @@ export function AgentAgencyCard({ membership }: { membership: Membership }) {
 }
 
 /** Shown to an agent whose only profile was archived after leaving an agency. */
-export function FormerAgentHolding({ email, notifications }: { email: string; notifications: unknown }) {
+export function FormerAgentHolding({ email, notifications, independent = null }: { email: string; notifications: unknown; independent?: IndependentProps }) {
   void notifications;
   return (
     <div className="mx-auto max-w-2xl rounded-3xl border border-ink-100 bg-white p-8 shadow-soft">
       <p className="text-[12px] font-semibold uppercase tracking-[0.16em] text-brand-600">Your Hirewise Connect account</p>
       <h1 className="mt-3 text-[1.8rem] font-bold leading-tight">Your agency profile has been archived</h1>
       <p className="mt-3 text-[15px] text-ink-600">Signed in as <span className="font-semibold">{email}</span>. Your previous agency membership ended and the profile that belonged to it is now part of your history, which only Hirewise can see.</p>
-      <p className="mt-2 text-[15px] text-ink-600">Applying as an independent freelancer starts a fresh profile; that flow opens in the next phase. Joining a new agency through its invitation link works today.</p>
+      <p className="mt-2 text-[15px] text-ink-600">Applying as an independent freelancer starts a fresh profile. Joining a new agency through its invitation link also works.</p>
+      {independent && <div className="mt-5">{independent.eligibility.eligible || independent.eligibility.pending ? <ApplyIndependentForm terms={independent.terms} feeLabel={independent.eligibility.feeLabel} pending={independent.eligibility.pending} /> : <p className="text-[13px] text-ink-500">{independent.eligibility.reason}</p>}</div>}
     </div>
   );
 }
