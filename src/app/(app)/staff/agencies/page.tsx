@@ -41,6 +41,8 @@ export default async function AgenciesPage({ searchParams }: { searchParams: Pro
       <PageHeader eyebrow="Hirewise Admin" title="Agencies" description="Partner agencies apply, Hirewise reviews, and only approval creates an agency. Hirewise keeps every client relationship; agencies supply and train talent." />
       <nav className="mb-5 flex flex-wrap gap-2" aria-label="Agencies sections">
         {[["applications", "Applications"], ["agencies", "Agencies"]].map(([k, l]) => <Link key={k} href={`${base}?tab=${k}`} className={cn("rounded-full border px-4 py-1.5 text-[13.5px] font-semibold", tab === k ? "border-ink-900 bg-ink-900 text-white" : "border-ink-200 bg-white text-ink-700 hover:bg-ink-50")} aria-current={tab === k ? "page" : undefined}>{l}</Link>)}
+        <Link href="/staff/agencies/seats" className="rounded-full border border-ink-200 bg-white px-4 py-1.5 text-[13.5px] font-semibold text-ink-700 hover:bg-ink-50">Seat requests and purchases</Link>
+        <Link href="/staff/agencies/plans" className="rounded-full border border-ink-200 bg-white px-4 py-1.5 text-[13.5px] font-semibold text-ink-700 hover:bg-ink-50">Plans and packages</Link>
       </nav>
 
       {tab === "applications" && apps && (

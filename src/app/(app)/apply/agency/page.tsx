@@ -5,6 +5,7 @@ import { prisma } from "@/server/db/client";
 import { requireAuth } from "@/server/auth/require-actor";
 import { applicationEligibility, agencyAgreement } from "@/server/services/agency-application.service";
 import { getSetting } from "@/server/services/setting.service";
+import { activePlans } from "@/server/services/seat.service";
 import { PageHeader, Card, Banner, StatusBadge, fmtDate } from "@/components/app/ui";
 import { ApplyForm, ApplicationDocuments, WithdrawButton } from "@/components/agency/ApplyForm";
 
@@ -14,7 +15,7 @@ export const metadata: Metadata = { title: "Apply for Agency" };
 export default async function ApplyForAgencyPage() {
   const auth = await requireAuth();
   const { actor } = auth;
-  const [elig, rules] = await Promise.all([applicationEligibility(prisma, actor), getSetting(prisma, "agencyApplications")]);
+  const [elig, rules, plans] = await Promise.all([applicationEligibility(prisma, actor), getSetting(prisma, "agencyApplications"), activePlans(prisma)]);
   const app = elig.latest;
   const editable = !!app && (app.status === "SUBMITTED" || app.status === "NEEDS_MORE_INFO");
   const agreement = elig.canApply || editable ? await agencyAgreement(prisma) : null;
@@ -54,14 +55,14 @@ export default async function ApplyForAgencyPage() {
 
       {editable && agreement && app && (
         <Card title={app.status === "NEEDS_MORE_INFO" ? "Update and resubmit your application" : "Edit your application"}>
-          <ApplyForm values={app} agreement={agreement} defaultEmail={auth.email} />
+          <ApplyForm values={app} agreement={agreement} defaultEmail={auth.email} plans={plans} />
         </Card>
       )}
 
       {!app || (!editable && elig.canApply) ? (
         elig.canApply && agreement ? (
           <Card title="Application" description="Takes about ten minutes. You can add supporting documents after submitting.">
-            <ApplyForm agreement={agreement} defaultEmail={auth.email} />
+            <ApplyForm agreement={agreement} defaultEmail={auth.email} plans={plans} />
           </Card>
         ) : !app ? (
           <Banner tone="info" title="You cannot apply right now">{elig.reason}</Banner>

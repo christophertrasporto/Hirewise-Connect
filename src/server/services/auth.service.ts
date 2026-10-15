@@ -186,6 +186,9 @@ export async function verifyEmail(db: PrismaClient, token: string): Promise<{ us
   const { count } = await tokenRepository.consume(db, t.id);
   if (count === 0) throw new AuthError("This verification link was already used.");
   await userRepository.setEmailVerified(db, t.userId);
+  // v2 phase 2: a join made from an invitation becomes active once the email is verified.
+  const { activatePendingMemberships } = await import("@/server/services/seat.service");
+  await activatePendingMemberships(db, t.userId);
   logger.info({ userId: t.userId }, "verification: completed");
   return { userId: t.userId };
 }

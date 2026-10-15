@@ -1,5 +1,6 @@
 "use server";
 
+import { registerViaInvite } from "@/server/services/invite.service";
 import { redirect } from "next/navigation";
 import { applicantRegistrationSchema, registerApplicant } from "@/server/services/agency-application.service";
 import { prisma } from "@/server/db/client";
@@ -117,7 +118,8 @@ export async function registerAgentAction(_prev: ActionResult, fd: FormData): Pr
       continuationToken: formString(fd, "continuationToken"),
     });
     const meta = await requestMeta();
-    const s = await registerAgent(prisma, input, meta);
+    const inviteToken = formString(fd, "inviteToken");
+    const s = inviteToken ? await registerViaInvite(prisma, input, inviteToken, meta) : await registerAgent(prisma, input, meta);
     await writeSessionCookie(s.token, s.expiresAt);
   } catch (e) {
     return toActionError(e);

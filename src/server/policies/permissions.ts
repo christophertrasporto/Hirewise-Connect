@@ -86,6 +86,8 @@ export const PERMISSIONS = {
   "agency.read": { group: "agency", description: "Read agencies and their applications (no decisions)" },
   "agency.review": { group: "agency", description: "Review agency applications: request information, approve, reject" },
   "agency.manage": { group: "agency", description: "Suspend, reactivate, deactivate, and edit any agency; override memberships" },
+  "agency.plans.manage": { group: "agency", description: "Create and price membership plans and seat packages" },
+  "agency.seats.manage": { group: "agency", description: "Add, remove, grant, or override an agency's Agent Seats; decide seat requests and record purchases; assign plans" },
   "agency.create_direct": { group: "agency", description: "Create an agency without an application (Super Admin only)" },
   // Agency marketplace (A1): portal capabilities. Never on a global role; resolved from AgencyUser membership.
   "agency.profile.manage": { group: "agency-portal", description: "Edit the agency's own profile" },
@@ -97,6 +99,7 @@ export const PERMISSIONS = {
   "agency.opportunities.read": { group: "agency-portal", description: "See opportunities shared with the agency" },
   "agency.submissions.create": { group: "agency-portal", description: "Submit eligible agents to opportunities" },
   "agency.reports.read": { group: "agency-portal", description: "See the agency's reports" },
+  "agency.billing.manage": { group: "agency-portal", description: "Request additional Agent Seats and buy seat packages" },
   "agency.settings.manage": { group: "agency-portal", description: "Manage managers, their permissions, and agency settings" },
   // System
   "audit.read": { group: "system", description: "Read the audit log" },

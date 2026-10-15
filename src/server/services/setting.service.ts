@@ -50,6 +50,18 @@ export const SETTING_SCHEMAS = {
       gateStaff: z.boolean().default(false),
     })
     .default(() => ({ gateStaff: false })),
+  /** v2 phase 2: Agent Seats and invitations. */
+  agencySeats: z
+    .object({
+      /** Used by the exit flows (phase 3). */
+      seatReleaseRule: z.enum(["IMMEDIATE", "AFTER_BILLING_PERIOD", "AFTER_ASSIGNMENT_ENDS"]).default("IMMEDIATE"),
+      /** 0 = the agency link never expires (it can still be rotated). */
+      inviteLinkTtlDays: z.number().int().min(0).max(3650).default(0),
+      emailInviteTtlDays: z.number().int().min(1).max(365).default(14),
+      /** A join whose email is never verified gives its seat back after this many days. */
+      unverifiedJoinTtlDays: z.number().int().min(1).max(365).default(14),
+    })
+    .default(() => ({ seatReleaseRule: "IMMEDIATE" as const, inviteLinkTtlDays: 0, emailInviteTtlDays: 14, unverifiedJoinTtlDays: 14 })),
   /** Section 8.8 thresholds. */
   profileViewBurstPerHour: z.number().int().positive().default(60),
   shortlistChurnPerDay: z.number().int().positive().default(12),

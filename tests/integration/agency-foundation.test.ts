@@ -303,7 +303,9 @@ describe("agencies: creation paths, tenant scope, status", () => {
     expect((await agencyAgents(db, await ana())).map((x) => x.id).sort()).toEqual([ids.agentProfile, ids.agent2Profile].sort());
     await setAgentAgency(db, await admin(), ids.agent2Profile, null, "Back to Hirewise Direct");
     const history = await membershipHistory(db, await admin(), ids.agent2Profile);
-    expect(history.map((h) => [h.agencyId, h.status])).toEqual([[null, "ACTIVE"], [ids.agencyA, "ENDED"], [ids.agencyB, "ENDED"]]); // Ben was first a member of his own agency (D6)
+    // v2 phase 2: Hirewise Direct is the absence of a membership, so only the two ended memberships remain (Ben was first a member of his own agency, D6).
+    expect(history.map((h) => [h.agencyId, h.status])).toEqual([[ids.agencyA, "ENDED"], [ids.agencyB, "ENDED"]]);
+    expect((await db.agentProfile.findUniqueOrThrow({ where: { id: ids.agent2Profile } })).primaryAgencyId).toBeNull();
     expect(await db.agentProfile.count({ where: { userId: ids.agent2User } })).toBe(1);
   });
 });

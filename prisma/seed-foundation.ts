@@ -100,6 +100,18 @@ export type FoundationIds = {
   categoryIds: Map<string, string>;
 };
 
+export const PLANS = [
+  { id: "plan_starter", key: "STARTER", name: "Starter", baseAgentSeats: 5 as number | null, features: ["Up to 5 agent seats", "Training marketplace", "Client opportunities"], sortOrder: 1 },
+  { id: "plan_growth", key: "GROWTH", name: "Growth", baseAgentSeats: 20 as number | null, features: ["Up to 20 agent seats", "Training marketplace", "Client opportunities", "Team reports"], sortOrder: 2 },
+  { id: "plan_professional", key: "PROFESSIONAL", name: "Professional", baseAgentSeats: 50 as number | null, features: ["Up to 50 agent seats", "Training marketplace", "Client opportunities", "Team reports", "Priority review"], sortOrder: 3 },
+  { id: "plan_enterprise", key: "ENTERPRISE", name: "Enterprise", baseAgentSeats: null as number | null, features: ["Custom agent seats", "Everything in Professional", "Dedicated Hirewise contact"], sortOrder: 4 },
+];
+export const SEAT_PACKAGES = [
+  { id: "pkg_5", name: "5 additional agent seats", seatCount: 5, sortOrder: 1 },
+  { id: "pkg_10", name: "10 additional agent seats", seatCount: 10, sortOrder: 2 },
+  { id: "pkg_25", name: "25 additional agent seats", seatCount: 25, sortOrder: 3 },
+];
+
 export async function seedFoundation(prisma: PrismaClient): Promise<FoundationIds> {
   // Roles
   const roleIds = new Map<RoleKey, string>();
@@ -155,6 +167,14 @@ export async function seedFoundation(prisma: PrismaClient): Promise<FoundationId
       update: {},
     });
     agreementIds[doc.type] = row.id;
+  }
+
+  // v2 phase 2: membership plans and seat packages (prices are placeholders until Hirewise sets them).
+  for (const p of PLANS) {
+    await prisma.plan.upsert({ where: { key: p.key }, create: p, update: {} });
+  }
+  for (const p of SEAT_PACKAGES) {
+    await prisma.seatPackage.upsert({ where: { id: p.id }, create: p, update: {} });
   }
 
   // Settings (Section 14 defaults)

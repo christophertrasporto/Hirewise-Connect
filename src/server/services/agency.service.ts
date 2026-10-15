@@ -1,4 +1,7 @@
 import { z } from "zod";
+import { joinAgencyTx, endMembershipTx, assignPlanTx } from "@/server/services/seat.service";
+import { seatRepository } from "@/server/repositories/seat.repository";
+import { membershipRepository } from "@/server/repositories/membership.repository";
 import type { Db, PrismaClient } from "@/server/db/types";
 import type { Actor } from "@/server/auth/actor";
 import { authorize, ForbiddenError, NotFoundError } from "@/server/policies/authorize";
@@ -17,14 +20,14 @@ import { toAgencyOwnerView, toAgencyStaffView } from "@/server/views/agency.view
  */
 const optionalText = (max: number) => z.string().trim().max(max).optional().or(z.literal(""));
 
-type OwnerCandidate = { id: string; email: string; role: { key: string }; agentProfiles: Array<{ id: string }> };
+type OwnerCandidate = { id: string; email: string; role: { key: string }; agentProfiles: Array<{ id: string; platformIdentityId: string | null }> };
 
 /**
  * Shared by approval and direct creation. Runs inside the caller's transaction: creates the agency, the Owner
  * seat, switches an APPLICANT to AGENCY_OWNER (other roles keep their role; the seat grants the portal), and makes
  * an owner who is also talent a primary member of their own agency (decision D6).
  */
-export async function provisionAgency(tx: Db, actor: Actor, owner: OwnerCandidate, d: { name: string; logoKey: string | null; description: string | null; contactEmail: string; contactPhone: string | null; country: string; city: string | null; website: string | null; source: "APPLICATION" | "DIRECT"; applicationId?: string }) {
+export async function provisionAgency(tx: Db, actor: Actor, owner: OwnerCandidate, d: { name: string; logoKey: string | null; description: string | null; contactEmail: string; contactPhone: string | null; country: string; city: string | null; website: string | null; source: "APPLICATION" | "DIRECT"; applicationId?: string; planKey?: string | null }) {
   const agency = await agencyRepository.createAgency(tx, { name: d.name, logoKey: d.logoKey, ownerUserId: owner.id, description: d.description, contactEmail: d.contactEmail, contactPhone: d.contactPhone, country: d.country, city: d.city, website: d.website });
   await agencyRepository.addSeat(tx, { agencyId: agency.id, userId: owner.id, role: "OWNER", permissions: [], addedById: actor.userId });
   await audit(tx, { actor, action: "AGENCY_CREATED", entityType: "Agency", entityId: agency.id, newValue: { name: d.name, ownerUserId: owner.id, source: d.source, applicationId: d.applicationId ?? null } });
@@ -34,18 +37,24 @@ export async function provisionAgency(tx: Db, actor: Actor, owner: OwnerCandidat
     await userRepository.setRole(tx, owner.id, role.id);
     await audit(tx, { actor, action: "USER_ROLE_CHANGED", entityType: "User", entityId: owner.id, previousValue: { role: "APPLICANT" }, newValue: { role: "AGENCY_OWNER", agencyId: agency.id } });
   }
+  // v2 phase 2: the plan chosen at application (or given at direct creation) writes the base seats.
+  const plan = d.planKey ? await seatRepository.planByKey(tx, d.planKey) : null;
+  if (plan && plan.isActive) await assignPlanTx(tx, actor, { id: agency.id, name: d.name, planId: null, ownerUserId: owner.id, owner: { email: owner.email } }, plan, { reason: d.source === "APPLICATION" ? "Plan chosen at application, confirmed at approval" : "Plan set at direct creation", override: true });
+  // An owner who is also talent becomes a member of their own agency (decision D6) and takes a seat (decision 4),
+  // unless they already belong to another agency, which is left for Hirewise to resolve.
   const ownerProfile = owner.agentProfiles[0] ?? null;
   if (ownerProfile) {
-    const m = await agencyRepository.startMembership(tx, { agentProfileId: ownerProfile.id, agencyId: agency.id, approvedById: actor.userId });
-    await audit(tx, { actor, action: "AGENCY_MEMBERSHIP_STARTED", entityType: "AgencyMembership", entityId: m.id, newValue: { agentProfileId: ownerProfile.id, agencyId: agency.id, how: "owner" } });
+    const elsewhere = await membershipRepository.openForProfile(tx, ownerProfile.id);
+    if (!elsewhere) await joinAgencyTx(tx, actor, { agencyId: agency.id, agentProfileId: ownerProfile.id, platformIdentityId: ownerProfile.platformIdentityId, status: "ACTIVE", source: "OWNER", approvedById: actor.userId, allowOverCapacity: true, reason: "Owner's own talent profile" });
+    else await audit(tx, { actor, action: "AGENCY_UPDATED", entityType: "Agency", entityId: agency.id, newValue: { note: "Owner already belongs to another agency; no owner membership created", membershipId: elsewhere.id } });
   }
   return agency.id;
 }
 
 /** Called only by approveApplication, inside its transaction. */
-export async function createAgencyForApplication(tx: Db, actor: Actor, app: { id: string; applicant: OwnerCandidate; proposedAgencyName: string; proposedLogoKey: string | null; description: string; applicantEmail: string; applicantPhone: string | null; country: string; city: string | null; website: string | null }) {
+export async function createAgencyForApplication(tx: Db, actor: Actor, app: { id: string; applicant: OwnerCandidate; proposedAgencyName: string; proposedLogoKey: string | null; description: string; applicantEmail: string; applicantPhone: string | null; country: string; city: string | null; website: string | null; preferredPlanKey: string | null }) {
   authorize(actor, "agency.review");
-  return provisionAgency(tx, actor, app.applicant, { name: app.proposedAgencyName, logoKey: app.proposedLogoKey, description: app.description, contactEmail: app.applicantEmail, contactPhone: app.applicantPhone, country: app.country, city: app.city, website: app.website, source: "APPLICATION", applicationId: app.id });
+  return provisionAgency(tx, actor, app.applicant, { name: app.proposedAgencyName, logoKey: app.proposedLogoKey, description: app.description, contactEmail: app.applicantEmail, contactPhone: app.applicantPhone, country: app.country, city: app.city, website: app.website, source: "APPLICATION", applicationId: app.id, planKey: app.preferredPlanKey });
 }
 
 export const directAgencySchema = z.object({
@@ -58,6 +67,7 @@ export const directAgencySchema = z.object({
   city: optionalText(80),
   website: z.string().trim().url().optional().or(z.literal("")),
   reason: z.string().trim().min(3, "Say why this agency is created without an application.").max(1000),
+  planKey: z.string().trim().max(40).optional().or(z.literal("")),
 });
 
 /** Super Admin only (agency.create_direct). The owner must already have an account that is not Hirewise staff. */
@@ -69,7 +79,7 @@ export async function createAgencyDirect(db: PrismaClient, actor: Actor, raw: z.
   if (["SUPER_ADMIN", "ADMIN", "SALES", "RECRUITER", "COACH", "OPERATIONS"].includes(owner.role.key)) throw new ForbiddenError("A Hirewise staff account cannot own an agency.");
   if (owner.agencyUsers.length) throw new Error("That account already belongs to an agency.");
   return db.$transaction(async (tx) => {
-    const id = await provisionAgency(tx, actor, owner, { name: input.name, logoKey: null, description: input.description || null, contactEmail: input.contactEmail || owner.email, contactPhone: input.contactPhone || null, country: input.country, city: input.city || null, website: input.website || null, source: "DIRECT" });
+    const id = await provisionAgency(tx, actor, owner, { name: input.name, logoKey: null, description: input.description || null, contactEmail: input.contactEmail || owner.email, contactPhone: input.contactPhone || null, country: input.country, city: input.city || null, website: input.website || null, source: "DIRECT", planKey: input.planKey || null });
     await audit(tx, { actor, action: "AGENCY_UPDATED", entityType: "Agency", entityId: id, newValue: { op: "direct-create" }, reason: input.reason });
     return id;
   });
@@ -106,7 +116,7 @@ export async function agencyAgents(db: PrismaClient, actor: Actor, agencyId?: st
   if (!id) throw new NotFoundError();
   assertAgencyScope(actor, id, "agency.read");
   if (!actor.permissions.has("agency.read")) authorize(actor, "agency.team.read");
-  return (await agencyRepository.agentsOf(db, id)).map((p) => ({ id: p.id, displayName: p.displayName, primaryRole: p.primaryRole, status: p.status, availabilityStatus: p.availabilityStatus, verificationLevel: p.verificationLevel, profileCompletion: p.profileCompletion }));
+  return (await membershipRepository.membersOf(db, id)).map((m) => ({ id: m.agentProfileId, membershipId: m.id, displayName: m.agentProfile.displayName, primaryRole: m.agentProfile.primaryRole, status: m.agentProfile.status, availabilityStatus: m.agentProfile.availabilityStatus, verificationLevel: m.agentProfile.verificationLevel, profileCompletion: m.agentProfile.profileCompletion, membershipStatus: m.status, joinedAt: m.joinedAt, invitationSource: m.invitationSource }));
 }
 
 // ---------------------------------------------------------------------------
@@ -160,14 +170,13 @@ export async function setAgentAgency(db: PrismaClient, actor: Actor, agentProfil
     const a = await agencyRepository.findAgency(db, agencyId);
     if (!a) throw new NotFoundError();
   }
-  const current = await agencyRepository.activeMembership(db, agentProfileId);
+  const profile = await membershipRepository.profileIdentity(db, agentProfileId);
+  if (!profile) throw new NotFoundError();
+  const current = await membershipRepository.openForProfile(db, agentProfileId);
+  // v2 phase 2: ending releases the seat; joining takes one (Hirewise adds seats first if the agency is full).
   await db.$transaction(async (tx) => {
-    if (current) {
-      await agencyRepository.endMembership(tx, current.id, reason.trim());
-      await audit(tx, { actor, action: "AGENCY_MEMBERSHIP_ENDED", entityType: "AgencyMembership", entityId: current.id, previousValue: { agencyId: current.agencyId }, reason: reason.trim() });
-    }
-    const m = await agencyRepository.startMembership(tx, { agentProfileId, agencyId, approvedById: actor.userId });
-    await audit(tx, { actor, action: "AGENCY_MEMBERSHIP_STARTED", entityType: "AgencyMembership", entityId: m.id, newValue: { agentProfileId, agencyId, how: "admin-override" }, reason: reason.trim() });
+    if (current) await endMembershipTx(tx, actor, current, { reason: reason.trim(), endedById: actor.userId });
+    if (agencyId) await joinAgencyTx(tx, actor, { agencyId, agentProfileId, platformIdentityId: profile.platformIdentityId, status: profile.user.emailVerifiedAt ? "ACTIVE" : "PENDING_VERIFICATION", source: "ADMIN", approvedById: actor.userId, allowOverCapacity: true, reason: `Admin override: ${reason.trim()}` });
   });
 }
 
