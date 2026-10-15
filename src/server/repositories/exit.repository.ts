@@ -90,6 +90,6 @@ export const exitRepository = {
     });
   },
   profileBasics(db: Db, agentProfileId: string) {
-    return db.agentProfile.findUnique({ where: { id: agentProfileId }, select: { id: true, status: true, archivedAt: true, userId: true, platformIdentityId: true, formerAgencyId: true, formerAt: true, displayName: true } });
+    return db.agentProfile.findUnique({ where: { id: agentProfileId }, select: { id: true, status: true, archivedAt: true, userId: true, platformIdentityId: true, formerAgencyId: true, formerAt: true, displayName: true, talentType: true } });
   },
 };

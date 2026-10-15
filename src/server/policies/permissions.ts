@@ -94,6 +94,7 @@ export const PERMISSIONS = {
   "agency.team.read": { group: "agency-portal", description: "See the agency's agents" },
   "agency.team.invite": { group: "agency-portal", description: "Invite agents to the agency" },
   "agency.team.remove": { group: "agency-portal", description: "End an agent's membership" },
+  "agency.training.read": { group: "agency-portal", description: "See the training catalog and members' courses, certifications, and assessments" },
   "agency.training.purchase": { group: "agency-portal", description: "Buy courses, bundles, and seats" },
   "agency.training.assign": { group: "agency-portal", description: "Assign purchased seats to agents" },
   "agency.opportunities.read": { group: "agency-portal", description: "See opportunities shared with the agency" },

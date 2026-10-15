@@ -23,6 +23,9 @@ export type CourseCard = {
   nextLesson: { id: string; title: string; contentType: string; detail: string } | null;
   actions: Array<{ label: string; lessonId: string | null }>;
   certification: { name: string; status: string; certificateNumber: string | null } | null;
+  /** v2 phase 4 */
+  source: string;
+  revoked: boolean;
 };
 
 const QUESTION_TYPES = new Set(["QUIZ", "ASSESSMENT", "AUDIO"]);
@@ -74,10 +77,11 @@ export async function myCourses(db: PrismaClient, actor: Actor): Promise<{ cards
     const cp = courseProgress.find((c) => c.courseId === e.courseId) ?? null;
     const required = lessons.filter((l) => l.isRequired);
     const paymentPending = e.paymentStatus === "PENDING";
+    const revoked = e.status === "REVOKED" || !!e.accessRevokedAt;
     const currentId = cp?.currentLessonId ?? required.find((l) => lp.get(l.id)?.status !== "COMPLETED")?.id ?? null;
     const current = currentId ? lessons.find((l) => l.id === currentId) ?? null : null;
     const started = lessons.some((l) => lp.has(l.id) || latestSub.has(l.id));
-    const status: CourseCardStatus = paymentPending ? "LOCKED" : e.completion ? "COMPLETED" : started ? "IN_PROGRESS" : "NOT_STARTED";
+    const status: CourseCardStatus = paymentPending || revoked ? "LOCKED" : e.completion ? "COMPLETED" : started ? "IN_PROGRESS" : "NOT_STARTED";
     const actions: CourseCard["actions"] = [];
     if (paymentPending) actions.push({ label: `Pay ${priceLabel(e.priceCents)} to Hirewise to unlock`, lessonId: null });
     for (const l of lessons) {
@@ -100,6 +104,8 @@ export async function myCourses(db: PrismaClient, actor: Actor): Promise<{ cards
       nextLesson: e.completion || paymentPending || !current ? null : { id: current.id, title: current.title, contentType: TYPE_LABEL[current.contentType] ?? current.contentType, detail: detailFor(current) },
       actions,
       certification: cert ? { name: cert.template.name, status: cert.status, certificateNumber: cert.certificateNumber } : e.course.certificationTemplate ? { name: e.course.certificationTemplate.name, status: "NOT_YET", certificateNumber: null } : null,
+      source: e.credentialSource === "AGENCY_SPONSORED" ? "Sponsored by your agency" : e.credentialSource === "INDEPENDENT_PURCHASE" ? "Bought by you" : e.credentialSource === "ADMIN_ASSIGNMENT" ? "Assigned by Hirewise" : "Hirewise",
+      revoked,
     };
   });
   const order: Record<CourseCardStatus, number> = { IN_PROGRESS: 0, NOT_STARTED: 1, LOCKED: 2, COMPLETED: 3 };

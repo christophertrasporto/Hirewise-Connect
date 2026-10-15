@@ -50,6 +50,7 @@ export async function recordAssessment(db: PrismaClient, actor: Actor, input: z.
       examScore: n(input.examScore) ?? enrollment.completion?.examScore ?? null, practicalScore: n(input.practicalScore), roleplayScore: n(input.roleplayScore), communicationScore: n(input.communicationScore),
       skillScores: null, comments: input.comments || null, strengths: input.strengths || null, areasForImprovement: input.areasForImprovement || null,
       resultLabelId: label.id, certificationRecommended: input.certificationRecommended, status: "FINAL",
+      credentialSource: enrollment.credentialSource, sponsoringAgencyId: enrollment.sponsoringAgencyId,
     });
     await audit(tx, { actor, action: "ASSESSMENT_FINALISED", entityType: "Assessment", entityId: a.id, newValue: { agentProfileId: input.agentProfileId, courseId: input.courseId, label: label.key, certificationRecommended: input.certificationRecommended } });
     await publishEvent(tx, "ASSESSMENT_FINALISED", { assessmentId: a.id, agentProfileId: input.agentProfileId, courseId: input.courseId, agentUserId: a.agentProfile.userId, agentEmail: a.agentProfile.user.email, label: label.label, courseTitle: a.course?.title ?? null });

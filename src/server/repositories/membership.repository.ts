@@ -4,7 +4,7 @@ import type { Db } from "@/server/db/types";
 const OPEN: AgencyMembershipStatus[] = ["INVITED", "PENDING_VERIFICATION", "ACTIVE", "EXIT_REQUESTED", "REMOVAL_REQUESTED", "ENDING"];
 
 const memberInclude = {
-  agentProfile: { select: { id: true, displayName: true, primaryRole: true, status: true, availabilityStatus: true, verificationLevel: true, profileCompletion: true, talentType: true, user: { select: { email: true, emailVerifiedAt: true } } } },
+  agentProfile: { select: { id: true, userId: true, displayName: true, primaryRole: true, status: true, availabilityStatus: true, verificationLevel: true, profileCompletion: true, talentType: true, user: { select: { email: true, emailVerifiedAt: true } } } },
   agency: { select: { id: true, name: true, ownerUserId: true } },
 } satisfies Prisma.AgencyMembershipInclude;
 

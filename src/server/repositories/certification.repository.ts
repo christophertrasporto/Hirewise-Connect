@@ -30,10 +30,10 @@ export const certificationRepository = {
   },
 
   /** Every certificate gets a printed number (HC-YYYY-NNNNNN, sequential per year) and a verification code. */
-  async create(db: Db, d: { agentProfileId: string; templateId: string; origin: "ACADEMY" | "ADMIN_ISSUED"; issuedById: string | null; assessmentId: string | null; courseId: string | null; status: CertificationStatus; expiresAt: Date | null; approvedById?: string | null }) {
+  async create(db: Db, d: { agentProfileId: string; templateId: string; origin: "ACADEMY" | "ADMIN_ISSUED"; issuedById: string | null; assessmentId: string | null; courseId: string | null; status: CertificationStatus; expiresAt: Date | null; approvedById?: string | null; credentialSource?: "AGENCY_SPONSORED" | "INDEPENDENT_PURCHASE" | "HIREWISE_DIRECT" | "ADMIN_ASSIGNMENT"; sponsoringAgencyId?: string | null }) {
     const year = new Date().getFullYear();
     const include = { template: true, agentProfile: { select: { id: true, displayName: true, userId: true, user: { select: { email: true } } } } } as const;
-    const base = { agentProfileId: d.agentProfileId, templateId: d.templateId, origin: d.origin, issuedById: d.issuedById ?? undefined, assessmentId: d.assessmentId ?? undefined, courseId: d.courseId ?? undefined, status: d.status, expiresAt: d.expiresAt ?? undefined, approvedById: d.approvedById ?? undefined, approvedAt: d.status === "APPROVED" ? new Date() : undefined };
+    const base = { agentProfileId: d.agentProfileId, templateId: d.templateId, origin: d.origin, issuedById: d.issuedById ?? undefined, assessmentId: d.assessmentId ?? undefined, courseId: d.courseId ?? undefined, status: d.status, expiresAt: d.expiresAt ?? undefined, approvedById: d.approvedById ?? undefined, approvedAt: d.status === "APPROVED" ? new Date() : undefined, credentialSource: d.credentialSource ?? "HIREWISE_DIRECT", sponsoringAgencyId: d.sponsoringAgencyId ?? undefined };
     for (let attempt = 0; ; attempt++) {
       const n = (await db.certification.count({ where: { certificateNumber: { startsWith: `HC-${year}-` } } })) + 1 + attempt;
       try {
