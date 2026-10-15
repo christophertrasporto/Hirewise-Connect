@@ -155,6 +155,7 @@ export const SETTING_META: Record<SettingKey, { label: string; help: string; kin
   onboardingWelcomeVideo: { label: "Welcome video (onboarding)", help: "Configured under Staff → Academy → Onboarding; shown here read-only.", kind: "json" },
   identity: { label: "Identity and duplicate detection", help: "Fresh profile on rejoining an agency, phone matching, emailing the existing address on a duplicate sign-up, continuation link validity (Identity phase 1).", kind: "json" },
   terms: { label: "Unified terms", help: "Whether staff accounts must also accept the Terms & Platform Agreement (off by default to avoid locking out the admin on deploy).", kind: "json" },
+  agencyExit: { label: "Agency exits", help: "Owner response window before Hirewise takes over a leave request, whether Hirewise reviews every exit, and when former profiles are archived (v2 phase 3).", kind: "json" },
   agencySeats: { label: "Agent Seats and invitations", help: "Seat release rule (phase 3), invitation link and email invite validity, and how long an unverified join keeps its seat (v2 phase 2).", kind: "json" },
   agencyApplications: { label: "Agency applications", help: "Re-application cooldown after a rejection (days), document limits, and the review due time (Agency A1). Nothing is hardcoded.", kind: "json" },
   retentionDays: { label: "Retention period (days)", help: "Inactive accounts are anonymised by the retention job after this many days (Q18).", kind: "number" },

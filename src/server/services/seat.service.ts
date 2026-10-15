@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { exitRepository } from "@/server/repositories/exit.repository";
 import type { PrismaClient, Db } from "@/server/db/types";
 import type { Actor } from "@/server/auth/actor";
 import { systemActor } from "@/server/auth/actor";
@@ -45,7 +46,7 @@ export function computeTotals(sums: Partial<Record<LedgerType, number>>, pending
 }
 
 export async function seatTotals(db: Db, agencyId: string): Promise<SeatTotals> {
-  const [ledger, pending] = await Promise.all([seatRepository.ledgerSums(db, agencyId), db.agencyMembership.count({ where: { agencyId, status: "ENDING" } })]);
+  const [ledger, pending] = await Promise.all([seatRepository.ledgerSums(db, agencyId), exitRepository.pendingReleaseCount(db, agencyId)]);
   return computeTotals(ledger.sums as Partial<Record<LedgerType, number>>, pending, ledger.planReversed);
 }
 
@@ -86,15 +87,34 @@ export async function joinAgencyTx(tx: Db, actor: Actor, p: JoinInput): Promise<
     if (open) throw new ForbiddenError("This person already belongs to an agency.");
   }
   if (!p.allowOverCapacity) await assertCapacity(tx, p.agencyId);
-  const m = await membershipRepository.create(tx, { agentProfileId: p.agentProfileId, agencyId: p.agencyId, platformIdentityId: p.platformIdentityId, status: p.status, invitationSource: p.source, approvedById: p.approvedById ?? null, invitedEmail: p.invitedEmail ?? null });
-  const entry = await seatRepository.addLedger(tx, { agencyId: p.agencyId, changeType: "CONSUMED", quantity: 1, reason: p.reason ?? `Member joined (${p.source.toLowerCase().replace(/_/g, " ")})`, relatedAgentProfileId: p.agentProfileId, relatedMembershipId: m.id, createdById: actor.userId === "system" ? null : actor.userId });
+  // v2 phase 3: a former or archived profile rejoins with a fresh profile (setting) or is reactivated.
+  let agentProfileId = p.agentProfileId;
+  let platformIdentityId = p.platformIdentityId;
+  const basics = await exitRepository.profileBasics(tx, p.agentProfileId);
+  if (basics && (basics.status === "FORMER_AGENCY_AGENT" || basics.status === "ARCHIVED")) {
+    platformIdentityId = platformIdentityId ?? basics.platformIdentityId;
+    const identitySettings = await getSetting(tx, "identity");
+    if (identitySettings.rejoinCreatesFreshProfile) {
+      if (!basics.archivedAt) {
+        await exitRepository.archive(tx, basics.id);
+        await audit(tx, { actor, action: "PROFILE_ARCHIVED", entityType: "AgentProfile", entityId: basics.id, newValue: { reason: "Rejoined an agency; a fresh profile starts" } });
+      }
+      const fresh = await exitRepository.createFreshProfile(tx, basics.id, platformIdentityId, basics.userId);
+      agentProfileId = fresh.id;
+      await audit(tx, { actor, action: "PROFILE_FRESH_CREATED", entityType: "AgentProfile", entityId: fresh.id, newValue: { fromProfileId: basics.id, agencyId: p.agencyId } });
+    } else {
+      await exitRepository.reactivateFormer(tx, basics.id);
+    }
+  }
+  const m = await membershipRepository.create(tx, { agentProfileId, agencyId: p.agencyId, platformIdentityId, status: p.status, invitationSource: p.source, approvedById: p.approvedById ?? null, invitedEmail: p.invitedEmail ?? null });
+  const entry = await seatRepository.addLedger(tx, { agencyId: p.agencyId, changeType: "CONSUMED", quantity: 1, reason: p.reason ?? `Member joined (${p.source.toLowerCase().replace(/_/g, " ")})`, relatedAgentProfileId: agentProfileId, relatedMembershipId: m.id, createdById: actor.userId === "system" ? null : actor.userId });
   const updated = await membershipRepository.update(tx, m.id, { seatLedgerEntryId: entry.id });
-  await membershipRepository.setProfileAgency(tx, p.agentProfileId, p.agencyId);
+  await membershipRepository.setProfileAgency(tx, agentProfileId, p.agencyId);
   if (p.emailInviteId) await membershipRepository.updateEmailInvite(tx, p.emailInviteId, { status: "ACCEPTED", acceptedMembershipId: m.id, acceptedAt: new Date() });
   if (p.linkId) await membershipRepository.incrementLinkUses(tx, p.linkId);
-  await audit(tx, { actor, action: "AGENCY_MEMBERSHIP_STARTED", entityType: "AgencyMembership", entityId: m.id, newValue: { agencyId: p.agencyId, agentProfileId: p.agentProfileId, status: p.status, source: p.source } });
+  await audit(tx, { actor, action: "AGENCY_MEMBERSHIP_STARTED", entityType: "AgencyMembership", entityId: m.id, newValue: { agencyId: p.agencyId, agentProfileId, status: p.status, source: p.source } });
   await audit(tx, { actor, action: "AGENCY_SEATS_CHANGED", entityType: "AgencySeatLedger", entityId: entry.id, newValue: { agencyId: p.agencyId, changeType: "CONSUMED", quantity: 1, membershipId: m.id } });
-  await publishEvent(tx, "AGENCY_MEMBER_JOINED", { agencyId: p.agencyId, agencyName: agency.name, ownerUserId: agency.ownerUserId, membershipId: m.id, agentProfileId: p.agentProfileId, displayName: updated.agentProfile.displayName, status: p.status, source: p.source });
+  await publishEvent(tx, "AGENCY_MEMBER_JOINED", { agencyId: p.agencyId, agencyName: agency.name, ownerUserId: agency.ownerUserId, membershipId: m.id, agentProfileId, displayName: updated.agentProfile.displayName, status: p.status, source: p.source });
   return updated;
 }
 

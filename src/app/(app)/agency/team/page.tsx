@@ -6,6 +6,8 @@ import { agencyMembers, seatSummary } from "@/server/services/seat.service";
 import { inviteLinkForAgency, listEmailInvites } from "@/server/services/invite.service";
 import { Card, EmptyState, StatusBadge, Banner, fmtDate } from "@/components/app/ui";
 import { InviteTools } from "@/components/agency/SeatPanels";
+import { RemoveAgentForm, ExitDecisionForm, ExitRequestSummary } from "@/components/agency/ExitForms";
+import { exitRequestsForAgency } from "@/server/services/exit.service";
 import { ForbiddenError } from "@/server/policies/authorize";
 
 export const metadata: Metadata = { title: "My team" };
@@ -22,6 +24,9 @@ export default async function AgencyTeamPage() {
   }
   const canInvite = actor.permissions.has("agency.team.invite");
   const active = actor.agency?.status === "ACTIVE";
+  const canRemove = actor.permissions.has("agency.team.remove");
+  const exits = await exitRequestsForAgency(prisma, actor).catch(() => []);
+  const openExits = exits.filter((e) => e.status === "PENDING_AGENCY" || e.status === "PENDING_ADMIN" || e.status === "APPROVED");
   const [seats, link, invites] = await Promise.all([
     seatSummary(prisma, actor),
     canInvite ? inviteLinkForAgency(prisma, actor).catch(() => null) : Promise.resolve(null),
@@ -42,12 +47,26 @@ export default async function AgencyTeamPage() {
                     <p className="text-[15px] font-semibold text-ink-900">{m.displayName} {!m.hasSeat && <span className="ml-1 rounded-full bg-gold-50 px-2 py-0.5 text-[11px] font-semibold text-gold-800">no seat yet</span>}</p>
                     <p className="text-[12.5px] text-ink-400">{m.primaryRole ?? "Talent"} · profile {m.profileCompletion}% · {m.verificationLevel.replace(/_/g, " ").toLowerCase()} · joined {fmtDate(m.joinedAt)} via {m.invitationSource.toLowerCase().replace(/_/g, " ")}</p>
                   </div>
-                  <div className="flex gap-2"><StatusBadge status={m.membershipStatus} /><StatusBadge status={m.availabilityStatus} /></div>
+                  <div className="flex flex-wrap items-center gap-2"><StatusBadge status={m.membershipStatus} /><StatusBadge status={m.availabilityStatus} />{canRemove && active && m.membershipStatus === "ACTIVE" && <RemoveAgentForm membershipId={m.membershipId} displayName={m.displayName} />}</div>
                 </li>
               ))}
             </ul>
           )}
         </Card>
+        {canRemove && openExits.length > 0 && (
+          <Card title={`Exit requests (${openExits.length})`} description="Agents who asked to leave, and removals in progress. Hirewise reviews a request when the agent has an active client assignment.">
+            <ul className="divide-y divide-ink-100">
+              {openExits.map((r) => (
+                <li key={r.id} className="space-y-3 py-3">
+                  <ExitRequestSummary r={r} audience="OWNER" />
+                  {r.status === "PENDING_AGENCY" && r.type === "AGENT_REQUESTED_LEAVE" && active && <ExitDecisionForm request={r} audience="OWNER" />}
+                  {r.status === "PENDING_ADMIN" && <p className="text-[12.5px] text-gold-700">Waiting for Hirewise.</p>}
+                  {r.status === "APPROVED" && <p className="text-[12.5px] text-ink-500">Approved; ends {r.effectiveAt ? new Date(r.effectiveAt).toLocaleDateString() : "when the current assignment ends"}.</p>}
+                </li>
+              ))}
+            </ul>
+          </Card>
+        )}
         {canInvite && (
           <Card title="Invite agents" description="Each join takes one Agent Seat. Leaving an agency goes through Hirewise.">
             <InviteTools link={link} invitable={noPlan ? 0 : seats.invitable} disabled={!active || noPlan} invites={invites} />

@@ -299,13 +299,16 @@ describe("agencies: creation paths, tenant scope, status", () => {
   it("memberships: an admin moves an agent between agencies; history is preserved and the profile is the same row", async () => {
     await expect(setAgentAgency(db, await ana(), ids.agent2Profile, ids.agencyA, "poach")).rejects.toBeInstanceOf(ForbiddenError);
     await setAgentAgency(db, await admin(), ids.agent2Profile, ids.agencyA, "Ben's own agency is a pilot; he works through ABC for now");
-    expect((await db.agentProfile.findUniqueOrThrow({ where: { id: ids.agent2Profile } })).primaryAgencyId).toBe(ids.agencyA);
-    expect((await agencyAgents(db, await ana())).map((x) => x.id).sort()).toEqual([ids.agentProfile, ids.agent2Profile].sort());
-    await setAgentAgency(db, await admin(), ids.agent2Profile, null, "Back to Hirewise Direct");
-    const history = await membershipHistory(db, await admin(), ids.agent2Profile);
-    // v2 phase 2: Hirewise Direct is the absence of a membership, so only the two ended memberships remain (Ben was first a member of his own agency, D6).
-    expect(history.map((h) => [h.agencyId, h.status])).toEqual([[ids.agencyA, "ENDED"], [ids.agencyB, "ENDED"]]);
-    expect((await db.agentProfile.findUniqueOrThrow({ where: { id: ids.agent2Profile } })).primaryAgencyId).toBeNull();
-    expect(await db.agentProfile.count({ where: { userId: ids.agent2User } })).toBe(1);
+    // v2 phase 3: leaving an agency makes the old profile a former profile; the move creates a fresh profile (decision 5), same identity.
+    const moved = await db.agentProfile.findFirstOrThrow({ where: { userId: ids.agent2User, archivedAt: null } });
+    expect(moved.id).not.toBe(ids.agent2Profile);
+    expect(moved.primaryAgencyId).toBe(ids.agencyA);
+    expect((await db.agentProfile.findUniqueOrThrow({ where: { id: ids.agent2Profile } })).status).toBe("ARCHIVED");
+    expect((await agencyAgents(db, await ana())).map((x) => x.id).sort()).toEqual([ids.agentProfile, moved.id].sort());
+    await setAgentAgency(db, await admin(), moved.id, null, "Back to Hirewise Direct");
+    expect((await membershipHistory(db, await admin(), ids.agent2Profile)).map((h) => [h.agencyId, h.status])).toEqual([[ids.agencyB, "ENDED"]]);
+    expect((await membershipHistory(db, await admin(), moved.id)).map((h) => [h.agencyId, h.status])).toEqual([[ids.agencyA, "ENDED"]]);
+    expect((await db.agentProfile.findUniqueOrThrow({ where: { id: moved.id } })).status).toBe("FORMER_AGENCY_AGENT");
+    expect(await db.agentProfile.count({ where: { userId: ids.agent2User } })).toBe(2);
   });
 });

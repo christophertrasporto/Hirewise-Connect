@@ -1,5 +1,7 @@
 import { z } from "zod";
-import { joinAgencyTx, endMembershipTx, assignPlanTx } from "@/server/services/seat.service";
+import { joinAgencyTx, assignPlanTx } from "@/server/services/seat.service";
+import { completeExitTx } from "@/server/services/exit.service";
+import { getSetting } from "@/server/services/setting.service";
 import { seatRepository } from "@/server/repositories/seat.repository";
 import { membershipRepository } from "@/server/repositories/membership.repository";
 import type { Db, PrismaClient } from "@/server/db/types";
@@ -175,7 +177,11 @@ export async function setAgentAgency(db: PrismaClient, actor: Actor, agentProfil
   const current = await membershipRepository.openForProfile(db, agentProfileId);
   // v2 phase 2: ending releases the seat; joining takes one (Hirewise adds seats first if the agency is full).
   await db.$transaction(async (tx) => {
-    if (current) await endMembershipTx(tx, actor, current, { reason: reason.trim(), endedById: actor.userId });
+    if (current) {
+      // v2 phase 3: an Admin override runs the same exit actions as an approved exit, with the configured release rule.
+      const settings = await getSetting(tx, "agencySeats");
+      await completeExitTx(tx, actor, current, { reason: `Admin override: ${reason.trim()}`, endedById: actor.userId, exitRequestId: null, releaseRule: settings.seatReleaseRule });
+    }
     if (agencyId) await joinAgencyTx(tx, actor, { agencyId, agentProfileId, platformIdentityId: profile.platformIdentityId, status: profile.user.emailVerifiedAt ? "ACTIVE" : "PENDING_VERIFICATION", source: "ADMIN", approvedById: actor.userId, allowOverCapacity: true, reason: `Admin override: ${reason.trim()}` });
   });
 }

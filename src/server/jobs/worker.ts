@@ -73,6 +73,12 @@ export async function runMaintenance(prisma: PrismaClient, now = new Date()): Pr
   const { expireEmailInvites } = await import("@/server/services/invite.service");
   await expireUnverifiedJoins(prisma, now);
   await expireEmailInvites(prisma, now);
+  // v2 phase 3: exits that fell due, owner silence, held seats, former profiles.
+  const { escalateStaleExitRequests, completeDueExits, releaseDueSeats, archiveFormerProfiles } = await import("@/server/services/exit.service");
+  await escalateStaleExitRequests(prisma, now);
+  await completeDueExits(prisma, now);
+  await releaseDueSeats(prisma, now);
+  await archiveFormerProfiles(prisma, now);
   return { expired, expiring, certificationsExpired: certs.expired, certificationsExpiring: certs.expiring };
 }
 
