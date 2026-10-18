@@ -1,4 +1,5 @@
 import type { Prisma, ExitRequestStatus, ExitRequestType, ExitEffectiveOption, ExitDecision, SeatReleaseRule } from "@prisma/client";
+import { clientLabelFrom } from "@/lib/client-redaction";
 import type { Db } from "@/server/db/types";
 
 const OPEN: ExitRequestStatus[] = ["PENDING_AGENCY", "PENDING_ADMIN", "APPROVED"];
@@ -77,6 +78,7 @@ export const exitRepository = {
         userId,
         platformIdentityId: platformIdentityId ?? undefined,
         displayName: from.displayName,
+        clientLabel: clientLabelFrom(from.privateContact?.fullLegalName, from.displayName),
         locationCity: from.locationCity,
         locationCountry: from.locationCountry,
         timezone: from.timezone,

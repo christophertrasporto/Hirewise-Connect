@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { agentIdentityDisclosedTo, clientIdentityDisclosedTo, grantsAtSchedulingTx, grantsAtPlacementTx } from "@/server/services/disclosure.service";
+import { clientNameFor } from "@/server/views/interview.views";
 import type { PrismaClient, Tx } from "@/server/db/types";
 import type { Actor } from "@/server/auth/actor";
 import { authorize, ForbiddenError, NotFoundError } from "@/server/policies/authorize";
@@ -102,19 +104,21 @@ function assertStaffOrOwner(actor: Actor, r: RequestRecord, permission: "intervi
 export async function getRequest(db: PrismaClient, actor: Actor, id: string) {
   const r = await loadRequest(db, id);
   const who = assertStaffOrOwner(actor, r, "interview.read_all");
-  if (who === "CLIENT") return { audience: who, request: toRequestClientView(r) };
-  if (who === "AGENT") return { audience: who, request: toRequestAgentView(r, actor.agentProfileId!) };
+  if (who === "CLIENT") return { audience: who, request: toRequestClientView(r, await agentIdentityDisclosedTo(db, actor.clientId!)) };
+  if (who === "AGENT") return { audience: who, request: toRequestAgentView(r, actor.agentProfileId!, { clientIdentity: (await clientIdentityDisclosedTo(db, actor.agentProfileId!)).has(r.clientId) }) };
   return { audience: who, request: toRequestStaffView(r, { canPrivateContact: actor.permissions.has("agent.read_private_contact") }) };
 }
 
 export async function listRequestsForClient(db: PrismaClient, actor: Actor) {
   if (actor.role !== "CLIENT" || !actor.clientId) return [];
-  return (await interviewRepository.listForClient(db, actor.clientId)).map(toRequestClientView);
+  const disclosed = await agentIdentityDisclosedTo(db, actor.clientId);
+  return (await interviewRepository.listForClient(db, actor.clientId)).map((r) => toRequestClientView(r, disclosed));
 }
 
 export async function listRequestsForAgent(db: PrismaClient, actor: Actor) {
   if (actor.role !== "AGENT" || !actor.agentProfileId) return [];
-  return (await interviewRepository.listForAgent(db, actor.agentProfileId)).map((r) => toRequestAgentView(r, actor.agentProfileId!));
+  const clients = await clientIdentityDisclosedTo(db, actor.agentProfileId);
+  return (await interviewRepository.listForAgent(db, actor.agentProfileId)).map((r) => toRequestAgentView(r, actor.agentProfileId!, { clientIdentity: clients.has(r.clientId) }));
 }
 
 export async function listRequestsForStaff(db: PrismaClient, actor: Actor, filter: "open" | "mine" | "all" | InterviewRequestStatus = "open") {
@@ -213,13 +217,15 @@ export async function scheduleInterviews(db: PrismaClient, actor: Actor, id: str
       const iv = await interviewRepository.createInterview(tx, { interviewRequestId: r.id, agentProfileId: it.agentProfileId, round, scheduledAt, timezone: input.timezone, durationMin: it.durationMin, meetingLink, coordinatorUserId: actor.userId, meetingProvider: meeting?.provider ?? null, meetingExternalId: meeting?.externalId ?? null });
       if (meeting) await audit(tx, { actor, action: "MEETING_CREATED", entityType: "Interview", entityId: iv.id, newValue: { provider: meeting.provider, externalId: meeting.externalId } });
       const cand = r.candidates.find((c) => c.agentProfileId === it.agentProfileId)!;
+      // Phase 5: disclosures the system makes at scheduling, per the disclosure setting (decision 6).
+      await grantsAtSchedulingTx(tx, actor, { clientId: r.clientId, agentProfileId: it.agentProfileId, interviewId: iv.id, isAgencyAgent: !!cand.agentProfile.primaryAgencyId });
       if (cand.agentProfile.availabilityStatus === "AVAILABLE") await agentRepository.setAvailability(tx, it.agentProfileId, "INTERVIEWING", { setById: actor.userId, reason: `Interview scheduled (${r.id})` });
       for (const [label, ms] of [["24h", 24 * 3_600_000], ["1h", 3_600_000]] as const) {
         const runAt = new Date(scheduledAt.getTime() - ms);
         if (runAt.getTime() > Date.now()) await jobRepository.enqueue(tx, "INTERVIEW_REMINDER", { interviewId: iv.id, label }, runAt);
       }
       await audit(tx, { actor, action: "INTERVIEW_SCHEDULED", entityType: "Interview", entityId: iv.id, newValue: { requestId: r.id, agentProfileId: it.agentProfileId, scheduledAt: scheduledAt.toISOString(), round } });
-      await publishEvent(tx, "INTERVIEW_SCHEDULED", { interviewId: iv.id, requestId: r.id, clientUserId: r.client.contacts[0]?.userId ?? null, clientEmail: r.client.contacts[0]?.businessEmail ?? null, agentUserId: cand.agentProfile.userId, agentEmail: cand.agentProfile.user.email, companyName: r.client.companyName, displayName: cand.agentProfile.displayName, scheduledAt: scheduledAt.toISOString(), timezone: input.timezone, meetingLink, salesUserId: r.assignedSalesUserId });
+      await publishEvent(tx, "INTERVIEW_SCHEDULED", { interviewId: iv.id, requestId: r.id, clientUserId: r.client.contacts[0]?.userId ?? null, clientEmail: r.client.contacts[0]?.businessEmail ?? null, agentUserId: cand.agentProfile.userId, agentEmail: cand.agentProfile.user.email, companyName: r.client.companyName, displayName: cand.agentProfile.displayName, clientLabel: clientNameFor(cand.agentProfile, false), scheduledAt: scheduledAt.toISOString(), timezone: input.timezone, meetingLink, salesUserId: r.assignedSalesUserId });
     }
     await move(tx, actor, r, "SCHEDULED");
   });
@@ -268,6 +274,7 @@ export async function recordClientDecision(db: PrismaClient, actor: Actor, inter
 
     if (input.decision === "SELECTED") {
       const placement = await createPlacementFromSelection(tx, actor, { clientId: r.clientId, agentProfileId: iv.agentProfileId, requirementId: r.requirementId, interviewRequestId: r.id, interviewId: iv.id, positionTitle: r.role, schedule: r.schedule, timezone: r.timezone, startDate: r.targetStartDate, accountManagerUserId: r.assignedSalesUserId ?? r.client.accountManagerUserId });
+      await grantsAtPlacementTx(tx, actor, { clientId: r.clientId, agentProfileId: iv.agentProfileId, placementId: placement.id });
       // The hold belongs to the account manager, who is warned before it expires.
       await reserveForClient(tx, actor, { agentProfileId: iv.agentProfileId, clientId: r.clientId, placementId: placement.id, reason: `Selected after interview (${r.id})`, system: true, reservedById: r.assignedSalesUserId ?? r.client.accountManagerUserId ?? null });
       await audit(tx, { actor, action: "CANDIDATE_SELECTED", entityType: "Placement", entityId: placement.id, newValue: { agentProfileId: iv.agentProfileId, requestId: r.id } });

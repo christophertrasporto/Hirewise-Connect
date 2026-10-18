@@ -82,6 +82,16 @@ export const SETTING_SCHEMAS = {
       currency: z.string().length(3).default("USD"),
     })
     .default(() => ({ enabled: true, feeMinor: 0, currency: "USD" })),
+  /** v2 phase 5: client-safe documents. Generated PDFs (profile, certificate) are approved for clients without a reviewer when on. */
+  clientProtection: z.object({ autoApproveGenerated: z.boolean().default(true) }).default(() => ({ autoApproveGenerated: true })),
+  /** v2 phase 5: when the system grants disclosures (decision 6). MANUAL leaves it to staff. */
+  disclosure: z
+    .object({
+      agentIdentityAt: z.enum(["INTERVIEW_SCHEDULED", "MANUAL"]).default("INTERVIEW_SCHEDULED"),
+      clientIdentityForDirectTalent: z.enum(["INTERVIEW_SCHEDULED", "MANUAL"]).default("INTERVIEW_SCHEDULED"),
+      clientIdentityForAgencyAgents: z.enum(["INTERVIEW_SCHEDULED", "MANUAL"]).default("MANUAL"),
+    })
+    .default(() => ({ agentIdentityAt: "INTERVIEW_SCHEDULED" as const, clientIdentityForDirectTalent: "INTERVIEW_SCHEDULED" as const, clientIdentityForAgencyAgents: "MANUAL" as const })),
   /** Section 8.8 thresholds. */
   profileViewBurstPerHour: z.number().int().positive().default(60),
   shortlistChurnPerDay: z.number().int().positive().default(12),

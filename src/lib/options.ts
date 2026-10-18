@@ -93,6 +93,16 @@ export const RECORDING_KINDS: Array<{ value: "INTRODUCTION" | "COLD_CALL" | "CUS
 ];
 
 export const STATUS_LABELS: Record<string, string> = {
+  // v2 phase 5: client-safe documents and disclosure
+  APPROVED_FOR_CLIENT: "Approved for client",
+  NEEDS_MANUAL_REVIEW: "Needs review",
+  AUTO_SANITIZED: "Auto-sanitized",
+  VIDEO_INTRO: "Video introduction",
+  VOICE_INTRO: "Voice sample",
+  PROFILE: "Profile PDF",
+  CERTIFICATE: "Certificate",
+  PORTFOLIO: "Portfolio item",
+  RESUME: "Résumé",
   RATE_DISCUSSION: "Rate discussion",
   OFF_PLATFORM_CONTACT: "Off-platform contact",
   DIRECT_HIRE_ATTEMPT: "Direct hire attempt",

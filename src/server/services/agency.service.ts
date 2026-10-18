@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { assignPartnerIdentityTx, assertNoClientFacingKeys } from "@/server/services/partner.service";
 import { joinAgencyTx, assignPlanTx } from "@/server/services/seat.service";
 import { completeExitTx } from "@/server/services/exit.service";
 import { getSetting } from "@/server/services/setting.service";
@@ -32,6 +33,8 @@ type OwnerCandidate = { id: string; email: string; role: { key: string }; agentP
 export async function provisionAgency(tx: Db, actor: Actor, owner: OwnerCandidate, d: { name: string; logoKey: string | null; description: string | null; contactEmail: string; contactPhone: string | null; country: string; city: string | null; website: string | null; source: "APPLICATION" | "DIRECT"; applicationId?: string; planKey?: string | null }) {
   const agency = await agencyRepository.createAgency(tx, { name: d.name, logoKey: d.logoKey, ownerUserId: owner.id, description: d.description, contactEmail: d.contactEmail, contactPhone: d.contactPhone, country: d.country, city: d.city, website: d.website });
   await agencyRepository.addSeat(tx, { agencyId: agency.id, userId: owner.id, role: "OWNER", permissions: [], addedById: actor.userId });
+  // v2 phase 5: the client-facing Partner Team identity is assigned by the system, never by the agency.
+  await assignPartnerIdentityTx(tx, actor, agency.id);
   await audit(tx, { actor, action: "AGENCY_CREATED", entityType: "Agency", entityId: agency.id, newValue: { name: d.name, ownerUserId: owner.id, source: d.source, applicationId: d.applicationId ?? null } });
   await audit(tx, { actor, action: "AGENCY_SEAT_ADDED", entityType: "AgencyUser", entityId: `${agency.id}:${owner.id}`, newValue: { agencyId: agency.id, userId: owner.id, role: "OWNER" } });
   if (owner.role.key === "APPLICANT") {
@@ -133,10 +136,16 @@ export const agencyProfileSchema = z.object({
   country: z.string().trim().min(2).max(80),
   city: optionalText(80),
   website: z.string().trim().url("Enter a full URL, including https://").optional().or(z.literal("")),
+  // v2 phase 5: private identity, visible to the agency and Hirewise only.
+  legalName: optionalText(160),
+  addressLine: optionalText(240),
+  registrationDetails: optionalText(400),
+  billingEmail: z.string().trim().email("Enter a valid billing email.").optional().or(z.literal("")),
 });
 
 /** Owners (and managers granted agency.profile.manage) edit their own agency; staff with agency.manage edit any. */
 export async function updateAgencyProfile(db: PrismaClient, actor: Actor, agencyId: string, raw: z.input<typeof agencyProfileSchema>) {
+  assertNoClientFacingKeys(raw as Record<string, unknown>);
   const input = agencyProfileSchema.parse(raw);
   if (!actor.permissions.has("agency.manage")) {
     authorize(actor, "agency.profile.manage");
@@ -146,7 +155,7 @@ export async function updateAgencyProfile(db: PrismaClient, actor: Actor, agency
   const a = await agencyRepository.findAgency(db, agencyId);
   if (!a) throw new NotFoundError();
   await db.$transaction(async (tx) => {
-    await agencyRepository.updateAgency(tx, a.id, { name: input.name, description: input.description || null, contactEmail: input.contactEmail, contactPhone: input.contactPhone || null, country: input.country, city: input.city || null, website: input.website || null });
+    await agencyRepository.updateAgency(tx, a.id, { name: input.name, description: input.description || null, contactEmail: input.contactEmail, contactPhone: input.contactPhone || null, country: input.country, city: input.city || null, website: input.website || null, legalName: input.legalName || null, addressLine: input.addressLine || null, registrationDetails: input.registrationDetails || null, billingEmail: input.billingEmail || null });
     await audit(tx, { actor, action: "AGENCY_UPDATED", entityType: "Agency", entityId: a.id, previousValue: { name: a.name }, newValue: { name: input.name } });
   });
 }

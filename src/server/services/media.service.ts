@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { clientMayOpenMedia } from "@/server/services/client-safe-document.service";
 import type { PrismaClient } from "@/server/db/types";
 import type { Actor } from "@/server/auth/actor";
 import { authorize, ForbiddenError, NotFoundError } from "@/server/policies/authorize";
@@ -111,7 +112,8 @@ export async function mediaDownloadUrl(db: PrismaClient, actor: Actor, target: {
   if (!m) throw new NotFoundError();
   const own = actor.role === "AGENT" && actor.agentProfileId === m.agentProfileId;
   const staff = actor.permissions.has("media.review") || actor.permissions.has("agent.read_public");
-  const clientOk = actor.role === "CLIENT" && m.status === "APPROVED";
+  // Phase 5: clients open media only through an APPROVED_FOR_CLIENT client-safe row.
+  const clientOk = actor.role === "CLIENT" && m.status === "APPROVED" && (await clientMayOpenMedia(db, target.type, m.id));
   if (!own && !staff && !clientOk) throw new NotFoundError();
   return getStorage().createDownloadUrl(m.storageKey);
 }

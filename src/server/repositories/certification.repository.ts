@@ -47,7 +47,7 @@ export const certificationRepository = {
   },
 
   findByVerificationCode(db: Db, code: string) {
-    return db.certification.findUnique({ where: { verificationCode: code }, include: { template: { select: { name: true, description: true, validityMonths: true } }, agentProfile: { select: { displayName: true } } } });
+    return db.certification.findUnique({ where: { verificationCode: code }, include: { template: { select: { name: true, description: true, validityMonths: true } }, agentProfile: { select: { displayName: true, clientLabel: true } } } });
   },
 
   /** Course title and coach for the printed certificate. */

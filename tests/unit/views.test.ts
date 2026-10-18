@@ -9,7 +9,7 @@ function agentFixture() {
   return {
     id: "a1", userId: "u1", displayName: "Maria S.", headline: "H", primaryRole: "Setter", summary: "S", photoKey: "k", yearsExperience: 4, experienceLevel: "MID" as const,
     locationCity: "Cebu", locationCountry: "PH", timezone: "Asia/Manila", languages: ["en"], workSetup: "REMOTE" as const, preferredShift: "US", equipmentSummary: "e", internetSummary: "i",
-    status: "APPROVED" as const, verificationLevel: "PROFILE_VERIFIED" as const, verificationIsManual: false, primaryAgencyId: null, platformIdentityId: null, talentType: "HIREWISE_DIRECT" as const, archivedAt: null, formerAgencyId: null, formerAt: null, availabilityStatus: "AVAILABLE" as const, availableFrom: null, profileCompletion: 90,
+    status: "APPROVED" as const, verificationLevel: "PROFILE_VERIFIED" as const, verificationIsManual: false, primaryAgencyId: null, platformIdentityId: null, talentType: "HIREWISE_DIRECT" as const, archivedAt: null, formerAgencyId: null, formerAt: null, clientLabel: null, clientLabelOverride: false, primaryAgency: null, availabilityStatus: "AVAILABLE" as const, availableFrom: null, profileCompletion: 90,
     submittedAt: now, approvedAt: now, approvedById: "admin", hiddenAt: null, suspendedAt: null, deletedAt: null, createdAt: now, updatedAt: now,
     privateContact: { id: "pc", agentProfileId: "a1", fullLegalName: "Maria Santos", personalEmail: "m@x.com", phone: "+63", addressLine: "Street 1", resumeKey: "r", governmentIdRefs: { passport: "x" }, createdAt: now, updatedAt: now },
     skills: [{ agentProfileId: "a1", skillId: "s1", level: "ADVANCED" as const, yearsUsed: 4, verifiedById: null, createdAt: now, updatedAt: now, skill: { id: "s1", name: "Cold Calling", category: "Sales", isActive: true, createdAt: now } }],
@@ -39,7 +39,7 @@ function agentFixture() {
 }
 
 describe("client-facing candidate projection (INV-A3, INV-P1)", () => {
-  const view = toCandidateClientView(agentFixture());
+  const view = toCandidateClientView(agentFixture(), { audience: "CLIENT", clientSafe: { videoIds: new Set(["v1"]), recordingIds: new Set(), portfolio: new Map(), documents: [] } });
   const keys = collectKeys(view);
 
   it("contains none of the forbidden keys", () => {

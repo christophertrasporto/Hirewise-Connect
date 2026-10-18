@@ -66,12 +66,12 @@ export default async function PlacementDetailPage({ params }: { params: Promise<
   return (
     <>
       <Link href="/placements" className="mb-4 inline-flex items-center gap-1.5 text-[13.5px] font-medium text-ink-500 hover:text-ink-900"><ArrowLeft className="h-4 w-4" /> Placements</Link>
-      <PageHeader eyebrow="Placement" title={`${p.agent.displayName} · ${p.positionTitle}`} description={`${p.schedule ?? "Schedule to be confirmed"}${p.timezone ? ` · ${p.timezone}` : ""}${p.startDate ? ` · start ${fmtDate(p.startDate)}` : ""}`} actions={<StatusBadge status={p.status} />} />
+      <PageHeader eyebrow="Placement" title={`${p.agent.name} · ${p.positionTitle}`} description={`${p.schedule ?? "Schedule to be confirmed"}${p.timezone ? ` · ${p.timezone}` : ""}${p.startDate ? ` · start ${fmtDate(p.startDate)}` : ""}`} actions={<StatusBadge status={p.status} />} />
       {!["CANCELLED", "COMPLETED"].includes(p.status) && <ol className="mb-6 flex flex-wrap gap-1.5">{STEPS.map((s, i) => <li key={s} className={`rounded-full px-3 py-1 text-[12px] font-semibold ${i < idx ? "bg-brand-50 text-brand-700" : i === idx ? "bg-ink-900 text-white" : "bg-ink-100 text-ink-400"}`}>{CLIENT_LABEL[s]}</li>)}</ol>}
 
       {p.status === "SELECTED" && <div className="mb-6"><Banner tone="info" title="Hirewise is confirming the terms">Your account manager will confirm the client rate and prepare the service agreement. Nothing is needed from you yet.</Banner></div>}
       {p.status === "AWAITING_DEPOSIT" && openInvoice && <div className="mb-6"><Banner tone="warn" title={`Deposit of ${openInvoice.amountLabel} due ${fmtDate(openInvoice.dueAt)}`}>Open <Link href={`/billing/invoices/${openInvoice.id}`} className="font-semibold underline">invoice {openInvoice.number}</Link> for payment instructions. Deployment preparation starts once Hirewise records the payment.</Banner></div>}
-      {p.status === "DEPLOYMENT_PREP" && <div className="mb-6"><Banner tone="success" title="Deposit received">Operations is preparing {p.agent.displayName} for deployment. You will be notified at activation.</Banner></div>}
+      {p.status === "DEPLOYMENT_PREP" && <div className="mb-6"><Banner tone="success" title="Deposit received">Operations is preparing {p.agent.name} for deployment. You will be notified at activation.</Banner></div>}
 
       <div className="grid gap-5 lg:grid-cols-[1.2fr_0.8fr]">
         <div className="space-y-5">
@@ -97,7 +97,7 @@ export default async function PlacementDetailPage({ params }: { params: Promise<
               <div><dt className="text-[12px] font-semibold uppercase tracking-[0.12em] text-ink-400">Start date</dt><dd className="mt-0.5 font-semibold text-ink-900">{p.startDate ? fmtDate(p.startDate) : "To be confirmed"}</dd></div>
             </dl>
           </Card>
-          <Card title="Talent"><p className="text-[15px] font-semibold text-ink-900">{p.agent.displayName}</p><p className="text-[13px] text-ink-500">{p.agent.primaryRole ?? "Talent"}</p></Card>
+          <Card title="Talent"><p className="text-[15px] font-semibold text-ink-900">{p.agent.name}</p><p className="text-[13px] text-ink-500">{p.agent.primaryRole ?? "Talent"}</p></Card>
         </div>
       </div>
     </>

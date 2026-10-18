@@ -47,7 +47,7 @@ export default async function ComparePage({ searchParams }: { searchParams: Prom
                 <th className="w-44 p-4" />
                 {rows.map((c) => (
                   <th key={c.id} className="p-4 align-top">
-                    <Link href={`/talent/${c.id}`} className="text-[16px] font-bold text-ink-900 hover:text-brand-700">{c.displayName}</Link>
+                    <Link href={`/talent/${c.id}`} className="text-[16px] font-bold text-ink-900 hover:text-brand-700">{c.name}</Link>
                     <p className="mt-0.5 text-[12.5px] font-normal text-ink-500">{c.headline}</p>
                   </th>
                 ))}

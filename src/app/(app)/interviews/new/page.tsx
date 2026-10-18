@@ -30,7 +30,7 @@ export default async function NewInterviewRequestPage({ searchParams }: { search
       {list.candidates.length === 0 ? (
         <EmptyState title="Shortlist candidates first" description="Interview requests are made from your shortlist." action={<Link href="/talent" className="inline-flex h-10 items-center rounded-full bg-ink-900 px-5 text-[14px] font-semibold text-white">Find talent</Link>} />
       ) : (
-        <InterviewRequestForm candidates={list.candidates.map((c) => ({ id: c.id, displayName: c.displayName, primaryRole: c.primaryRole }))} preselected={(ids ?? "").split(",").filter(Boolean)} requirements={requirements.filter((r) => r.status !== "CLOSED").map((r) => ({ id: r.id, title: r.title, role: r.role }))} defaultTimezone={client.timezone ?? "America/Los_Angeles"} />
+        <InterviewRequestForm candidates={list.candidates.map((c) => ({ id: c.id, displayName: c.name, primaryRole: c.primaryRole }))} preselected={(ids ?? "").split(",").filter(Boolean)} requirements={requirements.filter((r) => r.status !== "CLOSED").map((r) => ({ id: r.id, title: r.title, role: r.role }))} defaultTimezone={client.timezone ?? "America/Los_Angeles"} />
       )}
     </>
   );

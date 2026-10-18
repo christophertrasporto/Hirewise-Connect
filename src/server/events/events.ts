@@ -18,7 +18,7 @@ export type DomainEventMap = {
   CLIENT_CONFIRMED_SLOTS: { requestId: string; salesUserId: string; companyName: string };
   CANDIDATE_CONFIRMATION_REQUESTED: { requestId: string; agentProfileId: string; userId: string; email: string; role: string; schedule: string | null; timezone: string };
   CANDIDATE_RESPONDED: { requestId: string; salesUserId: string; displayName: string; response: "CONFIRMED" | "DECLINED" };
-  INTERVIEW_SCHEDULED: { interviewId: string; requestId: string; clientUserId: string | null; clientEmail: string | null; agentUserId: string; agentEmail: string; companyName: string; displayName: string; scheduledAt: string; timezone: string; meetingLink: string | null; salesUserId: string | null };
+  INTERVIEW_SCHEDULED: { interviewId: string; requestId: string; clientUserId: string | null; clientEmail: string | null; agentUserId: string; agentEmail: string; companyName: string; displayName: string; clientLabel: string; scheduledAt: string; timezone: string; meetingLink: string | null; salesUserId: string | null };
   CLIENT_DECISION_REQUESTED: { requestId: string; userId: string; email: string; role: string };
   CANDIDATE_SELECTED: { placementId: string; requestId: string; clientId: string; companyName: string; agentProfileId: string; agentUserId: string; agentEmail: string; displayName: string; salesUserId: string | null };
   CANDIDATE_NOT_SELECTED: { requestId: string; agentUserId: string; agentEmail: string; role: string };
@@ -64,6 +64,10 @@ export type DomainEventMap = {
   CREDENTIALS_REVOKED: { agencyId: string; agencyName: string; agentProfileId: string; agentUserId: string; ownerUserId: string; displayName: string; courses: string[]; certifications: string[]; assessments: number; seatsReturned: number };
   INDEPENDENT_APPLIED: { accessId: string; userId: string; email: string; feeMinor: number; currency: string; pendingPayment: boolean };
   INDEPENDENT_ACTIVATED: { accessId: string; userId: string; email: string; profileId: string };
+  // v2 phase 5: client protection
+  CLIENT_SAFE_DOCUMENT_NEEDS_REVIEW: { documentId: string; agentProfileId: string; displayName: string; type: string };
+  CLIENT_SAFE_DOCUMENT_REVIEWED: { documentId: string; agentProfileId: string; agentUserId: string; agentEmail: string; type: string; title: string; outcome: "APPROVED_FOR_CLIENT" | "REJECTED"; note: string | null };
+  DISCLOSURE_CHANGED: { grantId: string; scope: "AGENT_IDENTITY" | "AGENCY_IDENTITY" | "CLIENT_IDENTITY"; action: "GRANTED" | "REVOKED"; clientId: string; companyName: string; subjectLabel: string; accountManagerUserId: string | null; grantedBy: "STAFF" | "SYSTEM" };
   AGENCY_STATUS_CHANGED: { agencyId: string; agencyName: string; status: "ACTIVE" | "SUSPENDED" | "INACTIVE"; reason: string; ownerUserId: string; ownerEmail: string };
   // Course Builder phase 7
   ASSIGNMENT_SUBMITTED: { submissionId: string; lessonId: string; lessonTitle: string; courseId: string; courseTitle: string; agentProfileId: string; displayName: string; coachUserIds: string[]; late: boolean; resubmission: boolean };
@@ -74,11 +78,11 @@ export type DomainEventMap = {
   BILLING_RATE_PROPOSED: { rateId: string; agentProfileId: string; displayName: string; proposedByUserId: string; amount: number; currency: string; unit: string };
   BILLING_RATE_PUBLISHED: { rateId: string; agentProfileId: string; agentUserId: string; displayName: string; proposedByUserId: string };
   BILLING_RATE_REJECTED: { rateId: string; displayName: string; proposedByUserId: string; reason: string };
-  PLACEMENT_APPROVED: { placementId: string; clientUserId: string | null; clientEmail: string | null; companyName: string; displayName: string; positionTitle: string; salesUserId: string | null; rateLabel: string; depositLabel: string };
+  PLACEMENT_APPROVED: { placementId: string; clientUserId: string | null; clientEmail: string | null; companyName: string; displayName: string; clientLabel: string; positionTitle: string; salesUserId: string | null; rateLabel: string; depositLabel: string };
   DEPOSIT_REQUIRED: { placementId: string; clientUserId: string | null; clientEmail: string | null; companyName: string; invoiceNumber: string; amount: number; currency: string; dueAt: string; displayName: string };
   DEPOSIT_PAID: { placementId: string; how: "PAID" | "WAIVED"; clientUserId: string | null; clientEmail: string | null; companyName: string; agentUserId: string; agentEmail: string; displayName: string; salesUserId: string | null };
-  CANDIDATE_DEPLOYED: { placementId: string; clientUserId: string | null; clientEmail: string | null; companyName: string; agentUserId: string; agentEmail: string; displayName: string; positionTitle: string; startDate: string; salesUserId: string | null };
-  PLACEMENT_STATUS_CHANGED: { placementId: string; status: string; reason: string | null; clientUserId: string | null; companyName: string; agentUserId: string; displayName: string; positionTitle: string; salesUserId: string | null };
+  CANDIDATE_DEPLOYED: { placementId: string; clientUserId: string | null; clientEmail: string | null; companyName: string; agentUserId: string; agentEmail: string; displayName: string; clientLabel: string; positionTitle: string; startDate: string; salesUserId: string | null };
+  PLACEMENT_STATUS_CHANGED: { placementId: string; status: string; reason: string | null; clientUserId: string | null; companyName: string; agentUserId: string; displayName: string; clientLabel: string; positionTitle: string; salesUserId: string | null };
   // Phase 5
   INCIDENT_CREATED: { incidentId: string; subjectUserId: string; type: string; severity: string; reportedByUserId: string };
   USER_SUSPENDED: { userId: string; email: string; reason: string };

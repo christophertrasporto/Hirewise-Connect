@@ -3,10 +3,10 @@ import type { Db } from "@/server/db/types";
 
 export function requestInclude() {
   return {
-    client: { select: { id: true, companyName: true, timezone: true, accountManagerUserId: true, contacts: { where: { isPrimary: true }, select: { name: true, userId: true, businessEmail: true } } } },
+    client: { select: { id: true, companyName: true, industry: true, country: true, timezone: true, accountManagerUserId: true, contacts: { where: { isPrimary: true }, select: { name: true, userId: true, businessEmail: true } } } },
     requirement: { select: { id: true, title: true, role: true } },
-    candidates: { include: { agentProfile: { select: { id: true, displayName: true, primaryRole: true, availabilityStatus: true, userId: true, timezone: true, privateContact: { select: { fullLegalName: true } }, user: { select: { email: true } } } } }, orderBy: { createdAt: "asc" } },
-    interviews: { include: { agentProfile: { select: { id: true, displayName: true } } }, orderBy: [{ round: "asc" }, { scheduledAt: "asc" }] },
+    candidates: { include: { agentProfile: { select: { id: true, displayName: true, clientLabel: true, primaryAgencyId: true, primaryRole: true, availabilityStatus: true, userId: true, timezone: true, privateContact: { select: { fullLegalName: true } }, user: { select: { email: true } } } } }, orderBy: { createdAt: "asc" } },
+    interviews: { include: { agentProfile: { select: { id: true, displayName: true, clientLabel: true, privateContact: { select: { fullLegalName: true } } } } }, orderBy: [{ round: "asc" }, { scheduledAt: "asc" }] },
     assignedSales: { select: { id: true, email: true } },
   } satisfies Prisma.InterviewRequestInclude;
 }

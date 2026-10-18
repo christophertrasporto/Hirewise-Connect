@@ -150,7 +150,7 @@ export async function matchCandidates(db: PrismaClient, actor: Actor, requiremen
       weights,
       { includeSoon, hoursPerMonth: hours },
     );
-    return { candidate: { ...toCandidateCardView(r), shortlisted: shortlisted.has(r.id) }, score: scored.score, maxScore: scored.maxScore, percent: Math.round((scored.score / scored.maxScore) * 100), reasons: scored.reasons, hardFails: scored.hardFails };
+    return { candidate: { ...toCandidateCardView(r, { audience: "STAFF" }), shortlisted: shortlisted.has(r.id) }, score: scored.score, maxScore: scored.maxScore, percent: Math.round((scored.score / scored.maxScore) * 100), reasons: scored.reasons, hardFails: scored.hardFails };
   });
 
   const eligible = results.filter((m) => m.hardFails.length === 0);

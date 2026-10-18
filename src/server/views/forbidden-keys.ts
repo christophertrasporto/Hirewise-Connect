@@ -43,6 +43,23 @@ export const FORBIDDEN_FOR_CLIENT = [
   "idVerificationRefs",
   "duplicateFlags",
   "attemptedData",
+  // Client protection phase 5: agent-chosen names, real agency identity, raw storage keys and links
+  "displayName",
+  "logoKey",
+  "website",
+  "contactEmail",
+  "contactPhone",
+  "registrationDetails",
+  "billingEmail",
+  "storageKey",
+  "originalStorageKey",
+  "sanitizedStorageKey",
+  "url",
+  "meetingProvider",
+  "meetingExternalId",
+  "primaryAgency",
+  "primaryAgencyId",
+  "ownerUserId",
 ] as const;
 
 /**
@@ -70,6 +87,8 @@ export const FORBIDDEN_FOR_AGENCY = [
   "internalFeedback",
   "reviewFeedback",
   "businessEmail",
+  // Client protection phase 5: client identity reaches agencies only through a disclosure grant
+  "companyName",
 ] as const;
 
 export const FORBIDDEN_FOR_AGENT = [

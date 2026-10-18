@@ -1,4 +1,6 @@
 import { createHash } from "node:crypto";
+import { agentIdentityDisclosedTo, clientIdentityDisclosedTo } from "@/server/services/disclosure.service";
+import { clientNameFor } from "@/server/views/interview.views";
 import type { Db, PrismaClient, Tx } from "@/server/db/types";
 import type { Actor } from "@/server/auth/actor";
 import type { RequestMeta } from "@/server/auth/session";
@@ -53,12 +55,14 @@ function assertStaffRead(actor: Actor, p: { clientId: string }) {
 
 export async function listPlacementsForClient(db: PrismaClient, actor: Actor) {
   if (actor.role !== "CLIENT" || !actor.clientId) return [];
-  return (await placementRepository.listForClient(db, actor.clientId)).map((p) => toPlacementView(p, "CLIENT"));
+  const disclosed = await agentIdentityDisclosedTo(db, actor.clientId);
+  return (await placementRepository.listForClient(db, actor.clientId)).map((p) => toPlacementView(p, "CLIENT", { agentIdentity: disclosed.has(p.agentProfileId) }));
 }
 
 export async function listPlacementsForAgent(db: PrismaClient, actor: Actor) {
   if (actor.role !== "AGENT" || !actor.agentProfileId) return [];
-  return (await placementRepository.listForAgent(db, actor.agentProfileId)).map((p) => toPlacementView(p, "AGENT"));
+  const clients = await clientIdentityDisclosedTo(db, actor.agentProfileId);
+  return (await placementRepository.listForAgent(db, actor.agentProfileId)).map((p) => toPlacementView(p, "AGENT", { clientIdentity: clients.has(p.clientId) }));
 }
 
 export async function listPlacementsForStaff(db: PrismaClient, actor: Actor, status?: PlacementStatus) {
@@ -69,13 +73,13 @@ export async function listPlacementsForStaff(db: PrismaClient, actor: Actor, sta
 export async function getPlacementForClient(db: PrismaClient, actor: Actor, id: string) {
   const p = await load(db, id);
   assertClientOwns(actor, p);
-  return toPlacementClientView(p);
+  return toPlacementClientView(p, { agentIdentity: (await agentIdentityDisclosedTo(db, p.clientId)).has(p.agentProfileId) });
 }
 
 export async function getPlacementForAgent(db: PrismaClient, actor: Actor, id: string) {
   const p = await load(db, id);
   if (actor.role !== "AGENT" || actor.agentProfileId !== p.agentProfileId) throw new NotFoundError();
-  return toPlacementAgentView(p);
+  return toPlacementAgentView(p, { clientIdentity: (await clientIdentityDisclosedTo(db, p.agentProfileId)).has(p.clientId) });
 }
 
 export async function getPlacementForStaff(db: PrismaClient, actor: Actor, id: string) {
@@ -111,7 +115,7 @@ export async function approvePlacement(db: PrismaClient, actor: Actor, id: strin
     const dep = await billingRepository.createDeposit(tx, { placementId: p.id, policyId: policy.id, requiredAmount: deposit.amount, currency: deposit.currency, dueDate, approvedById: actor.userId });
     const inv = await issueInvoice(tx, actor, { clientId: p.clientId, placementId: p.id, depositId: dep.id, description: `Placement deposit (${policy.name}) for ${p.agentProfile.displayName} - ${p.positionTitle}`, amount: deposit.amount, currency: deposit.currency, dueAt: dueDate });
     await audit(tx, { actor, action: "PLACEMENT_APPROVED", entityType: "Placement", entityId: p.id, previousValue: { status: p.status }, newValue: { status: "AWAITING_AGREEMENT", clientBillingRateId: rate.id, depositId: dep.id, invoiceId: inv.id, requiredAmount: deposit.amount } });
-    await publishEvent(tx, "PLACEMENT_APPROVED", { placementId: p.id, clientUserId: p.client.contacts[0]?.userId ?? null, clientEmail: p.client.contacts[0]?.businessEmail ?? null, companyName: p.client.companyName, displayName: p.agentProfile.displayName, positionTitle: p.positionTitle, salesUserId: p.accountManagerUserId, rateLabel: rateLabel(rate), depositLabel: money(deposit.amount, deposit.currency) });
+    await publishEvent(tx, "PLACEMENT_APPROVED", { placementId: p.id, clientUserId: p.client.contacts[0]?.userId ?? null, clientEmail: p.client.contacts[0]?.businessEmail ?? null, companyName: p.client.companyName, displayName: p.agentProfile.displayName, clientLabel: clientNameFor(p.agentProfile, false), positionTitle: p.positionTitle, salesUserId: p.accountManagerUserId, rateLabel: rateLabel(rate), depositLabel: money(deposit.amount, deposit.currency) });
   });
 }
 
@@ -241,7 +245,7 @@ export async function activatePlacement(db: PrismaClient, actor: Actor, placemen
     const hold = await reservationRepository.activeForAgent(tx, p.agentProfileId);
     if (hold) await reservationRepository.setStatus(tx, hold.id, "CONVERTED");
     await audit(tx, { actor, action: "PLACEMENT_ACTIVATED", entityType: "Placement", entityId: p.id, previousValue: { status: p.status }, newValue: { status: "ACTIVE", startDate: p.startDate, deposit: deposit.status } });
-    await publishEvent(tx, "CANDIDATE_DEPLOYED", { placementId: p.id, clientUserId: p.client.contacts[0]?.userId ?? null, clientEmail: p.client.contacts[0]?.businessEmail ?? null, companyName: p.client.companyName, agentUserId: p.agentProfile.userId, agentEmail: p.agentProfile.user.email, displayName: p.agentProfile.displayName, positionTitle: p.positionTitle, startDate: p.startDate!.toISOString(), salesUserId: p.accountManagerUserId });
+    await publishEvent(tx, "CANDIDATE_DEPLOYED", { placementId: p.id, clientUserId: p.client.contacts[0]?.userId ?? null, clientEmail: p.client.contacts[0]?.businessEmail ?? null, companyName: p.client.companyName, agentUserId: p.agentProfile.userId, agentEmail: p.agentProfile.user.email, displayName: p.agentProfile.displayName, clientLabel: clientNameFor(p.agentProfile, false), positionTitle: p.positionTitle, startDate: p.startDate!.toISOString(), salesUserId: p.accountManagerUserId });
   });
 }
 
@@ -274,6 +278,6 @@ export async function transitionPlacement(db: PrismaClient, actor: Actor, placem
       if (current === "PLACED" || current === "RESERVED") await agentRepository.setAvailability(tx, p.agentProfileId, "AVAILABLE", { setById: actor.userId, reason: `Placement ${to.toLowerCase()}` });
     }
     await audit(tx, { actor, action: "PLACEMENT_STATUS_CHANGED", entityType: "Placement", entityId: p.id, previousValue: { status: p.status }, newValue: { status: to }, reason });
-    await publishEvent(tx, "PLACEMENT_STATUS_CHANGED", { placementId: p.id, status: to, reason: reason ?? null, clientUserId: p.client.contacts[0]?.userId ?? null, companyName: p.client.companyName, agentUserId: p.agentProfile.userId, displayName: p.agentProfile.displayName, positionTitle: p.positionTitle, salesUserId: p.accountManagerUserId });
+    await publishEvent(tx, "PLACEMENT_STATUS_CHANGED", { placementId: p.id, status: to, reason: reason ?? null, clientUserId: p.client.contacts[0]?.userId ?? null, companyName: p.client.companyName, agentUserId: p.agentProfile.userId, displayName: p.agentProfile.displayName, clientLabel: clientNameFor(p.agentProfile, false), positionTitle: p.positionTitle, salesUserId: p.accountManagerUserId });
   });
 }

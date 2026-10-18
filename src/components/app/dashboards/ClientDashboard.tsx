@@ -14,8 +14,8 @@ type Props = {
   shortlistCount: number;
   openRequests: number;
   decisionsPending: number;
-  upcoming: Array<{ id: string; requestId: string; displayName: string; scheduledAt: Date; timezone: string }>;
-  placements: Array<{ id: string; status: string; positionTitle: string; displayName: string }>;
+  upcoming: Array<{ id: string; requestId: string; name: string; scheduledAt: Date; timezone: string }>;
+  placements: Array<{ id: string; status: string; positionTitle: string; name: string }>;
 };
 
 export function ClientDashboard({ client, notifications, recommended, recentlyViewed, shortlistCount, openRequests, decisionsPending, upcoming, placements }: Props) {
@@ -66,7 +66,7 @@ export function ClientDashboard({ client, notifications, recommended, recentlyVi
             <ul className="divide-y divide-ink-100">
               {recentlyViewed.map((c) => (
                 <li key={c.id} className="py-2.5">
-                  <Link href={`/talent/${c.id}`} className="text-[14.5px] font-semibold text-ink-900 hover:text-brand-700">{c.displayName}</Link>
+                  <Link href={`/talent/${c.id}`} className="text-[14.5px] font-semibold text-ink-900 hover:text-brand-700">{c.name}</Link>
                   <p className="text-[12.5px] text-ink-500">{c.primaryRole ?? "—"}</p>
                 </li>
               ))}
@@ -81,7 +81,7 @@ export function ClientDashboard({ client, notifications, recommended, recentlyVi
             <ul className="divide-y divide-ink-100 text-[13.5px]">
               {upcoming.map((i) => (
                 <li key={i.id} className="flex items-center justify-between py-2.5">
-                  <Link href={`/interviews/${i.requestId}`} className="font-semibold text-ink-800 hover:text-brand-700">{i.displayName}</Link>
+                  <Link href={`/interviews/${i.requestId}`} className="font-semibold text-ink-800 hover:text-brand-700">{i.name}</Link>
                   <span className="text-ink-500">{new Date(i.scheduledAt).toLocaleString("en-US", { timeZone: i.timezone, dateStyle: "medium", timeStyle: "short" })}</span>
                 </li>
               ))}

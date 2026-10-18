@@ -5,7 +5,9 @@ import { ForbiddenError, NotFoundError } from "@/server/policies/authorize";
 import { agentRepository, type SearchWhere } from "@/server/repositories/agent.repository";
 import { shortlistRepository } from "@/server/repositories/shortlist.repository";
 import { clientRepository } from "@/server/repositories/client.repository";
-import { toCandidateCardView, toCandidateClientView, type CandidateCardView } from "@/server/views/agent.views";
+import { toCandidateCardView, toCandidateClientView, type CandidateCardView, type Audience } from "@/server/views/agent.views";
+import { clientSafeContextFor, agencyNameReplacements } from "@/server/services/client-safe-document.service";
+import { agentIdentityDisclosedTo } from "@/server/services/disclosure.service";
 import { timezoneOffsetHours } from "@/lib/timezones";
 import { flagRepository } from "@/server/repositories/flag.repository";
 import { getSetting } from "./setting.service";
@@ -67,8 +69,14 @@ export async function assertMarketplaceAccess(db: PrismaClient, actor: Actor): P
  * default sort (verification, availability, recency) are applied in memory on the
  * capped result set. Every returned row is a client-safe card.
  */
+/** Clients (and anyone without staff read rights) get the client projection; staff with agent.read_public the staff one. */
+export function audienceFor(actor: Actor): Audience {
+  return actor.role !== "CLIENT" && actor.permissions.has("agent.read_public") ? "STAFF" : "CLIENT";
+}
+
 export async function searchCandidates(db: PrismaClient, actor: Actor, filters: SearchFilters) {
   const access = await assertMarketplaceAccess(db, actor);
+  const audience = audienceFor(actor);
   const minVerification = filters.verification ? VERIFICATION_ORDER.slice(VERIFICATION_ORDER.indexOf(filters.verification)) : undefined;
   const where: SearchWhere = {
     text: filters.q || undefined,
@@ -87,11 +95,12 @@ export async function searchCandidates(db: PrismaClient, actor: Actor, filters: 
     minAssessmentRank: filters.minAssessment || undefined,
   };
   const rows = await agentRepository.searchApproved(db, where);
+  const safe = audience === "CLIENT" ? await clientSafeContextFor(db, rows.map((r) => r.id)) : new Map();
   const shortlisted = access.clientId ? new Set((await shortlistRepository.activeAgentIds(db, access.clientId)).map((s) => s.agentProfileId)) : new Set<string>();
   const clientOffset = access.timezone ? timezoneOffsetHours(access.timezone) : null;
 
   let cards: CandidateCardView[] = rows.map((r) => {
-    const card = toCandidateCardView(r);
+    const card = toCandidateCardView(r, { audience, clientSafe: safe.get(r.id) });
     const agentOffset = r.timezone ? timezoneOffsetHours(r.timezone) : null;
     const tzDiff = clientOffset !== null && agentOffset !== null ? Math.abs(clientOffset - agentOffset) : null;
     return { ...card, shortlisted: shortlisted.has(r.id), tzDiffHours: tzDiff === null ? null : Math.min(tzDiff, 24 - tzDiff) };
@@ -114,10 +123,14 @@ export async function searchCandidates(db: PrismaClient, actor: Actor, filters: 
 }
 
 /** Candidate profile for a client. Records the view and the introduction (Section 8.3). */
-export async function getCandidateForClient(db: PrismaClient, actor: Actor, agentProfileId: string) {
+export async function getCandidateForClient(db: PrismaClient, actor: Actor, agentProfileId: string, opts: { previewAsClient?: boolean } = {}) {
   const access = await assertMarketplaceAccess(db, actor);
   const p = await agentRepository.findApprovedById(db, agentProfileId);
   if (!p) throw new NotFoundError();
+  const audience: Audience = opts.previewAsClient ? "CLIENT" : audienceFor(actor);
+  // Phase 5: the legal name only through an active AGENT_IDENTITY grant for this client; media only with approved client-safe rows.
+  const disclosed = access.clientId ? (await agentIdentityDisclosedTo(db, access.clientId)).has(p.id) : false;
+  const view = toCandidateClientView(p, { audience, legalName: disclosed ? p.privateContact?.fullLegalName ?? null : null, clientSafe: audience === "CLIENT" ? (await clientSafeContextFor(db, [p.id])).get(p.id) : undefined, agencyNames: audience === "CLIENT" ? await agencyNameReplacements(db) : undefined });
   let shortlisted = false;
   if (access.clientId) {
     await shortlistRepository.recordView(db, access.clientId, p.id);
@@ -126,7 +139,7 @@ export async function getCandidateForClient(db: PrismaClient, actor: Actor, agen
     const list = await shortlistRepository.defaultForClient(db, access.clientId, actor.userId);
     shortlisted = !!(await shortlistRepository.activeEntry(db, list.id, p.id));
   }
-  return { candidate: toCandidateClientView(p), shortlisted };
+  return { candidate: view, shortlisted };
 }
 
 /** Client dashboard: newest approved candidates matching the client's requested services. */
@@ -144,11 +157,14 @@ export async function recommendedForClient(db: PrismaClient, actor: Actor, take 
     })
     .sort((a, b) => b.score - a.score || (b.r.approvedAt?.getTime() ?? 0) - (a.r.approvedAt?.getTime() ?? 0))
     .slice(0, take);
-  return scored.map(({ r }) => toCandidateCardView(r));
+  const safe = await clientSafeContextFor(db, scored.map(({ r }) => r.id));
+  return scored.map(({ r }) => toCandidateCardView(r, { audience: "CLIENT", clientSafe: safe.get(r.id) }));
 }
 
 export async function recentlyViewedForClient(db: PrismaClient, actor: Actor, take = 6) {
   if (actor.role !== "CLIENT" || !actor.clientId) return [];
   const rows = await shortlistRepository.recentlyViewed(db, actor.clientId, take);
-  return rows.filter((v) => v.agentProfile.status === "APPROVED").map((v) => toCandidateCardView(v.agentProfile));
+  const approved = rows.filter((v) => v.agentProfile.status === "APPROVED");
+  const safe = await clientSafeContextFor(db, approved.map((v) => v.agentProfile.id));
+  return approved.map((v) => toCandidateCardView(v.agentProfile, { audience: "CLIENT", clientSafe: safe.get(v.agentProfile.id) }));
 }

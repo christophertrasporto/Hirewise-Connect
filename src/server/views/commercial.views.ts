@@ -1,6 +1,8 @@
 import type { Prisma } from "@/server/db/types";
 import type { placementInclude } from "@/server/repositories/placement.repository";
 import type { invoiceInclude } from "@/server/repositories/billing.repository";
+import { clientNameFor } from "@/server/views/interview.views";
+import { maskedClientLabel } from "@/lib/client-redaction";
 
 type PlacementRecord = Prisma.PlacementGetPayload<{ include: ReturnType<typeof placementInclude> }>;
 type InvoiceRecord = Prisma.InvoiceGetPayload<{ include: ReturnType<typeof invoiceInclude> }>;
@@ -48,7 +50,7 @@ function depositView(d: PlacementRecord["deposit"]) {
  * Client placement detail (Section 6): status, schedule, billing-rate snapshot, deposit,
  * own invoices, agreement state. Never compensation, never internal notes.
  */
-export function toPlacementClientView(p: PlacementRecord) {
+export function toPlacementClientView(p: PlacementRecord, opts: { agentIdentity?: boolean } = {}) {
   return {
     id: p.id,
     status: p.status,
@@ -59,7 +61,7 @@ export function toPlacementClientView(p: PlacementRecord) {
     createdAt: p.createdAt,
     activatedAt: p.activatedAt,
     endedAt: p.endedAt,
-    agent: { id: p.agentProfile.id, displayName: p.agentProfile.displayName, primaryRole: p.agentProfile.primaryRole },
+    agent: { id: p.agentProfile.id, name: clientNameFor(p.agentProfile, !!opts.agentIdentity), primaryRole: p.agentProfile.primaryRole },
     billingRate: p.clientBillingRate ? { amount: p.clientBillingRate.amount, currency: p.clientBillingRate.currency, unit: p.clientBillingRate.unit, label: rateLabel(p.clientBillingRate) } : null,
     deposit: depositView(p.deposit),
     invoices: p.invoices.map((i) => ({ id: i.id, number: i.number, amount: i.amount, currency: i.currency, amountLabel: money(i.amount, i.currency), status: i.status, dueAt: i.dueAt, issuedAt: i.issuedAt })),
@@ -71,7 +73,7 @@ export function toPlacementClientView(p: PlacementRecord) {
  * Agent placement detail: status, schedule, company, own compensation snapshot,
  * and a boolean "client rate published" flag. No billing amounts, deposits, or invoices (INV-C2).
  */
-export function toPlacementAgentView(p: PlacementRecord) {
+export function toPlacementAgentView(p: PlacementRecord, opts: { clientIdentity?: boolean } = {}) {
   return {
     id: p.id,
     status: p.status,
@@ -82,7 +84,7 @@ export function toPlacementAgentView(p: PlacementRecord) {
     createdAt: p.createdAt,
     activatedAt: p.activatedAt,
     endedAt: p.endedAt,
-    client: { companyName: p.client.companyName, timezone: p.client.timezone },
+    client: { companyName: opts.clientIdentity ? p.client.companyName : maskedClientLabel(p.client), timezone: p.client.timezone },
     compensation: p.agentCompensation ? { amount: p.agentCompensation.amount, currency: p.agentCompensation.currency, unit: p.agentCompensation.unit, label: rateLabel(p.agentCompensation) } : null,
     clientRatePublished: !!p.clientBillingRate,
     checklistProgress: p.checklistItems.length ? { done: p.checklistItems.filter((c) => c.isDone).length, total: p.checklistItems.length } : null,

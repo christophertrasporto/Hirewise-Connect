@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, Award, BadgeCheck, CalendarPlus, Clock3, Globe2, Languages, Laptop } from "lucide-react";
+import { ArrowLeft, Award, BadgeCheck, CalendarPlus, Clock3, Globe2, Languages, Laptop, ShieldCheck } from "lucide-react";
+import { DocumentLink } from "@/components/client-protection/Forms";
 import { prisma } from "@/server/db/client";
 import { requireActor } from "@/server/auth/require-actor";
 import { getCandidateForClient } from "@/server/services/search.service";
@@ -13,19 +14,20 @@ import { labelFor } from "@/lib/options";
 
 export const metadata: Metadata = { title: "Candidate" };
 
-export default async function CandidatePage({ params }: { params: Promise<{ id: string }> }) {
+export default async function CandidatePage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ preview?: string }> }) {
   const actor = await requireActor();
   const { id } = await params;
+  const preview = (await searchParams).preview === "client";
   let data: Awaited<ReturnType<typeof getCandidateForClient>>;
   try {
-    data = await getCandidateForClient(prisma, actor, id);
+    data = await getCandidateForClient(prisma, actor, id, { previewAsClient: preview });
   } catch (e) {
     if (e instanceof NotFoundError) notFound();
     if (e instanceof ForbiddenError) return <Banner tone="warn" title="Marketplace not open yet">{e.message}</Banner>;
     throw e;
   }
   const c = data.candidate;
-  const initials = c.displayName.split(/\s+/).map((w) => w[0]).join("").slice(0, 2).toUpperCase();
+  const initials = c.name.split(/\s+/).map((w) => w[0]).join("").slice(0, 2).toUpperCase();
 
   return (
     <>
@@ -35,11 +37,14 @@ export default async function CandidatePage({ params }: { params: Promise<{ id: 
           <span className="flex h-20 w-20 shrink-0 items-center justify-center rounded-3xl bg-gradient-to-br from-ink-700 to-ink-900 font-display text-2xl font-bold text-white">{initials}</span>
           <div>
             <div className="flex flex-wrap items-center gap-2">
-              <h1 className="text-[1.75rem] font-bold leading-tight">{c.displayName}</h1>
+              <h1 className="text-[1.75rem] font-bold leading-tight">{c.name}</h1>
               <span className="inline-flex items-center gap-1 rounded-full bg-brand-50 px-2.5 py-1 text-[11.5px] font-semibold text-brand-700 ring-1 ring-inset ring-brand-200"><BadgeCheck className="h-3.5 w-3.5" /> {labelFor(c.verificationLevel)}</span>
               <StatusBadge status={c.availabilityStatus} />
             </div>
             <p className="mt-1 text-[15px] text-ink-600">{c.headline ?? c.primaryRole}</p>
+            <p className="mt-1 inline-flex items-center gap-1.5 text-[12.5px] font-semibold text-brand-700"><ShieldCheck className="h-3.5 w-3.5" /> {c.partnerTeam ? <Link href={`/partners/${c.partnerTeam.code}`} className="hover:underline">{c.partnerTeam.name}</Link> : "Hirewise Direct talent"}{c.identityDisclosed && <span className="ml-2 rounded-full bg-ink-100 px-2 py-0.5 text-[11px] font-semibold text-ink-700">Full name disclosed by Hirewise</span>}</p>
+            {preview && <p className="mt-1 text-[12px] text-gold-700">Preview: this is exactly what a client sees. <Link href={`/talent/${c.id}`} className="underline">Back to the staff view</Link></p>}
+            {!preview && actor.role !== "CLIENT" && <p className="mt-1 text-[12px] text-ink-400"><Link href={`/talent/${c.id}?preview=client`} className="underline">Preview as a client</Link></p>}
             <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-[13px] text-ink-500">
               <span className="inline-flex items-center gap-1"><Globe2 className="h-3.5 w-3.5" /> {c.locationCountry ?? "—"} · {c.timezone ?? "—"}</span>
               <span className="inline-flex items-center gap-1"><Languages className="h-3.5 w-3.5" /> {c.languages.join(", ") || "—"}</span>
@@ -96,6 +101,14 @@ export default async function CandidatePage({ params }: { params: Promise<{ id: 
                 <MediaPlayer type="RECORDING" id={r.id} />
               </div>
             ))}
+          </Card>
+          <Card title="Documents" description="Client-safe copies prepared by Hirewise. Originals stay private.">
+            {c.documents.length === 0 && c.portfolio.length === 0 ? <EmptyState title="No documents cleared yet" /> : (
+              <ul className="space-y-2 text-[13.5px]">
+                {c.documents.map((d) => <li key={d.id}><DocumentLink id={d.id} label={d.title} /></li>)}
+                {c.portfolio.map((p) => <li key={p.id}>{p.documentId ? <DocumentLink id={p.documentId} label={p.title} /> : <span className="text-ink-700">{p.title}</span>}{p.description && <p className="text-[12.5px] text-ink-500">{p.description}</p>}</li>)}
+              </ul>
+            )}
           </Card>
           <Card title="Certifications" description="Issued by the Hirewise VA Academy after coach review.">
             {c.certifications.length === 0 ? <EmptyState title="No certifications yet" /> : (

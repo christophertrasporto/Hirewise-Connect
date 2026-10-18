@@ -25,6 +25,11 @@ import { IncidentForm } from "@/components/phase5/IncidentForms";
 import { billingRatesForAgent, currentCompensationFor, compensationHistoryFor } from "@/server/services/rate.service";
 import { ProposeRateForm, RateDecision, CompensationForm } from "@/components/commercial/RateForms";
 import { rateLabel } from "@/server/views/commercial.views";
+import { can } from "@/server/policies/authorize";
+import { clientSafeDocumentsForStaff } from "@/server/services/client-safe-document.service";
+import { listGrants } from "@/server/services/disclosure.service";
+import { listClientsForStaff } from "@/server/services/client.service";
+import { ClientLabelForm, GrantDisclosureForm, DisclosureGrantList, DocumentLink } from "@/components/client-protection/Forms";
 
 export const metadata: Metadata = { title: "Agent profile" };
 
@@ -46,6 +51,9 @@ export default async function StaffAgentPage({ params }: { params: Promise<{ id:
   const rates = actor.permissions.has("billing_rate.read") ? await billingRatesForAgent(prisma, actor, a.id) : null;
   const compensation = actor.permissions.has("compensation.read") ? await currentCompensationFor(prisma, actor, a.id) : null;
   const compHistory = actor.permissions.has("compensation.read") ? await compensationHistoryFor(prisma, actor, a.id) : null;
+  const clientSafeDocs = await clientSafeDocumentsForStaff(prisma, actor, a.id);
+  const grants = can(actor, "disclosure.manage") ? await listGrants(prisma, actor, { agentProfileId: a.id }) : [];
+  const clients = can(actor, "disclosure.manage") ? await listClientsForStaff(prisma, actor, "ACTIVE") : [];
   const allowed = AGENT_PROFILE_TRANSITIONS.filter((t) => t.from === a.status && t.permission !== "OWNER" && actor.permissions.has(t.permission)).map((t) => ({ to: t.to, requiresReason: !!t.requiresReason }));
 
   return (
@@ -68,6 +76,21 @@ export default async function StaffAgentPage({ params }: { params: Promise<{ id:
               <Item k="Internet" v={a.internetSummary ?? "—"} />
               <Item k="Completion" v={`${a.profileCompletion}%`} />
             </dl>
+          </Card>
+
+          <Card title="What clients see" description={`Clients see “${a.clientLabel}” ${a.partnerTeam ? `of ${a.partnerTeam.name}` : "as Hirewise Direct talent"}; the full name only through a disclosure grant.`} actions={a.status === "APPROVED" ? <Link href={`/talent/${a.id}?preview=client`} className="text-[13px] font-semibold text-brand-600">Preview as client</Link> : undefined}>
+            {can(actor, "agent.review") && <ClientLabelForm agentProfileId={a.id} label={a.clientLabel} override={a.clientLabelOverride} />}
+            <h4 className="mt-4 text-[12px] font-semibold uppercase tracking-wider text-ink-400">Client-safe documents</h4>
+            {clientSafeDocs.length === 0 ? <p className="mt-1 text-[13px] text-ink-400">None yet. Rows appear when the profile, media, or certifications are approved.</p> : (
+              <ul className="mt-1 divide-y divide-ink-100 text-[13.5px]">{clientSafeDocs.map((d) => <li key={d.id} className="flex items-center justify-between gap-3 py-2"><span>{labelFor(d.type)}{d.reviewNote ? <span className="text-ink-400"> · {d.reviewNote}</span> : ""}</span><span className="flex items-center gap-3"><StatusBadge status={d.status} />{(d.hasSanitized || d.isExternalLink) && <DocumentLink id={d.id} label="Open" />}</span></li>)}</ul>
+            )}
+            {can(actor, "disclosure.manage") && (
+              <div className="mt-5 space-y-4 border-t border-ink-100 pt-4">
+                <GrantDisclosureForm scope="AGENT_IDENTITY" agentProfileId={a.id} clients={clients.map((c) => ({ id: c.id, companyName: c.companyName }))} />
+                <GrantDisclosureForm scope="CLIENT_IDENTITY" agentProfileId={a.id} clients={clients.map((c) => ({ id: c.id, companyName: c.companyName }))} />
+                <DisclosureGrantList grants={grants} canManage />
+              </div>
+            )}
           </Card>
 
           <Card title="Skills and software">

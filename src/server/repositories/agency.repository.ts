@@ -102,7 +102,7 @@ export const agencyRepository = {
     return db.agency.create({ data: d, include: agencyInclude });
   },
 
-  updateAgency(db: Db, id: string, d: { name?: string; logoKey?: string | null; description?: string | null; contactEmail?: string; contactPhone?: string | null; country?: string; city?: string | null; website?: string | null; status?: AgencyStatus; statusReason?: string | null; suspendedAt?: Date | null; deactivatedAt?: Date | null; trainingAccess?: boolean; opportunityAccess?: boolean }) {
+  updateAgency(db: Db, id: string, d: { name?: string; logoKey?: string | null; description?: string | null; contactEmail?: string; contactPhone?: string | null; country?: string; city?: string | null; website?: string | null; legalName?: string | null; addressLine?: string | null; registrationDetails?: string | null; billingEmail?: string | null; status?: AgencyStatus; statusReason?: string | null; suspendedAt?: Date | null; deactivatedAt?: Date | null; trainingAccess?: boolean; opportunityAccess?: boolean }) {
     return db.agency.update({ where: { id }, data: d, include: agencyInclude });
   },
 

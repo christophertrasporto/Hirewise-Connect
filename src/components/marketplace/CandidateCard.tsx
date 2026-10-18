@@ -7,7 +7,7 @@ import { labelFor } from "@/lib/options";
 import { cn } from "@/lib/cn";
 
 export function CandidateCard({ c, canShortlist = true }: { c: CandidateCardView & { note?: string | null }; canShortlist?: boolean }) {
-  const initials = c.displayName.split(/\s+/).map((w) => w[0]).join("").slice(0, 2).toUpperCase();
+  const initials = c.name.split(/\s+/).map((w) => w[0]).join("").slice(0, 2).toUpperCase();
   return (
     <article className="flex h-full flex-col rounded-3xl border border-ink-100 bg-white p-5 shadow-soft transition hover:-translate-y-0.5 hover:shadow-lift">
       <div className="flex items-start gap-3.5">
@@ -16,8 +16,9 @@ export function CandidateCard({ c, canShortlist = true }: { c: CandidateCardView
           <span className={cn("absolute -right-1 -bottom-1 h-3.5 w-3.5 rounded-full ring-2 ring-white", c.availabilityStatus === "AVAILABLE" ? "bg-brand-500" : c.availabilityStatus === "AVAILABLE_SOON" ? "bg-gold-500" : "bg-ink-300")} title={labelFor(c.availabilityStatus)} />
         </Link>
         <div className="min-w-0 flex-1">
-          <Link href={`/talent/${c.id}`} className="block truncate text-[16px] font-bold text-ink-900 hover:text-brand-700">{c.displayName}</Link>
+          <Link href={`/talent/${c.id}`} className="block truncate text-[16px] font-bold text-ink-900 hover:text-brand-700">{c.name}</Link>
           <p className="text-[13px] text-ink-500">{c.primaryRole ?? "Talent"}{c.yearsExperience ? ` · ${c.yearsExperience} yrs` : ""}</p>
+          <p className="text-[11.5px] font-medium text-brand-700">{c.partnerTeam ? c.partnerTeam.name : "Hirewise Direct talent"}</p>
           <div className="mt-1.5 flex flex-wrap gap-1">
             <span className="inline-flex items-center gap-1 rounded-full bg-brand-50 px-2 py-0.5 text-[11px] font-semibold text-brand-700 ring-1 ring-inset ring-brand-200"><BadgeCheck className="h-3 w-3" /> {labelFor(c.verificationLevel)}</span>
             <StatusBadge status={c.availabilityStatus} />

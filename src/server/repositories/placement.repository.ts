@@ -3,8 +3,8 @@ import type { Db } from "@/server/db/types";
 
 export function placementInclude() {
   return {
-    client: { select: { id: true, companyName: true, timezone: true, accountManagerUserId: true, contacts: { where: { isPrimary: true }, select: { userId: true, businessEmail: true, name: true }, take: 1 } } },
-    agentProfile: { select: { id: true, displayName: true, primaryRole: true, availabilityStatus: true, userId: true, user: { select: { email: true } } } },
+    client: { select: { id: true, companyName: true, industry: true, country: true, timezone: true, accountManagerUserId: true, contacts: { where: { isPrimary: true }, select: { userId: true, businessEmail: true, name: true }, take: 1 } } },
+    agentProfile: { select: { id: true, displayName: true, clientLabel: true, primaryRole: true, availabilityStatus: true, userId: true, user: { select: { email: true } }, privateContact: { select: { fullLegalName: true } } } },
     accountManager: { select: { id: true, email: true } },
     // Snapshots (Section 4.6). The compensation snapshot is filtered out of every projection
     // except for holders of compensation.read (INV-C1).

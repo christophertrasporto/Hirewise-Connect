@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { clientLabelFrom } from "@/lib/client-redaction";
 import { joinAgencyTx } from "@/server/services/seat.service";
 import { acceptTermsTx, requireTermsAccepted } from "@/server/services/terms.service";
 import { guardSignup, ensureIdentity, syncIdentityContact } from "@/server/services/identity.service";
@@ -196,7 +197,24 @@ export async function updatePersonal(db: PrismaClient, actor: Actor, input: z.in
   );
   // Identity phase 1: the identity contacts follow the private phone so duplicate detection stays accurate.
   await syncIdentityContact(db, actor, actor.userId, { kind: "PHONE", value: input.phone || null, source: "PRIVATE_CONTACT" });
+  // Phase 5: the client label follows the legal name unless staff pinned it.
+  if (!p.clientLabelOverride) await agentRepository.setClientLabel(db, p.id, clientLabelFrom(input.fullLegalName, input.displayName), false);
   return recomputeCompletion(db, p.id);
+}
+
+/**
+ * Staff set or reset the label clients see (phase 5, decision 1). Null returns to the derived label.
+ */
+export async function setClientLabel(db: PrismaClient, actor: Actor, agentProfileId: string, label: string | null) {
+  authorize(actor, "agent.review");
+  const p = await agentRepository.findByIdForStaff(db, agentProfileId);
+  if (!p) throw new NotFoundError();
+  const next = label?.trim() ? label.trim().slice(0, 60) : clientLabelFrom(p.privateContact?.fullLegalName, p.displayName);
+  await db.$transaction(async (tx) => {
+    await agentRepository.setClientLabel(tx, p.id, next, !!label?.trim());
+    await audit(tx, { actor, action: "CLIENT_LABEL_SET", entityType: "AgentProfile", entityId: p.id, previousValue: { clientLabel: p.clientLabel }, newValue: { clientLabel: next, override: !!label?.trim() } });
+  });
+  return next;
 }
 
 export async function updateProfessional(db: PrismaClient, actor: Actor, input: z.infer<typeof professionalSchema>) {
@@ -303,6 +321,7 @@ export async function reviewTransition(db: PrismaClient, actor: Actor, agentProf
   await db.$transaction(async (tx) => {
     const extra = to === "APPROVED" ? { approvedAt: new Date(), approvedById: actor.userId, hiddenAt: null, suspendedAt: null } : to === "HIDDEN" ? { hiddenAt: new Date() } : to === "SUSPENDED" ? { suspendedAt: new Date() } : {};
     await agentRepository.setStatus(tx, p.id, to, extra);
+    if (to === "APPROVED" && !p.clientLabel) await agentRepository.setClientLabel(tx, p.id, clientLabelFrom(p.privateContact?.fullLegalName, p.displayName), false);
     if (to === "APPROVED" && p.availabilityStatus === "UNAVAILABLE") {
       await agentRepository.setAvailability(tx, p.id, "AVAILABLE", { setById: actor.userId, reason: "Profile approved" });
     }

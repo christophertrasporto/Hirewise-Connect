@@ -37,7 +37,7 @@ export default async function StaffPlacementPage({ params }: { params: Promise<{
   return (
     <>
       <Link href="/staff/placements" className="mb-4 inline-flex items-center gap-1.5 text-[13.5px] font-medium text-ink-500 hover:text-ink-900"><ArrowLeft className="h-4 w-4" /> Placements</Link>
-      <PageHeader eyebrow={p.client.companyName} title={`${p.agent.displayName} · ${p.positionTitle}`} description={`${p.schedule ?? "Schedule TBD"} · ${p.timezone ?? "timezone TBD"} · selected ${fmtDate(p.createdAt)}${p.accountManager ? ` · manager ${p.accountManager.email}` : ""}`} actions={<StatusBadge status={p.status} />} />
+      <PageHeader eyebrow={p.client.companyName} title={`${p.agent.name} · ${p.positionTitle}`} description={`${p.schedule ?? "Schedule TBD"} · ${p.timezone ?? "timezone TBD"} · selected ${fmtDate(p.createdAt)}${p.accountManager ? ` · manager ${p.accountManager.email}` : ""}`} actions={<StatusBadge status={p.status} />} />
 
       {!["CANCELLED", "COMPLETED"].includes(p.status) && (
         <ol className="mb-6 flex flex-wrap gap-1.5">
@@ -123,7 +123,7 @@ export default async function StaffPlacementPage({ params }: { params: Promise<{
 
           <Card title="People">
             <dl className="space-y-2 text-[14px]">
-              <div><dt className="text-[12px] font-semibold uppercase tracking-[0.12em] text-ink-400">Talent</dt><dd><Link href={`/staff/talent/${p.agent.id}`} className="font-semibold text-brand-600">{p.agent.displayName}</Link> <span className="text-ink-400">· {labelFor(p.agent.availabilityStatus)}</span></dd></div>
+              <div><dt className="text-[12px] font-semibold uppercase tracking-[0.12em] text-ink-400">Talent</dt><dd><Link href={`/staff/talent/${p.agent.id}`} className="font-semibold text-brand-600">{p.agent.name}</Link> <span className="text-ink-400">· {labelFor(p.agent.availabilityStatus)}</span></dd></div>
               <div><dt className="text-[12px] font-semibold uppercase tracking-[0.12em] text-ink-400">Client</dt><dd className="font-medium text-ink-800">{p.client.companyName}</dd></div>
             </dl>
           </Card>

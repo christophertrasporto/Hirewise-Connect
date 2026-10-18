@@ -1,4 +1,5 @@
 import type { AgentProfileStatus, AvailabilityStatus, ExperienceLevel, SkillLevel, VerificationLevel, WorkSetup } from "@prisma/client";
+import { clientLabelFrom } from "@/lib/client-redaction";
 import type { Db } from "@/server/db/types";
 
 export type SearchWhere = {
@@ -23,6 +24,8 @@ export type SearchWhere = {
 export function agentSelfInclude() {
   return {
     privateContact: true,
+    // v2 phase 5: the Partner Team shown to clients instead of the agency.
+    primaryAgency: { select: { id: true, name: true, clientFacingCode: true, clientFacingName: true } },
     skills: { include: { skill: true } },
     experiences: { orderBy: { startDate: "desc" as const } },
     industryExperiences: true,
@@ -44,6 +47,7 @@ export const agentRepository = {
       data: {
         userId: d.userId,
         displayName: d.displayName,
+        clientLabel: clientLabelFrom(d.fullLegalName, d.displayName),
         locationCity: d.locationCity ?? undefined,
         locationCountry: d.locationCountry ?? undefined,
         timezone: d.timezone ?? undefined,
@@ -134,6 +138,11 @@ export const agentRepository = {
 
   setVerification(db: Db, id: string, level: VerificationLevel, isManual: boolean) {
     return db.agentProfile.update({ where: { id }, data: { verificationLevel: level, verificationIsManual: isManual } });
+  },
+
+  /** v2 phase 5: the label clients see. Override pins it against legal-name changes. */
+  setClientLabel(db: Db, id: string, clientLabel: string, clientLabelOverride: boolean) {
+    return db.agentProfile.update({ where: { id }, data: { clientLabel, clientLabelOverride }, select: { id: true, clientLabel: true } });
   },
 
   setStatus(db: Db, id: string, status: AgentProfileStatus, extra: { submittedAt?: Date; approvedAt?: Date; approvedById?: string; hiddenAt?: Date | null; suspendedAt?: Date | null } = {}) {

@@ -103,6 +103,9 @@ describe("confirm and authorization", () => {
     await expect(mediaDownloadUrl(db, makeActor("CLIENT", { clientId: "c" }), { type: "VIDEO", id: video.id })).rejects.toThrow(NotFoundError);
 
     await db.video.update({ where: { id: video.id }, data: { status: "APPROVED" } });
+    // Phase 5: approval alone is not enough; clients need an approved client-safe row.
+    await expect(mediaDownloadUrl(db, makeActor("CLIENT", { clientId: "c" }), { type: "VIDEO", id: video.id })).rejects.toThrow(NotFoundError);
+    await db.clientSafeDocument.create({ data: { agentProfileId, type: "VIDEO_INTRO", sourceType: "VIDEO", sourceId: video.id, originalStorageKey: video.storageKey, sanitizedStorageKey: video.storageKey, status: "APPROVED_FOR_CLIENT" } });
     expect(await mediaDownloadUrl(db, makeActor("CLIENT", { clientId: "c" }), { type: "VIDEO", id: video.id })).toMatch(/sig=/);
 
     await expect(mediaDownloadUrl(db, makeActor("SALES"), { type: "RESUME", id: agentProfileId })).rejects.toThrow(ForbiddenError);
