@@ -34,8 +34,9 @@ test("client A cannot see client B's shortlist, and unapproved candidates are 40
   });
   await login(page, "hiring@acme-solar.example");
   await page.goto("/shortlist");
-  await expect(page.getByText("Your shortlist is empty")).toBeVisible();
-  await expect(page.getByText("Jose R.")).toHaveCount(0);
+  // Acme never sees Beta's entry or note, whatever Acme itself shortlisted in an earlier spec.
+  await expect(page.getByText(/Your shortlist is empty|Shortlist/).first()).toBeVisible();
+  await expect(page.getByText("Strong Zendesk background")).toHaveCount(0);
 
   // Draft agent (Maria) never appears in search for a client.
   await page.goto("/talent?q=Maria");

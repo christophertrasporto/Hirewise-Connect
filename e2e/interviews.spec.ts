@@ -74,7 +74,8 @@ test("interview request: company hidden from candidate until scheduled; Sales me
   // A message with a phone number is held for review.
   await page.locator("textarea[name=body]").fill("Can Jose text me at +1 555 010 0199?");
   await page.getByRole("button", { name: "Send" }).click();
-  await expect(page.getByText("pending Hirewise review")).toBeVisible();
+  // Phase 6a: contact details are masked on delivery by default (held for review under the BLOCK setting).
+  await expect(page.getByText(/Contact details were removed before delivery|pending Hirewise review/)).toBeVisible();
   await logout(page);
 
   // Candidate confirms availability; still no company name.
