@@ -27,8 +27,9 @@ export function ScheduleForm({ requestId, candidates, defaultTimezone }: { reque
             <div className="mt-3 grid gap-3 sm:grid-cols-[1fr_120px_1fr]">
               <Input type="datetime-local" name={`scheduledAt:${c.agentProfileId}`} aria-label="Date and time" />
               <Input type="number" name={`durationMin:${c.agentProfileId}`} defaultValue={30} min={15} max={180} aria-label="Duration (minutes)" />
-              <Input type="url" name={`meetingLink:${c.agentProfileId}`} placeholder="Meeting link (Zoom, Meet)" />
+              <Input type="url" name={`meetingLink:${c.agentProfileId}`} placeholder="Hirewise-owned meeting link (or leave empty for the provider)" />
             </div>
+            <Input name={`participants:${c.agentProfileId}`} placeholder="Participants (comma separated, labels only, e.g. Client hiring manager, Hirewise account manager)" className="mt-2" />
           </div>
         ))}
         {eligible.length === 0 && <p className="text-[13.5px] text-ink-400">No eligible candidates.</p>}

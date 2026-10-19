@@ -105,6 +105,8 @@ export type CandidateViewOptions = {
   clientSafe?: ClientSafeContext;
   /** Further agency names to replace in free text (the agent's own agency is always replaced). */
   agencyNames?: Array<{ name: string; replacement: string }>;
+  /** Platform email alias shown to clients in place of any real address (phase 6a). */
+  contactAlias?: string | null;
 };
 const CLIENT_ONLY: CandidateViewOptions = { audience: "CLIENT" };
 
@@ -141,6 +143,7 @@ export function toCandidateClientView(a: AgentSelfRecord, opts: CandidateViewOpt
     name: client ? opts.legalName ?? clientLabelOf(a) : a.displayName,
     identityDisclosed: client ? !!opts.legalName : false,
     partnerTeam: partnerTeamFor(a),
+    contactAlias: client ? opts.contactAlias ?? null : null,
     talentType: a.talentType,
     headline: r(a.headline),
     primaryRole: a.primaryRole,

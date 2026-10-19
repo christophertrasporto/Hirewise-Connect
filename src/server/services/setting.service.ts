@@ -92,6 +92,12 @@ export const SETTING_SCHEMAS = {
       clientIdentityForAgencyAgents: z.enum(["INTERVIEW_SCHEDULED", "MANUAL"]).default("MANUAL"),
     })
     .default(() => ({ agentIdentityAt: "INTERVIEW_SCHEDULED" as const, clientIdentityForDirectTalent: "INTERVIEW_SCHEDULED" as const, clientIdentityForAgencyAgents: "MANUAL" as const })),
+  /** v2 phase 6a: messaging. MASK delivers the message with contact details removed; BLOCK holds it for review. */
+  messaging: z.object({ contactDetails: z.enum(["MASK", "BLOCK"]).default("MASK"), flagRateTalk: z.boolean().default(true) }).default(() => ({ contactDetails: "MASK" as const, flagRateTalk: true })),
+  /** v2 phase 6a: pasted interview links must sit on one of these hosts (the configured provider is always allowed). */
+  meetings: z.object({ allowedHosts: z.array(z.string().trim().min(3)).default(["meet.hirewise.example", "zoom.us", "meet.google.com", "teams.microsoft.com", "teams.live.com"]), requireProvider: z.boolean().default(false) }).default(() => ({ allowedHosts: ["meet.hirewise.example", "zoom.us", "meet.google.com", "teams.microsoft.com", "teams.live.com"], requireProvider: false })),
+  /** v2 phase 6a: email aliases. Inbound routing stays off until the email provider can deliver to the webhook. */
+  email: z.object({ aliasDomain: z.string().trim().min(3).default("hirewiseconnect.com"), inboundEnabled: z.boolean().default(false) }).default(() => ({ aliasDomain: "hirewiseconnect.com", inboundEnabled: false })),
   /** Section 8.8 thresholds. */
   profileViewBurstPerHour: z.number().int().positive().default(60),
   shortlistChurnPerDay: z.number().int().positive().default(12),

@@ -1,4 +1,7 @@
 import type { PrismaClient } from "@/server/db/types";
+import { threadRepository } from "@/server/repositories/thread.repository";
+import { bypassRepository } from "@/server/repositories/bypass.repository";
+import { clientSafeDocumentRepository } from "@/server/repositories/client-safe-document.repository";
 import type { Actor } from "@/server/auth/actor";
 import { authorizeAny } from "@/server/policies/authorize";
 import { agentRepository } from "@/server/repositories/agent.repository";
@@ -45,7 +48,9 @@ export async function staffDashboard(db: PrismaClient, actor: Actor) {
     interviews: actor.permissions.has("interview.read_all") ? await interviewCounters(db) : null,
     placements: actor.permissions.has("placement.read_all") ? await placementCounters(db) : null,
     requirementsOpen: actor.permissions.has("requirement.read") ? await requirementRepository.countOpen(db) : 0,
-    heldMessages: actor.permissions.has("interview.coordinate") ? (await interviewRepository.heldMessages(db, 500)).length : 0,
+    heldMessages: actor.permissions.has("interview.coordinate") || actor.permissions.has("thread.moderate") ? await threadRepository.countHeld(db) : 0,
+    bypassOpen: actor.permissions.has("bypass.review") ? await bypassRepository.countOpen(db) : 0,
+    documentsWaiting: actor.permissions.has("media.review") ? await clientSafeDocumentRepository.countOpen(db) : 0,
     openFlags: actor.permissions.has("flag.review") ? await flagRepository.countOpen(db) : 0,
     tasks: { queue: queueTasks.map(taskView), mine: myTasks.map(taskView) },
     visibility: { agents: canAgents, clients: canClients, media: actor.permissions.has("media.review") },

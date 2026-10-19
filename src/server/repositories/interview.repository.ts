@@ -12,9 +12,10 @@ export function requestInclude() {
 }
 
 export const interviewRepository = {
-  createRequest(db: Db, d: { clientId: string; requirementId: string | null; requestedById: string; preferredDate: Date | null; preferredTime: string | null; timezone: string; notes: string | null; role: string; schedule: string | null; targetStartDate: Date | null; assignedSalesUserId: string | null; candidateIds: string[] }) {
+  createRequest(db: Db, d: { clientId: string; requirementId: string | null; requestedById: string; preferredDate: Date | null; preferredTime: string | null; timezone: string; notes: string | null; role: string; schedule: string | null; targetStartDate: Date | null; assignedSalesUserId: string | null; candidateIds: string[]; requestedWindows?: string[] }) {
     return db.interviewRequest.create({
       data: {
+        requestedWindows: d.requestedWindows?.length ? d.requestedWindows : undefined,
         clientId: d.clientId,
         requirementId: d.requirementId ?? undefined,
         requestedById: d.requestedById,
@@ -61,8 +62,9 @@ export const interviewRepository = {
     return db.interviewRequestCandidate.updateMany({ where: { interviewRequestId: requestId, agentProfileId }, data: { status, respondedAt: new Date() } });
   },
 
-  createInterview(db: Db, d: { interviewRequestId: string; agentProfileId: string; round: number; scheduledAt: Date; timezone: string; durationMin: number; meetingLink: string | null; coordinatorUserId: string; meetingProvider?: string | null; meetingExternalId?: string | null }) {
-    return db.interview.create({ data: { ...d, meetingLink: d.meetingLink ?? undefined } });
+  createInterview(db: Db, d: { interviewRequestId: string; agentProfileId: string; round: number; scheduledAt: Date; timezone: string; durationMin: number; meetingLink: string | null; coordinatorUserId: string; meetingProvider?: string | null; meetingExternalId?: string | null; participants?: Array<{ label: string; role: string }>; linkSource?: "PROVIDER" | "STAFF_PASTED" | null }) {
+    const { participants, linkSource, ...rest } = d;
+    return db.interview.create({ data: { ...rest, meetingLink: d.meetingLink ?? undefined, participants: participants?.length ? participants : undefined, linkSource: linkSource ?? undefined } });
   },
 
   findInterview(db: Db, id: string) {

@@ -97,7 +97,8 @@ export default async function StaffInterviewRequestPage({ params }: { params: Pr
         </div>
 
         <div className="space-y-5">
-          <Card title="Mediated thread" description="Choose who sees each message. Client and candidate messages always come to Hirewise first."><MessageThread requestId={r.id} messages={messages} audience="STAFF" closed={closed} /></Card>
+          {(r as { requestedWindows?: string[] }).requestedWindows?.length ? <Card title="Windows the client offered"><ul className="list-disc pl-5 text-[14px] text-ink-700">{(r as { requestedWindows: string[] }).requestedWindows.map((w) => <li key={w}>{w}</li>)}</ul></Card> : null}
+          <Card title="Mediated thread" description="Choose who sees each message. Client and candidate messages always come to Hirewise first. Contact details are removed and flagged automatically."><MessageThread requestId={r.id} messages={messages} audience="STAFF" closed={closed} /></Card>
           {canCoordinate && <Card title="Sales notes" description="Internal. Never shown to the client or candidates."><WorkflowButton requestId={r.id} op="SALES_NOTES" label="Save notes" variant="outline" withMessage="Commercial context, proposed rate band, objections…" defaultText={r.salesNotes ?? ""} /></Card>}
           {r.interviews.length === 0 && <EmptyState title="No interviews yet" />}
         </div>

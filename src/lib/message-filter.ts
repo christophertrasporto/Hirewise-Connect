@@ -8,6 +8,8 @@ const EMAIL = /[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/i;
 // 7+ digits with optional separators, or obvious "+63 917 ..." shapes. Avoids matching years or short ids.
 const PHONE = /(?:\+?\d[\d\s().-]{7,}\d)/;
 const MESSAGING_URL = /\b(?:wa\.me|whatsapp\.com|t\.me|telegram\.(?:me|org)|m\.me|messenger\.com|skype:|discord\.(?:gg|com)|signal\.me|viber\.com|linkedin\.com\/in\/|facebook\.com|instagram\.com|calendly\.com)\b/i;
+const ANY_URL = /\b(?:https?:\/\/|www\.)[^\s<>"')\]]+/i;
+const BARE_DOMAIN = /\b[a-z0-9-]+(?:\.[a-z0-9-]+)*\.(?:com|net|org|io|co|ph|me|link|app|dev|info|biz|us|uk|au|ca|ai|xyz|site|online)\b(?:\/[^\s<>"')\]]*)?/i;
 const HANDLE_HINT = /\b(?:my (?:whatsapp|telegram|skype|viber|signal|discord|fb|facebook|ig|instagram|linkedin)|(?:whatsapp|telegram|skype|viber|signal) (?:me|number|id|handle))\b/i;
 
 const RATE_TALK = [
@@ -39,6 +41,7 @@ export function scanMessage(body: string): MessageScan {
   if (EMAIL.test(text)) reasons.push("email address");
   if (PHONE.test(text.replace(/\b(19|20)\d{2}\b/g, ""))) reasons.push("phone number");
   if (MESSAGING_URL.test(text)) reasons.push("messaging or social link");
+  else if (ANY_URL.test(text) || BARE_DOMAIN.test(text)) reasons.push("link");
   if (HANDLE_HINT.test(text)) reasons.push("messaging handle");
   const contactInfo = reasons.length > 0;
   const rateTalk = RATE_TALK.some((r) => r.test(text));

@@ -51,10 +51,12 @@ export function computeTeamStats(members: PartnerMemberStats[]): TeamStats {
   };
 }
 
-export function toPartnerTeamClientView(t: PartnerTeamRecord, stats: TeamStats, disclosed: { name: string } | null = null) {
+export function toPartnerTeamClientView(t: PartnerTeamRecord, stats: TeamStats, disclosed: { name: string } | null = null, contactAlias: string | null = null) {
   const code = t.clientFacingCode ?? "";
   return {
     code,
+    /** Platform alias for written contact with the team through Hirewise (phase 6a). */
+    contactAlias,
     name: t.clientFacingName ?? `Hirewise Certified Partner Team ${code}`,
     specializations: t.clientFacingSpecializations,
     memberSince: t.joinedAt,

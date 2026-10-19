@@ -26,6 +26,7 @@ export function toRequestClientView(r: RequestRecord, disclosed: Set<string> = n
     targetStartDate: r.targetStartDate,
     notes: r.notes,
     requirement: r.requirement ? { id: r.requirement.id, title: r.requirement.title } : null,
+    requestedWindows: (r.requestedWindows as string[] | null) ?? [],
     accountManagerAssigned: !!r.assignedSalesUserId,
     cancelledReason: r.cancelledReason,
     createdAt: r.createdAt,
@@ -73,6 +74,7 @@ export function toRequestStaffView(r: RequestRecord, opts: { canPrivateContact: 
     salesNotes: r.salesNotes,
     cancelledReason: r.cancelledReason,
     createdAt: r.createdAt,
+    requestedWindows: (r.requestedWindows as string[] | null) ?? [],
     client: { id: r.client.id, companyName: r.client.companyName, timezone: r.client.timezone, contactName: r.client.contacts[0]?.name ?? null, contactEmail: r.client.contacts[0]?.businessEmail ?? null, accountManagerUserId: r.client.accountManagerUserId },
     requirement: r.requirement ? { id: r.requirement.id, title: r.requirement.title, role: r.requirement.role } : null,
     assignedSales: r.assignedSales ? { id: r.assignedSales.id, email: r.assignedSales.email } : null,
@@ -88,7 +90,7 @@ export function toRequestStaffView(r: RequestRecord, opts: { canPrivateContact: 
       status: c.status,
       respondedAt: c.respondedAt,
     })),
-    interviews: r.interviews.map((i) => ({ id: i.id, agentProfileId: i.agentProfileId, displayName: i.agentProfile.displayName, round: i.round, scheduledAt: i.scheduledAt, timezone: i.timezone, durationMin: i.durationMin, meetingLink: i.meetingLink, status: i.status, clientDecision: i.clientDecision, clientFeedback: i.clientFeedback, internalFeedback: i.internalFeedback })),
+    interviews: r.interviews.map((i) => ({ id: i.id, agentProfileId: i.agentProfileId, displayName: i.agentProfile.displayName, round: i.round, scheduledAt: i.scheduledAt, timezone: i.timezone, durationMin: i.durationMin, meetingLink: i.meetingLink, linkSource: i.linkSource, participants: (i.participants as Array<{ label: string; role: string }> | null) ?? [], status: i.status, clientDecision: i.clientDecision, clientFeedback: i.clientFeedback, internalFeedback: i.internalFeedback })),
   };
 }
 

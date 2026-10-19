@@ -175,6 +175,27 @@ export const EVENT_HANDLERS: { [T in DomainEventType]: EventHandler<T> } = {
     for (const id of recipients) await notifyUser(db, { userId: id, type: "MESSAGE_POSTED", title: "New message on an interview request", body: p.preview, dedupeKey: `MSG:${p.messageId}:${id}` });
   },
 
+  // v2 phase 6a: mediated threads, bypass cases
+  THREAD_MESSAGE_POSTED: async (db, p) => {
+    const title = p.kind === "INTERVIEW_REQUEST" ? "New message on an interview request" : p.kind === "PARTNER_ENQUIRY" ? "New message on a Partner Team enquiry" : `New message: ${p.title}`;
+    for (const id of new Set(p.recipientUserIds)) await notifyUser(db, { userId: id, type: "MESSAGE_POSTED", title, body: p.preview, dedupeKey: `MSG:${p.messageId}:${id}` });
+  },
+
+  BYPASS_REPORTED: async (db, p) => {
+    await notifyStaff(db, ["ADMIN", "SALES"], { type: "BYPASS_REPORTED", title: `Bypass report from a ${p.reporterRole.toLowerCase().replace(/_/g, " ")}`, body: `About ${p.reportedLabel}: ${p.description}. Review it under Compliance → Bypass reports.`, dedupeKey: `BYP:${p.reportId}` });
+    const existing = await taskRepository.findOpenByRelated(db, "REVIEW_BYPASS_REPORT", "BypassReport", p.reportId);
+    if (!existing) await taskRepository.create(db, { type: "REVIEW_BYPASS_REPORT", title: `Bypass report: ${p.reportedLabel}`, queueRole: "ADMIN", dueAt: new Date(Date.now() + 2 * 24 * 60 * 60_000), relatedType: "BypassReport", relatedId: p.reportId });
+    await notifyUser(db, { userId: p.reporterUserId, type: "BYPASS_REPORTED", title: "Thank you for your report", body: "Hirewise is reviewing it. You will hear back once a decision is made; nothing changes automatically.", dedupeKey: `BYPR:${p.reportId}` });
+  },
+
+  BYPASS_DECIDED: async (db, p) => {
+    const label = p.status.toLowerCase().replace(/_/g, " ");
+    await notifyUser(db, { userId: p.reporterUserId, type: "BYPASS_DECIDED", title: `Your bypass report: ${label}`, body: "Hirewise has decided on the case you reported. Thank you for keeping the platform fair.", dedupeKey: `BYPD:${p.reportId}:${p.status}:reporter` });
+    const copy = p.status === "WARNING_ISSUED" ? "Hirewise issued a warning about a direct-contact or bypass attempt. Keep all client communication on the platform." : p.status === "RESTRICTED" ? "Hirewise restricted your access following a bypass case. Contact Hirewise to resolve it." : p.status === "SUSPENDED" ? "Your access was suspended following a bypass case." : "A bypass case concerning you was closed.";
+    for (const id of new Set([p.reportedUserId, p.reportedOwnerUserId].filter((x): x is string => !!x))) await notifyUser(db, { userId: id, type: "BYPASS_DECIDED", title: `Platform rules: ${label}`, body: `${copy}${p.note && p.status !== "CLOSED" ? ` Note from Hirewise: ${p.note}` : ""}`, dedupeKey: `BYPD:${p.reportId}:${p.status}:${id}` });
+    if (p.status === "CLOSED") await taskRepository.completeByRelated(db, "REVIEW_BYPASS_REPORT", "BypassReport", p.reportId);
+  },
+
   MESSAGE_HELD_FOR_REVIEW: async (db, p) => {
     const body = `A ${p.authorRole.toLowerCase()} message was held: ${p.reasons.join(", ")}. Review it before it reaches the other party.`;
     if (p.salesUserId) await notifyUser(db, { userId: p.salesUserId, type: "MESSAGE_HELD_FOR_REVIEW", title: "Message held for review", body, dedupeKey: `HELD:${p.messageId}` });

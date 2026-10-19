@@ -3,6 +3,7 @@ import Link from "next/link";
 import { prisma } from "@/server/db/client";
 import { requireActor } from "@/server/auth/require-actor";
 import { listHeldMessages, listOpenFlags } from "@/server/services/message.service";
+import { listMaskedMessages } from "@/server/services/thread.service";
 import { PageHeader, Card, EmptyState } from "@/components/app/ui";
 import { reviewHeldMessageAction, markFlagReviewedAction } from "@/app/(app)/actions";
 
@@ -12,21 +13,35 @@ export default async function CompliancePage() {
   const actor = await requireActor();
   const held = actor.permissions.has("interview.coordinate") ? await listHeldMessages(prisma, actor) : [];
   const flags = actor.permissions.has("flag.review") ? await listOpenFlags(prisma, actor) : [];
+  const masked = actor.permissions.has("thread.moderate") ? await listMaskedMessages(prisma, actor) : [];
   return (
     <>
-      <PageHeader eyebrow="Non-circumvention" title="Held messages and activity flags" description="Practical safeguards from Section 8.8: messages carrying contact details wait here; rate talk, profile-view bursts, shortlist churn, and contact details in profiles raise flags for review. Nothing outside the platform is inspected." actions={<><Link href="/staff/compliance/incidents" className="rounded-full border border-ink-200 bg-white px-4 py-1.5 text-[13.5px] font-semibold text-ink-700">Incidents</Link>{actor.permissions.has("user.manage") && <Link href="/staff/compliance/data" className="rounded-full border border-ink-200 bg-white px-4 py-1.5 text-[13.5px] font-semibold text-ink-700">Data protection</Link>}</>} />
+      <PageHeader eyebrow="Non-circumvention" title="Held messages and activity flags" description="Practical safeguards from Section 8.8: messages carrying contact details wait here; rate talk, profile-view bursts, shortlist churn, and contact details in profiles raise flags for review. Nothing outside the platform is inspected." actions={<><Link href="/staff/compliance/bypass" className="rounded-full bg-ink-900 px-4 py-1.5 text-[13.5px] font-semibold text-white">Bypass reports</Link><Link href="/staff/compliance/incidents" className="rounded-full border border-ink-200 bg-white px-4 py-1.5 text-[13.5px] font-semibold text-ink-700">Incidents</Link>{actor.permissions.has("user.manage") && <Link href="/staff/compliance/data" className="rounded-full border border-ink-200 bg-white px-4 py-1.5 text-[13.5px] font-semibold text-ink-700">Data protection</Link>}</>} />
       <div className="grid gap-5 lg:grid-cols-2">
         <Card title="Messages held for review" description="Release to deliver, block to keep it from the other party.">
           {held.length === 0 ? <EmptyState title="Nothing held" /> : (
             <ul className="space-y-3">
               {held.map((m) => (
                 <li key={m.id} className="rounded-2xl border border-gold-200 bg-gold-50 p-4">
-                  <p className="text-[12px] font-semibold uppercase tracking-wider text-gold-700">{m.authorRole.toLowerCase()} · {m.companyName} · {m.role} · <Link href={`/staff/interviews/${m.requestId}`} className="underline">open request</Link></p>
+                  <p className="text-[12px] font-semibold uppercase tracking-wider text-gold-700">{m.authorRole.toLowerCase()} · {m.companyName ?? "Hirewise"} · {m.title} · <Link href={`/staff/interviews/${m.requestId}`} className="underline">open request</Link></p>
                   <p className="mt-1.5 whitespace-pre-line text-[14px] text-ink-800">{m.body}</p>
                   <div className="mt-3 flex gap-2">
                     <form action={reviewHeldMessageAction}><input type="hidden" name="messageId" value={m.id} /><input type="hidden" name="decision" value="RELEASE" /><button className="rounded-full bg-ink-900 px-3.5 py-1.5 text-[12.5px] font-semibold text-white">Release</button></form>
                     <form action={reviewHeldMessageAction}><input type="hidden" name="messageId" value={m.id} /><input type="hidden" name="decision" value="BLOCK" /><button className="rounded-full border border-red-200 bg-white px-3.5 py-1.5 text-[12.5px] font-semibold text-red-700">Block</button></form>
                   </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Card>
+        <Card title="Masked messages (last 7 days)" description="Delivered with contact details removed and flagged (phase 6a). The original text stays here for Hirewise.">
+          {masked.length === 0 ? <EmptyState title="Nothing masked recently" /> : (
+            <ul className="divide-y divide-ink-100 text-[13.5px]">
+              {masked.map((m) => (
+                <li key={m.id} className="py-2.5">
+                  <p className="text-[12px] font-semibold uppercase tracking-wider text-gold-700">{m.authorRole.toLowerCase().replace(/_/g, " ")} · {m.companyName ?? "Hirewise"} · <Link href={`/messages/${m.threadId}`} className="underline">{m.title}</Link> · {m.findings.join(", ")}</p>
+                  <p className="text-ink-700">{m.body}</p>
+                  {m.originalBody && <p className="text-[12.5px] text-ink-400">As typed: {m.originalBody}</p>}
                 </li>
               ))}
             </ul>

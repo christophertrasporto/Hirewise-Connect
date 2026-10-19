@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { ReportBypassForm } from "@/components/communication/Forms";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, Award, BadgeCheck, CalendarPlus, Clock3, Globe2, Languages, Laptop, ShieldCheck } from "lucide-react";
@@ -102,6 +103,7 @@ export default async function CandidatePage({ params, searchParams }: { params: 
               </div>
             ))}
           </Card>
+          {actor.role === "CLIENT" && <Card title="Contact" description="All contact runs through Hirewise and this platform."><p className="text-[13.5px] text-ink-700">{c.contactAlias ? <>Platform address: <span className="font-mono font-semibold">{c.contactAlias}</span></> : "Message Hirewise from your interview request or the Messages page."}</p><div className="mt-3"><ReportBypassForm relatedType="AgentProfile" relatedId={c.id} subjectLabel={c.name} compact /></div></Card>}
           <Card title="Documents" description="Client-safe copies prepared by Hirewise. Originals stay private.">
             {c.documents.length === 0 && c.portfolio.length === 0 ? <EmptyState title="No documents cleared yet" /> : (
               <ul className="space-y-2 text-[13.5px]">

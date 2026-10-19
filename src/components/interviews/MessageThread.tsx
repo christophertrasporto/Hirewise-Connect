@@ -7,10 +7,10 @@ import { idle, type ActionResult } from "@/server/http/action-result";
 import { Textarea, Select, SubmitButton, FormAlert } from "@/components/ui/Form";
 import { cn } from "@/lib/cn";
 
-export type ThreadMessage = { id: string; body: string; authorRole: string; authorLabel: string; mine: boolean; visibleTo: string; heldForReview: boolean; blocked: boolean; createdAt: Date };
+export type ThreadMessage = { id: string; body: string; originalBody?: string | null; masked?: boolean; authorRole: string; authorLabel: string; mine: boolean; visibleTo: string; heldForReview: boolean; blocked: boolean; createdAt: Date };
 
 export function MessageThread({ requestId, messages, audience, closed }: { requestId: string; messages: ThreadMessage[]; audience: "CLIENT" | "AGENT" | "STAFF"; closed: boolean }) {
-  const [state, action] = useActionState(postMessageAction, idle as ActionResult<{ held: boolean; reasons: string[] }>);
+  const [state, action] = useActionState(postMessageAction, idle as ActionResult<{ held: boolean; masked?: boolean; reasons: string[] }>);
   const form = useRef<HTMLFormElement>(null);
   useEffect(() => {
     if (state.ok) form.current?.reset();
@@ -28,8 +28,10 @@ export function MessageThread({ requestId, messages, audience, closed }: { reque
               {audience === "STAFF" && <span className="rounded-full bg-white/60 px-1.5 text-[10px] text-ink-500">{m.visibleTo.toLowerCase().replace(/_/g, " ")}</span>}
               {m.heldForReview && !m.blocked && <span className="inline-flex items-center gap-1 rounded-full bg-gold-100 px-1.5 text-[10px] text-gold-700"><ShieldAlert className="h-3 w-3" /> held for review</span>}
               {m.blocked && <span className="rounded-full bg-red-100 px-1.5 text-[10px] text-red-700">blocked</span>}
+              {m.masked && <span className="rounded-full bg-gold-100 px-1.5 text-[10px] text-gold-700">contact details removed</span>}
             </div>
             <p className="whitespace-pre-line">{m.body}</p>
+            {m.originalBody && <p className="mt-2 rounded-xl bg-white/70 px-3 py-2 text-[12.5px] text-ink-600"><span className="font-semibold">As typed (Hirewise only):</span> {m.originalBody}</p>}
           </div>
         ))}
       </div>
@@ -49,6 +51,7 @@ export function MessageThread({ requestId, messages, audience, closed }: { reque
             )}
             <SubmitButton variant="dark" pendingText="Sending…" className="h-9 text-[13px]"><Send className="h-3.5 w-3.5" /> Send</SubmitButton>
           </div>
+          {state.ok && state.data?.masked && <FormAlert tone="info">Contact details were removed before delivery ({state.data.reasons.join(", ")}). All coordination goes through Hirewise; a flag was recorded.</FormAlert>}
           {state.ok && state.data?.held && <FormAlert tone="info">Your message is pending Hirewise review because it appears to include contact details ({state.data.reasons.join(", ")}). During hiring, all coordination goes through Hirewise.</FormAlert>}
           {state.error && <FormAlert>{state.error}</FormAlert>}
           {audience !== "STAFF" && <p className="text-[12px] text-ink-400">Please keep contact details and rate discussions out of this thread. Hirewise handles scheduling, pricing, and contracts.</p>}

@@ -105,6 +105,9 @@ export const PERMISSIONS = {
   // Client protection (v2 phase 5)
   "disclosure.manage": { group: "client-protection", description: "Grant and revoke identity disclosures between clients, talent, and Partner Teams" },
   "partner.identity.manage": { group: "client-protection", description: "Edit an agency's client-facing Partner Team name and specializations" },
+  // Communication and enforcement (v2 phase 6a)
+  "thread.moderate": { group: "communication", description: "Read every message thread, release or block held messages, see masked originals, close threads" },
+  "bypass.review": { group: "communication", description: "Work bypass report cases: review, warn, restrict, suspend, close" },
   // System
   "audit.read": { group: "system", description: "Read the audit log" },
   "settings.manage": { group: "system", description: "Change platform settings" },
@@ -137,6 +140,8 @@ export const ROLE_PERMISSIONS: Record<RoleKey, readonly PermissionKey[]> = {
   SUPER_ADMIN: ALL_PERMISSION_KEYS,
   ADMIN: ADMIN_PERMISSIONS,
   SALES: [
+    "thread.moderate",
+    "bypass.review",
     "agency.read",
     "agent.read_public",
     "client.read",
