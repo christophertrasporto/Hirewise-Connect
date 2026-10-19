@@ -90,10 +90,10 @@ test("interview request: company hidden from candidate until scheduled; Sales me
 
   // Sales schedules.
   await login(page, "sales@hirewise.example");
+  // Phase 6a: the masked message shows up under Masked messages with the typed text kept for Hirewise; nothing to release.
   await page.goto("/staff/compliance");
   await expect(page.getByText("Can Jose text me").first()).toBeVisible();
-  await page.getByRole("button", { name: "Release" }).first().click();
-  await expect(page.getByText("Can Jose text me")).toHaveCount(0);
+  await expect(page.getByText(/As typed: Can Jose text me at +1 555 010 0199/)).toBeVisible();
   await page.goto("/staff/interviews?f=CANDIDATE_CONFIRMATION");
   await page.locator("a[href^=\"/staff/interviews/\"]").first().click();
   await page.waitForURL(/\/staff\/interviews\/[a-z0-9]+$/);
