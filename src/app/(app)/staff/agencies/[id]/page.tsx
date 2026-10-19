@@ -12,6 +12,10 @@ import { AdminSeatChangeForm, AssignPlanForm } from "@/components/agency/AdminSe
 import { seatSummary, activePlans } from "@/server/services/seat.service";
 import { exitRequestsForAgency } from "@/server/services/exit.service";
 import { ExitRequestSummary } from "@/components/agency/ExitForms";
+import { partnerIdentityForStaff } from "@/server/services/partner.service";
+import { listGrants } from "@/server/services/disclosure.service";
+import { listClientsForStaff } from "@/server/services/client.service";
+import { PartnerIdentityForm, GrantDisclosureForm, DisclosureGrantList } from "@/components/client-protection/Forms";
 
 export const metadata: Metadata = { title: "Agency" };
 
@@ -32,6 +36,9 @@ export default async function AgencyStaffPage({ params }: { params: Promise<{ id
   const managesSeats = can(actor, "agency.seats.manage");
   const [agencies, seats, plans, exits] = await Promise.all([manages ? listAgencies(prisma, actor).then((rows) => rows.map((a) => ({ id: a.id, name: a.name }))) : Promise.resolve([]), seatSummary(prisma, actor, id), activePlans(prisma), exitRequestsForAgency(prisma, actor, id)]);
   const t = seats.totals;
+  const partner = await partnerIdentityForStaff(prisma, actor, id);
+  const grants = can(actor, "disclosure.manage") ? await listGrants(prisma, actor, { agencyId: id }) : [];
+  const clients = can(actor, "disclosure.manage") ? await listClientsForStaff(prisma, actor, "ACTIVE") : [];
 
   return (
     <>
@@ -63,6 +70,21 @@ export default async function AgencyStaffPage({ params }: { params: Promise<{ id
               {[["Contact", `${agency.contactEmail}${agency.contactPhone ? ` · ${agency.contactPhone}` : ""}`], ["Website", agency.website ?? "—"], ["Training access", agency.trainingAccess ? "On" : "Off"], ["Opportunity access", agency.opportunityAccess ? "On" : "Off"], ["Application", agency.applicationId ? "From an approved application" : "Created directly by a Super Admin"]].map(([k, v]) => <div key={k} className="flex justify-between gap-4 py-1.5"><dt className="text-ink-500">{k}</dt><dd className="text-right font-medium text-ink-800">{k === "Application" && agency.applicationId ? <Link href={`/staff/agencies/applications/${agency.applicationId}`} className="text-brand-600">{v}</Link> : v}</dd></div>)}
             </dl>
             {agency.description && <p className="mt-4 whitespace-pre-line rounded-2xl bg-ink-50 p-4 text-[14px] text-ink-700">{agency.description}</p>}
+            {(agency.legalName || agency.addressLine || agency.registrationDetails || agency.billingEmail) && <dl className="mt-4 divide-y divide-ink-50 text-[13.5px]">{[["Legal name", agency.legalName], ["Address", agency.addressLine], ["Registration", agency.registrationDetails], ["Billing email", agency.billingEmail]].filter(([, v]) => v).map(([k, v]) => <div key={k} className="flex justify-between gap-4 py-1.5"><dt className="text-ink-500">{k}</dt><dd className="text-right font-medium text-ink-800">{v}</dd></div>)}</dl>}
+          </Card>
+          <Card title="Client-facing identity" description={`What clients see instead of ${agency.name}. ${partner.visibleToClients ? "Listed under Partner Teams." : "Not listed yet: needs ACTIVE status, opportunity access, and at least one approved agent."}`}>
+            <dl className="grid gap-3 text-[14px] sm:grid-cols-3">
+              <div><dt className="text-ink-400">Code</dt><dd className="font-mono font-semibold text-ink-900">{partner.code ?? "—"}</dd></div>
+              <div><dt className="text-ink-400">Name</dt><dd className="font-semibold text-ink-900">{partner.name ?? "—"}</dd></div>
+              <div><dt className="text-ink-400">Team</dt><dd className="font-semibold text-ink-900">{partner.stats.teamSize} approved · {partner.stats.availableNow} available · {partner.stats.certifiedMembers} certified</dd></div>
+            </dl>
+            {can(actor, "partner.identity.manage") && partner.name && <div className="mt-4"><PartnerIdentityForm agencyId={agency.id} name={partner.name} specializations={partner.specializations} /></div>}
+            {can(actor, "disclosure.manage") && (
+              <div className="mt-5 space-y-4 border-t border-ink-100 pt-4">
+                <GrantDisclosureForm scope="AGENCY_IDENTITY" agencyId={agency.id} clients={clients.map((c) => ({ id: c.id, companyName: c.companyName }))} />
+                <DisclosureGrantList grants={grants} canManage />
+              </div>
+            )}
           </Card>
           <Card title={`Agents (${agents.length})`} description="Members in any open membership status. Agencies invite their own agents from their portal; moving an agent here releases and takes seats.">
             {agents.length === 0 ? <EmptyState title="No agents yet" /> : (

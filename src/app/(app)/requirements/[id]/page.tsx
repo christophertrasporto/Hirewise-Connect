@@ -40,7 +40,7 @@ export default async function RequirementMatchesPage({ params, searchParams }: {
       {data.nearMisses.length > 0 && (
         <Card title="Near misses" description="Right skills, but role or availability does not fit yet." className="mt-5">
           <ul className="divide-y divide-ink-100 text-[13.5px]">
-            {data.nearMisses.map((m) => <li key={m.candidate.id} className="flex items-center justify-between py-2"><Link href={`/talent/${m.candidate.id}`} className="font-semibold text-brand-600">{m.candidate.displayName}</Link><span className="text-ink-500">{m.hardFails.join(" · ")}</span></li>)}
+            {data.nearMisses.map((m) => <li key={m.candidate.id} className="flex items-center justify-between py-2"><Link href={`/talent/${m.candidate.id}`} className="font-semibold text-brand-600">{m.candidate.name}</Link><span className="text-ink-500">{m.hardFails.join(" · ")}</span></li>)}
           </ul>
         </Card>
       )}

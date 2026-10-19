@@ -90,13 +90,13 @@ describe("matching with explanations", () => {
     const a = await matchCandidates(db, clientA(), ids.requirement);
     const b = await matchCandidates(db, clientA(), ids.requirement);
     expect(a.matches.map((m) => m.candidate.id)).toEqual(b.matches.map((m) => m.candidate.id));
-    expect(a.matches.map((m) => m.candidate.displayName)).toEqual(["Jose R.", "Ana L."]);
+    expect(a.matches.map((m) => m.candidate.name)).toEqual(["Jose R.", "Ana L."]);
     expect(a.matches[0].reasons.find((r) => r.rule === "skills")?.text).toBe("Matched 2/2 required skills");
     expect(a.matches[1].reasons.find((r) => r.rule === "skills")?.text).toContain("missing appointment setting");
-    expect(a.nearMisses.map((m) => m.candidate.displayName)).toEqual(["Eva E."]);
+    expect(a.nearMisses.map((m) => m.candidate.name)).toEqual(["Eva E."]);
     expect(a.consideredCount).toBe(3);
     const strict = await matchCandidates(db, clientA(), ids.requirement, { includeSoon: false });
-    expect(strict.matches.map((m) => m.candidate.displayName)).toEqual(["Jose R."]);
+    expect(strict.matches.map((m) => m.candidate.name)).toEqual(["Jose R."]);
     await expect(matchCandidates(db, clientB(), ids.requirement)).rejects.toThrow(NotFoundError);
     expect((await matchCandidates(db, sales(), ids.requirement)).matches).toHaveLength(2);
     await expect(matchCandidates(db, makeActor("COACH"), ids.requirement)).rejects.toThrow(ForbiddenError);

@@ -7,7 +7,7 @@ import { idle } from "@/server/http/action-result";
 import { Field, FormAlert, Input, Select, SubmitButton, Textarea } from "@/components/ui/Form";
 import { COUNTRIES } from "@/lib/options";
 
-export function AgencyProfileForm({ agency, disabled }: { agency: { id: string; name: string; description: string | null; contactEmail: string; contactPhone: string | null; country: string; city: string | null; website: string | null }; disabled: boolean }) {
+export function AgencyProfileForm({ agency, disabled }: { agency: { id: string; name: string; description: string | null; contactEmail: string; contactPhone: string | null; country: string; city: string | null; website: string | null; legalName?: string | null; addressLine?: string | null; registrationDetails?: string | null; billingEmail?: string | null }; disabled: boolean }) {
   const router = useRouter();
   const [state, action] = useActionState(updateAgencyProfileAction, idle);
   const fe = state.fieldErrors ?? {};
@@ -27,6 +27,12 @@ export function AgencyProfileForm({ agency, disabled }: { agency: { id: string; 
           <Field label="Website (optional)" htmlFor="ag-web" error={fe.website} className="sm:col-span-2"><Input id="ag-web" name="website" type="url" placeholder="https://" defaultValue={agency.website ?? ""} invalid={!!fe.website} /></Field>
         </div>
         <Field label="About the agency (optional)" htmlFor="ag-desc" error={fe.description} hint="Shown to Hirewise. Clients never see agency details."><Textarea id="ag-desc" name="description" rows={4} defaultValue={agency.description ?? ""} /></Field>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field label="Legal name (optional)" htmlFor="ag-legal" error={fe.legalName} hint="Private: Hirewise only."><Input id="ag-legal" name="legalName" defaultValue={agency.legalName ?? ""} /></Field>
+          <Field label="Billing email (optional)" htmlFor="ag-bill" error={fe.billingEmail}><Input id="ag-bill" name="billingEmail" type="email" defaultValue={agency.billingEmail ?? ""} invalid={!!fe.billingEmail} /></Field>
+          <Field label="Business address (optional)" htmlFor="ag-addr" error={fe.addressLine}><Input id="ag-addr" name="addressLine" defaultValue={agency.addressLine ?? ""} /></Field>
+          <Field label="Registration details (optional)" htmlFor="ag-reg" error={fe.registrationDetails} hint="Registration number, authority, or similar."><Input id="ag-reg" name="registrationDetails" defaultValue={agency.registrationDetails ?? ""} /></Field>
+        </div>
         {state.error && <FormAlert>{state.error}</FormAlert>}
         {state.ok && <FormAlert tone="success">Saved.</FormAlert>}
         <SubmitButton pendingText="Saving…">Save profile</SubmitButton>

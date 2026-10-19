@@ -393,33 +393,35 @@ model User {
   incidentsReported         Incident[]          @relation("IncidentReporter")
   incidentsResolved         Incident[]          @relation("IncidentResolver")
 
-  permissionOverrides     UserPermissionOverride[]   @relation("OverrideSubject")
-  onboardingVideoProgress OnboardingVideoProgress[]
-  grantedOverrides        UserPermissionOverride[]   @relation("OverrideGrantor")
-  clientContact           ClientContact?
-  agentProfiles           AgentProfile[]
-  platformIdentity        PlatformIdentity?
-  duplicateFlagsReviewed  DuplicateFlag[]            @relation("DuplicateFlagReviewer")
-  agreementAcceptances    AgreementAcceptance[]
-  notifications           Notification[]
-  notificationPrefs       NotificationPreference[]
-  managedClients          Client[]                   @relation("AccountManager")
-  assignedRequirements    ClientRequirement[]        @relation("RequirementSales")
-  reservationsMade        Reservation[]              @relation("ReservedBy")
-  availabilityChanges     AgentAvailability[]        @relation("AvailabilitySetBy")
-  documentsUploaded       Document[]                 @relation("DocumentUploader")
-  profilesApproved        AgentProfile[]             @relation("ProfileApprover")
-  videosReviewed          Video[]                    @relation("VideoReviewer")
-  recordingsReviewed      Recording[]                @relation("RecordingReviewer")
-  portfoliosReviewed      Portfolio[]                @relation("PortfolioReviewer")
-  settingsUpdated         Setting[]                  @relation("SettingUpdater")
+  permissionOverrides       UserPermissionOverride[]   @relation("OverrideSubject")
+  onboardingVideoProgress   OnboardingVideoProgress[]
+  grantedOverrides          UserPermissionOverride[]   @relation("OverrideGrantor")
+  clientContact             ClientContact?
+  agentProfiles             AgentProfile[]
+  platformIdentity          PlatformIdentity?
+  duplicateFlagsReviewed    DuplicateFlag[]            @relation("DuplicateFlagReviewer")
+  agreementAcceptances      AgreementAcceptance[]
+  notifications             Notification[]
+  notificationPrefs         NotificationPreference[]
+  managedClients            Client[]                   @relation("AccountManager")
+  assignedRequirements      ClientRequirement[]        @relation("RequirementSales")
+  reservationsMade          Reservation[]              @relation("ReservedBy")
+  availabilityChanges       AgentAvailability[]        @relation("AvailabilitySetBy")
+  documentsUploaded         Document[]                 @relation("DocumentUploader")
+  profilesApproved          AgentProfile[]             @relation("ProfileApprover")
+  videosReviewed            Video[]                    @relation("VideoReviewer")
+  recordingsReviewed        Recording[]                @relation("RecordingReviewer")
+  portfoliosReviewed        Portfolio[]                @relation("PortfolioReviewer")
+  settingsUpdated           Setting[]                  @relation("SettingUpdater")
   // Agency marketplace (A1)
-  agencyApplications      AgencyApplication[]        @relation("Applicant")
-  reviewedApplications    AgencyApplication[]        @relation("ApplicationReviewer")
-  applicationHistory      AgencyApplicationHistory[] @relation("ApplicationHistoryActor")
-  ownedAgencies           Agency[]                   @relation("AgencyOwner")
-  agencyUsers             AgencyUser[]
-  membershipApprovals     AgencyMembership[]         @relation("MembershipApprover")
+  agencyApplications        AgencyApplication[]        @relation("Applicant")
+  reviewedApplications      AgencyApplication[]        @relation("ApplicationReviewer")
+  applicationHistory        AgencyApplicationHistory[] @relation("ApplicationHistoryActor")
+  ownedAgencies             Agency[]                   @relation("AgencyOwner")
+  agencyUsers               AgencyUser[]
+  membershipApprovals       AgencyMembership[]         @relation("MembershipApprover")
+  clientSafeDocumentReviews ClientSafeDocument[]       @relation("ClientSafeDocumentReviewer")
+  disclosureGrantsGiven     DisclosureGrant[]          @relation("DisclosureGrantedBy")
 
   @@index([roleId])
   @@index([status])
@@ -500,6 +502,7 @@ model Client {
   placements        Placement[]
   invoices          Invoice[]
   savedSearches     SavedSearch[]
+  disclosureGrants  DisclosureGrant[]
 
   @@index([status])
   @@index([accountManagerUserId])
@@ -648,6 +651,11 @@ model AgentProfile {
   primaryAgencyId       String?
   primaryAgency         Agency?                     @relation("PrimaryAgencyAgents", fields: [primaryAgencyId], references: [id])
   agencyMemberships     AgencyMembership[]
+  /// v2 phase 5: what clients see instead of the display name (first name + last initial), kept from the legal name unless overridden.
+  clientLabel           String?
+  clientLabelOverride   Boolean                     @default(false)
+  clientSafeDocuments   ClientSafeDocument[]
+  disclosureGrants      DisclosureGrant[]
 
   @@index([status])
   @@index([userId])
@@ -2316,41 +2324,51 @@ model AgencyApplicationHistory {
 
 /// A partner agency. Created only from an approved AgencyApplication or by a Super Admin (agency.create_direct).
 model Agency {
-  id                    String                 @id @default(cuid())
-  name                  String
-  logoKey               String?
-  ownerUserId           String
-  owner                 User                   @relation("AgencyOwner", fields: [ownerUserId], references: [id])
-  description           String?
-  contactEmail          String
-  contactPhone          String?
-  country               String
-  city                  String?
-  website               String?
-  status                AgencyStatus           @default(ACTIVE)
-  statusReason          String?
+  id                          String                 @id @default(cuid())
+  name                        String
+  logoKey                     String?
+  ownerUserId                 String
+  owner                       User                   @relation("AgencyOwner", fields: [ownerUserId], references: [id])
+  description                 String?
+  contactEmail                String
+  contactPhone                String?
+  country                     String
+  city                        String?
+  website                     String?
+  status                      AgencyStatus           @default(ACTIVE)
+  statusReason                String?
   /// Membership plan (v2 phase 2). Null until Hirewise assigns one; invites open only then.
-  planId                String?
-  plan                  Plan?                  @relation(fields: [planId], references: [id])
-  planStartedAt         DateTime?
-  trainingAccess        Boolean                @default(true)
-  opportunityAccess     Boolean                @default(true)
-  joinedAt              DateTime               @default(now())
-  suspendedAt           DateTime?
-  deactivatedAt         DateTime?
-  createdAt             DateTime               @default(now())
-  updatedAt             DateTime               @updatedAt
-  application           AgencyApplication?
-  users                 AgencyUser[]
-  memberships           AgencyMembership[]
-  primaryAgents         AgentProfile[]         @relation("PrimaryAgencyAgents")
-  seatLedger            AgencySeatLedger[]
-  seatPurchases         SeatPurchase[]
-  seatRequests          SeatRequest[]
-  inviteLinks           AgencyInviteLink[]
-  emailInvites          AgencyEmailInvite[]
-  coursePurchases       CoursePurchase[]
-  courseSeatAssignments CourseSeatAssignment[]
+  planId                      String?
+  plan                        Plan?                  @relation(fields: [planId], references: [id])
+  planStartedAt               DateTime?
+  trainingAccess              Boolean                @default(true)
+  opportunityAccess           Boolean                @default(true)
+  joinedAt                    DateTime               @default(now())
+  suspendedAt                 DateTime?
+  deactivatedAt               DateTime?
+  createdAt                   DateTime               @default(now())
+  updatedAt                   DateTime               @updatedAt
+  application                 AgencyApplication?
+  users                       AgencyUser[]
+  memberships                 AgencyMembership[]
+  primaryAgents               AgentProfile[]         @relation("PrimaryAgencyAgents")
+  seatLedger                  AgencySeatLedger[]
+  seatPurchases               SeatPurchase[]
+  seatRequests                SeatRequest[]
+  inviteLinks                 AgencyInviteLink[]
+  emailInvites                AgencyEmailInvite[]
+  coursePurchases             CoursePurchase[]
+  courseSeatAssignments       CourseSeatAssignment[]
+  /// v2 phase 5: client-facing Partner Team identity. Assigned by the system at approval; the name is edited only by Hirewise.
+  clientFacingCode            String?                @unique
+  clientFacingName            String?
+  clientFacingSpecializations String[]               @default([])
+  /// v2 phase 5: private identity, Hirewise Admin only.
+  legalName                   String?
+  addressLine                 String?
+  registrationDetails         String?
+  billingEmail                String?
+  disclosureGrants            DisclosureGrant[]
 
   @@index([status])
   @@index([ownerUserId])
@@ -2862,4 +2880,96 @@ model IndependentAccess {
 
   @@index([userId, status])
   @@index([status, createdAt])
+}
+
+// ---------------------------------------------------------------------------
+// v2 phase 5: client protection
+// ---------------------------------------------------------------------------
+
+enum ClientSafeDocumentType {
+  RESUME
+  PROFILE
+  CERTIFICATE
+  PORTFOLIO
+  VOICE_INTRO
+  VIDEO_INTRO
+}
+
+enum ClientSafeSourceType {
+  VIDEO
+  RECORDING
+  PORTFOLIO
+  CERTIFICATION
+  PROFILE
+}
+
+enum SanitizationStatus {
+  PENDING
+  AUTO_SANITIZED
+  NEEDS_MANUAL_REVIEW
+  APPROVED_FOR_CLIENT
+  REJECTED
+}
+
+enum DisclosureScope {
+  AGENT_IDENTITY
+  AGENCY_IDENTITY
+  CLIENT_IDENTITY
+}
+
+enum DisclosureGrantor {
+  STAFF
+  SYSTEM
+}
+
+/// A client-safe version of one source item. The original is never altered; only APPROVED_FOR_CLIENT rows are served to clients.
+model ClientSafeDocument {
+  id                  String                 @id @default(cuid())
+  agentProfileId      String
+  agentProfile        AgentProfile           @relation(fields: [agentProfileId], references: [id], onDelete: Cascade)
+  type                ClientSafeDocumentType
+  sourceType          ClientSafeSourceType
+  sourceId            String
+  originalStorageKey  String
+  sanitizedStorageKey String?
+  status              SanitizationStatus     @default(PENDING)
+  /// What the scan found (kinds only, never the raw contact values).
+  findings            Json?
+  autoNote            String?
+  reviewedById        String?
+  reviewedBy          User?                  @relation("ClientSafeDocumentReviewer", fields: [reviewedById], references: [id])
+  reviewedAt          DateTime?
+  reviewNote          String?
+  createdAt           DateTime               @default(now())
+  updatedAt           DateTime               @updatedAt
+
+  @@unique([sourceType, sourceId, originalStorageKey])
+  @@index([agentProfileId, status])
+  @@index([status])
+}
+
+/// Explicit, revocable disclosure of an identity to a client (agent full name, real agency identity) or of a client's identity to talent.
+model DisclosureGrant {
+  id             String            @id @default(cuid())
+  scope          DisclosureScope
+  clientId       String
+  client         Client            @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  agentProfileId String?
+  agentProfile   AgentProfile?     @relation(fields: [agentProfileId], references: [id], onDelete: Cascade)
+  agencyId       String?
+  agency         Agency?           @relation(fields: [agencyId], references: [id], onDelete: Cascade)
+  grantedBy      DisclosureGrantor
+  grantedById    String?
+  grantedByUser  User?             @relation("DisclosureGrantedBy", fields: [grantedById], references: [id])
+  reason         String
+  interviewId    String?
+  grantedAt      DateTime          @default(now())
+  expiresAt      DateTime?
+  revokedAt      DateTime?
+  revokedById    String?
+  revokeReason   String?
+
+  @@index([clientId, scope])
+  @@index([agentProfileId])
+  @@index([agencyId])
 }

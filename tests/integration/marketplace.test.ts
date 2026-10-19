@@ -3,6 +3,7 @@ import { testDb, resetDb } from "../setup/db";
 import { searchCandidates, getCandidateForClient, recommendedForClient } from "@/server/services/search.service";
 import { addToShortlist, removeFromShortlist, setShortlistNote, getOwnShortlist, compareShortlisted, getShortlistForStaff, shortlistActivityForStaff } from "@/server/services/shortlist.service";
 import { reviewMedia, listMediaReviewQueue, mediaDownloadUrl } from "@/server/services/media.service";
+import { reviewClientSafeDocument } from "@/server/services/client-safe-document.service";
 import { addNote, listNotesForStaff, listNotesForSubject } from "@/server/services/note.service";
 import { makeActor } from "@/server/auth/actor";
 import { ForbiddenError, NotFoundError } from "@/server/policies/authorize";
@@ -55,7 +56,7 @@ beforeAll(async () => {
     const u = await db.user.create({ data: { email, roleId: agentRole } });
     const p = await db.agentProfile.create({
       data: {
-        userId: u.id, displayName: email.split("@")[0], headline: `Headline for ${email}`, primaryRole: opts.role ?? "Customer Service Representative", status, availabilityStatus: opts.availability ?? "AVAILABLE", timezone: opts.tz ?? "Asia/Manila", verificationLevel: opts.verification ?? "PROFILE_VERIFIED", approvedAt: status === "APPROVED" ? new Date() : undefined, languages: ["English"],
+        userId: u.id, displayName: email.split("@")[0], clientLabel: email.split("@")[0], headline: `Headline for ${email}`, primaryRole: opts.role ?? "Customer Service Representative", status, availabilityStatus: opts.availability ?? "AVAILABLE", timezone: opts.tz ?? "Asia/Manila", verificationLevel: opts.verification ?? "PROFILE_VERIFIED", approvedAt: status === "APPROVED" ? new Date() : undefined, languages: ["English"],
         privateContact: { create: { fullLegalName: email, personalEmail: email, phone: "+63" } },
         skills: opts.skill ? { create: { skillId: opts.skill, level: "ADVANCED" } } : undefined,
         experiences: { create: { title: "Rep", startDate: new Date("2023-01-01"), isCampaign: true } },
@@ -72,6 +73,8 @@ beforeAll(async () => {
   ids.draft = d.p.id;
   ids.agentUser = a1.u.id;
   ids.videoApproved = (await db.video.create({ data: { agentProfileId: a1.p.id, storageKey: "agents/x/video/a.mp4", status: "APPROVED", isCurrent: true } })).id;
+  // Phase 5: clients open media only through an approved client-safe row.
+  await db.clientSafeDocument.create({ data: { agentProfileId: a1.p.id, type: "VIDEO_INTRO", sourceType: "VIDEO", sourceId: ids.videoApproved, originalStorageKey: "agents/x/video/a.mp4", sanitizedStorageKey: "agents/x/video/a.mp4", status: "APPROVED_FOR_CLIENT" } });
   ids.videoSubmitted = (await db.video.create({ data: { agentProfileId: a1.p.id, storageKey: "agents/x/video/b.mp4", status: "SUBMITTED", submittedAt: new Date() } })).id;
   await db.recording.create({ data: { agentProfileId: a1.p.id, kind: "COLD_CALL", title: "Sample", storageKey: "agents/x/recording/a.mp3", status: "SUBMITTED", submittedAt: new Date() } });
 });
@@ -97,7 +100,7 @@ describe("marketplace access (Section 14 Q2: gated)", () => {
 describe("search (Section 8.3)", () => {
   it("returns only APPROVED, available candidates by default and never leaks private fields", async () => {
     const r = await searchCandidates(db, clientA(), {});
-    const names = r.cards.map((c) => c.displayName);
+    const names = r.cards.map((c) => c.name);
     expect(names).toContain("approved1");
     expect(names).toContain("approved2");
     expect(names).not.toContain("draft");
@@ -107,19 +110,19 @@ describe("search (Section 8.3)", () => {
   });
 
   it("filters by skill, role, verification, and availability", async () => {
-    expect((await searchCandidates(db, clientA(), { skills: [ids.skillCs] })).cards.map((c) => c.displayName)).toEqual(["approved1"]);
-    expect((await searchCandidates(db, clientA(), { role: "Cold Caller" })).cards.map((c) => c.displayName)).toEqual(["approved2"]);
-    expect((await searchCandidates(db, clientA(), { verification: "HIREWISE_CERTIFIED" })).cards.map((c) => c.displayName)).toEqual(["approved1"]);
-    expect((await searchCandidates(db, clientA(), { availability: ["PLACED"] })).cards.map((c) => c.displayName)).toEqual(["placed"]);
+    expect((await searchCandidates(db, clientA(), { skills: [ids.skillCs] })).cards.map((c) => c.name)).toEqual(["approved1"]);
+    expect((await searchCandidates(db, clientA(), { role: "Cold Caller" })).cards.map((c) => c.name)).toEqual(["approved2"]);
+    expect((await searchCandidates(db, clientA(), { verification: "HIREWISE_CERTIFIED" })).cards.map((c) => c.name)).toEqual(["approved1"]);
+    expect((await searchCandidates(db, clientA(), { availability: ["PLACED"] })).cards.map((c) => c.name)).toEqual(["placed"]);
   });
 
   it("sorts recommended by verification level first and computes timezone distance from the client", async () => {
     const r = await searchCandidates(db, clientA(), {});
-    expect(r.cards[0].displayName).toBe("approved1");
-    const ny = r.cards.find((c) => c.displayName === "approved2")!;
+    expect(r.cards[0].name).toBe("approved1");
+    const ny = r.cards.find((c) => c.name === "approved2")!;
     expect(ny.tzDiffHours).toBeLessThanOrEqual(3);
     const within = await searchCandidates(db, clientA(), { tzWithin: 3 });
-    expect(within.cards.map((c) => c.displayName)).toEqual(["approved2"]);
+    expect(within.cards.map((c) => c.name)).toEqual(["approved2"]);
   });
 
   it("opening a candidate records a view and an introduction; unapproved profiles are 404", async () => {
@@ -132,7 +135,7 @@ describe("search (Section 8.3)", () => {
 
   it("recommendations favour the services the client asked for", async () => {
     const rec = await recommendedForClient(db, clientA());
-    expect(rec[0].displayName).toBe("approved1");
+    expect(rec[0].name).toBe("approved1");
   });
 });
 
@@ -194,6 +197,11 @@ describe("media review (Section 5.3)", () => {
     expect(await db.auditLog.count({ where: { action: "VIDEO_APPROVED", entityId: ids.videoSubmitted } })).toBe(1);
     await runWorkerOnce(db);
     expect(await db.notification.count({ where: { userId: ids.agentUser, type: "MEDIA_APPROVED" } })).toBe(1);
+    // Phase 5: newly approved media waits for the client-safe check before clients can see it.
+    expect((await getCandidateForClient(db, clientA(), ids.approved)).candidate.videos).toEqual([]);
+    const row = await db.clientSafeDocument.findFirstOrThrow({ where: { sourceType: "VIDEO", sourceId: ids.videoSubmitted } });
+    expect(row.status).toBe("NEEDS_MANUAL_REVIEW");
+    await reviewClientSafeDocument(db, makeActor("RECRUITER", { userId: "rec_1" }), { id: row.id, decision: "APPROVE" });
     const c = await getCandidateForClient(db, clientA(), ids.approved);
     expect(c.candidate.videos.map((v) => v.id)).toEqual([ids.videoSubmitted]);
     await expect(mediaDownloadUrl(db, clientA(), { type: "VIDEO", id: ids.videoApproved })).rejects.toThrow(NotFoundError);

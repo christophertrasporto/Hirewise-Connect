@@ -22,7 +22,7 @@ export default async function StaffPlacementsPage({ searchParams }: { searchPara
             <tbody className="divide-y divide-ink-100">
               {rows.map((p) => (
                 <tr key={p.id}>
-                  <td className="py-3"><Link href={`/staff/placements/${p.id}`} className="font-semibold text-brand-600">{p.agent.displayName}</Link></td>
+                  <td className="py-3"><Link href={`/staff/placements/${p.id}`} className="font-semibold text-brand-600">{p.agent.name}</Link></td>
                   <td className="py-3 text-ink-800">{p.client.companyName}</td>
                   <td className="py-3 text-ink-700">{p.positionTitle}{p.schedule ? ` · ${p.schedule}` : ""}</td>
                   <td className="py-3 text-ink-500">{fmtDate(p.createdAt)}</td>

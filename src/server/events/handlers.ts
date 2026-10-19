@@ -1,4 +1,5 @@
 import type { Db } from "@/server/db/types";
+import { ensureMediaRowById, ensureProfileRow, ensureCertificateRow } from "@/server/services/client-safe-document.service";
 import type { DomainEventMap, DomainEventType } from "./events";
 import { notifyUser } from "@/server/services/notification.service";
 import { userRepository } from "@/server/repositories/user.repository";
@@ -81,6 +82,7 @@ export const EVENT_HANDLERS: { [T in DomainEventType]: EventHandler<T> } = {
   },
 
   MEDIA_REVIEWED: async (db, p) => {
+    if (p.outcome === "APPROVED") await ensureMediaRowById(db, p.type, p.mediaId);
     const label = p.type === "VIDEO" ? "video introduction" : `voice sample “${p.title}”`;
     const copy = {
       APPROVED: { title: `Your ${label} is approved`, body: "Clients can now see it on your profile." },
@@ -129,7 +131,7 @@ export const EVENT_HANDLERS: { [T in DomainEventType]: EventHandler<T> } = {
 
   INTERVIEW_SCHEDULED: async (db, p) => {
     const when = new Date(p.scheduledAt).toLocaleString("en-US", { timeZone: p.timezone, dateStyle: "medium", timeStyle: "short" });
-    if (p.clientUserId) await notifyUser(db, { userId: p.clientUserId, type: "INTERVIEW_SCHEDULED", title: `Interview scheduled with ${p.displayName}`, body: `${when} (${p.timezone}).${p.meetingLink ? ` Link: ${p.meetingLink}` : ""}`, email: p.clientEmail ? { to: p.clientEmail } : undefined, dedupeKey: `IS:${p.interviewId}:client` });
+    if (p.clientUserId) await notifyUser(db, { userId: p.clientUserId, type: "INTERVIEW_SCHEDULED", title: `Interview scheduled with ${p.clientLabel}`, body: `${when} (${p.timezone}).${p.meetingLink ? ` Link: ${p.meetingLink}` : ""}`, email: p.clientEmail ? { to: p.clientEmail } : undefined, dedupeKey: `IS:${p.interviewId}:client` });
     await notifyUser(db, { userId: p.agentUserId, type: "INTERVIEW_SCHEDULED", title: `Interview scheduled with ${p.companyName}`, body: `${when} (${p.timezone}).${p.meetingLink ? ` Link: ${p.meetingLink}` : ""} Join a few minutes early.`, email: { to: p.agentEmail }, dedupeKey: `IS:${p.interviewId}:agent` });
     if (p.salesUserId) await notifyUser(db, { userId: p.salesUserId, type: "INTERVIEW_SCHEDULED", title: `Scheduled: ${p.displayName} with ${p.companyName}`, body: `${when} (${p.timezone}).`, dedupeKey: `IS:${p.interviewId}:sales` });
   },
@@ -188,6 +190,7 @@ export const EVENT_HANDLERS: { [T in DomainEventType]: EventHandler<T> } = {
   },
 
   PROFILE_REVIEWED: async (db, p) => {
+    if (p.outcome === "APPROVED") await ensureProfileRow(db, p.agentProfileId);
     const copy = {
       APPROVED: { title: "Your profile is approved", body: "Your Hirewise Connect profile is now visible to vetted clients. Keep your availability up to date." },
       REVISION_REQUIRED: { title: "Your profile needs changes", body: p.feedback ? `Hirewise feedback: ${p.feedback}` : "Hirewise has requested changes. Open your profile to see the feedback." },
@@ -368,6 +371,7 @@ export const EVENT_HANDLERS: { [T in DomainEventType]: EventHandler<T> } = {
   },
 
   CERTIFICATION_APPROVED: async (db, p) => {
+    await ensureCertificateRow(db, p.certificationId);
     await notifyUser(db, { userId: p.agentUserId, type: "CERTIFICATION_APPROVED", title: `You earned ${p.templateName}`, body: `The certification now shows on your profile${p.expiresAt ? ` and is valid until ${new Date(p.expiresAt).toLocaleDateString()}` : ""}.`, email: { to: p.agentEmail }, dedupeKey: `CAPP:${p.certificationId}` });
   },
 
@@ -404,7 +408,7 @@ export const EVENT_HANDLERS: { [T in DomainEventType]: EventHandler<T> } = {
   },
 
   PLACEMENT_APPROVED: async (db, p) => {
-    if (p.clientUserId) await notifyUser(db, { userId: p.clientUserId, type: "PLACEMENT_APPROVED", title: `Hirewise approved ${p.displayName} for ${p.positionTitle}`, body: `Client rate ${p.rateLabel}. Next: review and accept the Placement Service Agreement under Placements, then the deposit of ${p.depositLabel} is due.`, email: p.clientEmail ? { to: p.clientEmail } : undefined, dedupeKey: `PLAPP:${p.placementId}:client` });
+    if (p.clientUserId) await notifyUser(db, { userId: p.clientUserId, type: "PLACEMENT_APPROVED", title: `Hirewise approved ${p.clientLabel} for ${p.positionTitle}`, body: `Client rate ${p.rateLabel}. Next: review and accept the Placement Service Agreement under Placements, then the deposit of ${p.depositLabel} is due.`, email: p.clientEmail ? { to: p.clientEmail } : undefined, dedupeKey: `PLAPP:${p.placementId}:client` });
     if (p.salesUserId) await notifyUser(db, { userId: p.salesUserId, type: "PLACEMENT_APPROVED", title: `Placement approved: ${p.displayName} for ${p.companyName}`, body: "The client has been asked to accept the service agreement. Follow up if it stalls.", dedupeKey: `PLAPP:${p.placementId}:sales` });
     await taskRepository.completeByRelated(db, "FINALISE_PLACEMENT", "Placement", p.placementId);
   },
@@ -426,7 +430,7 @@ export const EVENT_HANDLERS: { [T in DomainEventType]: EventHandler<T> } = {
 
   CANDIDATE_DEPLOYED: async (db, p) => {
     const start = new Date(p.startDate).toLocaleDateString();
-    if (p.clientUserId) await notifyUser(db, { userId: p.clientUserId, type: "CANDIDATE_DEPLOYED", title: `${p.displayName} is active from ${start}`, body: `Your ${p.positionTitle} placement is live. Your account manager stays your point of contact.`, email: p.clientEmail ? { to: p.clientEmail } : undefined, dedupeKey: `DEPLOY:${p.placementId}:client` });
+    if (p.clientUserId) await notifyUser(db, { userId: p.clientUserId, type: "CANDIDATE_DEPLOYED", title: `${p.clientLabel} is active from ${start}`, body: `Your ${p.positionTitle} placement is live. Your account manager stays your point of contact.`, email: p.clientEmail ? { to: p.clientEmail } : undefined, dedupeKey: `DEPLOY:${p.placementId}:client` });
     await notifyUser(db, { userId: p.agentUserId, type: "CANDIDATE_DEPLOYED", title: `You start with ${p.companyName} on ${start}`, body: `Position: ${p.positionTitle}. Follow the client communication rules and keep Hirewise in the loop.`, email: { to: p.agentEmail }, dedupeKey: `DEPLOY:${p.placementId}:agent` });
     const staff = await userRepository.idsByRole(db, ["OPERATIONS"]);
     for (const s of [...staff.map((x) => x.id), ...(p.salesUserId ? [p.salesUserId] : [])]) await notifyUser(db, { userId: s, type: "CANDIDATE_DEPLOYED", title: `Deployed: ${p.displayName} at ${p.companyName}`, body: `Start ${start}.`, dedupeKey: `DEPLOY:${p.placementId}:${s}` });
@@ -436,7 +440,7 @@ export const EVENT_HANDLERS: { [T in DomainEventType]: EventHandler<T> } = {
   PLACEMENT_STATUS_CHANGED: async (db, p) => {
     const label = p.status.toLowerCase();
     const body = `${p.displayName} - ${p.positionTitle} is now ${label}.${p.reason ? ` Reason: ${p.reason}` : ""}`;
-    if (p.clientUserId) await notifyUser(db, { userId: p.clientUserId, type: "PLACEMENT_STATUS_CHANGED", title: `Placement ${label}`, body, dedupeKey: `PLST:${p.placementId}:${p.status}:client:${Date.now() >> 16}` });
+    if (p.clientUserId) await notifyUser(db, { userId: p.clientUserId, type: "PLACEMENT_STATUS_CHANGED", title: `Placement ${label}`, body: `${p.clientLabel} - ${p.positionTitle} is now ${label}.${p.reason ? ` Reason: ${p.reason}` : ""}`, dedupeKey: `PLST:${p.placementId}:${p.status}:client:${Date.now() >> 16}` });
     await notifyUser(db, { userId: p.agentUserId, type: "PLACEMENT_STATUS_CHANGED", title: `Your placement with ${p.companyName} is ${label}`, body: p.reason ? `Reason: ${p.reason}` : "Contact Hirewise with any questions.", dedupeKey: `PLST:${p.placementId}:${p.status}:agent:${Date.now() >> 16}` });
     if (p.salesUserId) await notifyUser(db, { userId: p.salesUserId, type: "PLACEMENT_STATUS_CHANGED", title: `Placement ${label}: ${p.displayName} at ${p.companyName}`, body, dedupeKey: `PLST:${p.placementId}:${p.status}:sales:${Date.now() >> 16}` });
   },
@@ -449,6 +453,21 @@ export const EVENT_HANDLERS: { [T in DomainEventType]: EventHandler<T> } = {
   USER_SUSPENDED: async (db, p) => {
     await notifyUser(db, { userId: p.userId, type: "USER_SUSPENDED", title: "Your account has been suspended", body: `Reason: ${p.reason}. Contact Hirewise to resolve this.`, email: { to: p.email }, dedupeKey: `SUSP:${p.userId}:${Date.now() >> 16}` });
     await notifyStaff(db, ["ADMIN"], { type: "USER_SUSPENDED", title: `User suspended: ${p.email}`, body: p.reason, dedupeKey: `SUSPA:${p.userId}:${Date.now() >> 16}` });
+  },
+
+  // v2 phase 5: client protection
+  CLIENT_SAFE_DOCUMENT_NEEDS_REVIEW: async (db, p) => {
+    await notifyStaff(db, ["ADMIN", "RECRUITER"], { type: "CLIENT_SAFE_DOCUMENT_NEEDS_REVIEW", title: `Client-safe review: ${p.displayName}`, body: `A ${p.type.replace(/_/g, " ").toLowerCase()} is waiting for approval before clients can open it. Review it under Media review.`, dedupeKey: `CSDR:${p.documentId}` });
+  },
+
+  CLIENT_SAFE_DOCUMENT_REVIEWED: async (db, p) => {
+    const ok = p.outcome === "APPROVED_FOR_CLIENT";
+    await notifyUser(db, { userId: p.agentUserId, type: "CLIENT_SAFE_DOCUMENT_REVIEWED", title: ok ? `Your ${p.title.toLowerCase()} is now visible to clients` : `Your ${p.title.toLowerCase()} was not cleared for clients`, body: ok ? "Clients can open it from your profile." : `${p.note ?? "Hirewise could not clear it for client viewing."} It stays on your profile for Hirewise; upload a new version if needed.`, dedupeKey: `CSDV:${p.documentId}:${p.outcome}` });
+  },
+
+  DISCLOSURE_CHANGED: async (db, p) => {
+    if (p.grantedBy === "SYSTEM" || !p.accountManagerUserId) return;
+    await notifyUser(db, { userId: p.accountManagerUserId, type: "DISCLOSURE_CHANGED", title: `Disclosure ${p.action.toLowerCase()}: ${p.scope.replace(/_/g, " ").toLowerCase()}`, body: `${p.companyName} and ${p.subjectLabel}.`, dedupeKey: `DISC:${p.grantId}:${p.action}` });
   },
 
   ONLINE_PAYMENT_RECEIVED: async (db, p) => {

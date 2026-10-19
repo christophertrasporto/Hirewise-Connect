@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { clientLabelFrom } from "@/lib/client-redaction";
 import { inheritedSource } from "@/server/services/credential.service";
 import type { Db, PrismaClient } from "@/server/db/types";
 import type { Actor } from "@/server/auth/actor";
@@ -182,5 +183,5 @@ export async function verifyCertificate(db: PrismaClient, rawCode: string): Prom
   if (!c) return none;
   const course = c.courseId ? await certificationRepository.courseFor(db, c.courseId) : null;
   const expired = !!c.expiresAt && c.expiresAt.getTime() < Date.now();
-  return { found: true, valid: c.status === "APPROVED" && !expired, status: expired && c.status === "APPROVED" ? "EXPIRED" : c.status, certificateNumber: c.certificateNumber, templateName: c.template.name, learnerName: c.agentProfile.displayName, courseTitle: course?.title ?? null, issuedAt: c.issuedAt, expiresAt: c.expiresAt };
+  return { found: true, valid: c.status === "APPROVED" && !expired, status: expired && c.status === "APPROVED" ? "EXPIRED" : c.status, certificateNumber: c.certificateNumber, templateName: c.template.name, learnerName: c.agentProfile.clientLabel ?? clientLabelFrom(null, c.agentProfile.displayName), courseTitle: course?.title ?? null, issuedAt: c.issuedAt, expiresAt: c.expiresAt };
 }

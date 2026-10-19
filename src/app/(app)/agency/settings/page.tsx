@@ -18,8 +18,19 @@ export default async function AgencySettingsPage() {
   const t = seats.totals;
   return (
     <div className="space-y-5">
-      <Card title="Agency profile" description={canEdit ? "What Hirewise sees about your agency." : "Only the owner, or a manager with the profile permission, can edit this."}>
+      <Card title="Agency profile" description={canEdit ? "What Hirewise sees about your agency. Clients never see any of it." : "Only the owner, or a manager with the profile permission, can edit this."}>
         <AgencyProfileForm agency={agency} disabled={!canEdit || !active} />
+      </Card>
+
+      <Card title="Client-facing identity" description="How clients see your team. Assigned by Hirewise and read-only here: your real name, logo, website, and contact details are never shown to clients.">
+        {agency.clientFacing ? (
+          <dl className="grid gap-3 text-[14px] sm:grid-cols-3">
+            <div><dt className="text-ink-400">Partner Team code</dt><dd className="font-mono font-semibold text-ink-900">{agency.clientFacing.code}</dd></div>
+            <div><dt className="text-ink-400">Name clients see</dt><dd className="font-semibold text-ink-900">{agency.clientFacing.name}</dd></div>
+            <div><dt className="text-ink-400">Specializations</dt><dd className="font-semibold text-ink-900">{agency.clientFacing.specializations.join(", ") || "Set by Hirewise"}</dd></div>
+          </dl>
+        ) : <p className="text-[13.5px] text-ink-500">Hirewise assigns the client-facing identity.</p>}
+        <p className="mt-3 text-[12.5px] text-ink-400">Ask your Hirewise contact to adjust the name or specializations.</p>
       </Card>
 
       <div id="seats" className="scroll-mt-6">

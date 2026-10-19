@@ -1,5 +1,6 @@
 import type { Prisma } from "@/server/db/types";
 import type { agentSelfInclude } from "@/server/repositories/agent.repository";
+import { redactForClient, clientLabelFrom } from "@/lib/client-redaction";
 
 type AgentSelfRecord = Prisma.AgentProfileGetPayload<{ include: ReturnType<typeof agentSelfInclude> }>;
 
@@ -48,6 +49,10 @@ export function toAgentSelfView(a: AgentSelfRecord) {
   return {
     id: a.id,
     displayName: a.displayName,
+    // v2 phase 5: what clients see instead of the display name, and the Partner Team they see instead of the agency.
+    clientLabel: a.clientLabel ?? clientLabelFrom(a.privateContact?.fullLegalName, a.displayName),
+    clientLabelOverride: a.clientLabelOverride,
+    partnerTeam: partnerTeamFor(a),
     headline: a.headline,
     primaryRole: a.primaryRole,
     summary: a.summary,
@@ -89,19 +94,57 @@ export function toAgentSelfView(a: AgentSelfRecord) {
   };
 }
 
+/** v2 phase 5: who the projection is for. Clients get labels, redaction, and only client-safe media. */
+export type Audience = "CLIENT" | "STAFF";
+export type ClientSafeContext = { videoIds: Set<string>; recordingIds: Set<string>; portfolio: Map<string, string>; documents: Array<{ id: string; type: string; title: string }> };
+export type CandidateViewOptions = {
+  audience: Audience;
+  /** Legal name to show in place of the label: only when the requesting client holds an AGENT_IDENTITY grant. */
+  legalName?: string | null;
+  /** Approved client-safe rows for this agent. Absent means a client sees no media and no documents. */
+  clientSafe?: ClientSafeContext;
+  /** Further agency names to replace in free text (the agent's own agency is always replaced). */
+  agencyNames?: Array<{ name: string; replacement: string }>;
+};
+const CLIENT_ONLY: CandidateViewOptions = { audience: "CLIENT" };
+
+export function partnerTeamFor(a: { primaryAgency: { clientFacingCode: string | null; clientFacingName: string | null } | null }) {
+  const ag = a.primaryAgency;
+  return ag?.clientFacingCode ? { code: ag.clientFacingCode, name: ag.clientFacingName ?? `Hirewise Certified Partner Team ${ag.clientFacingCode}` } : null;
+}
+
+function clientLabelOf(a: AgentSelfRecord) {
+  return a.clientLabel ?? clientLabelFrom(a.privateContact?.fullLegalName, a.displayName);
+}
+
+function redactor(a: AgentSelfRecord, opts: CandidateViewOptions) {
+  if (opts.audience !== "CLIENT") return (t: string | null) => t;
+  const team = partnerTeamFor(a);
+  const names = [...(opts.agencyNames ?? []), ...(a.primaryAgency ? [{ name: a.primaryAgency.name, replacement: team?.name ?? "a Hirewise Partner Team" }] : [])];
+  return (t: string | null) => (t ? redactForClient(t, { agencyNames: names }).text : t);
+}
+
 export type CandidateClientView = ReturnType<typeof toCandidateClientView>;
 
 /**
- * What a client may see (Section 6). Only APPROVED media, no private contact,
- * no review feedback, no internal notes. Rates and certifications join in later phases.
+ * What a client may see (Section 6, phase 5). The client label instead of the display name, redacted free text,
+ * no private contact, no review feedback, no internal notes, no raw links, and only media and documents with an
+ * APPROVED_FOR_CLIENT client-safe row. Staff get the same shape with the display name and unredacted text.
  */
-export function toCandidateClientView(a: AgentSelfRecord) {
+export function toCandidateClientView(a: AgentSelfRecord, opts: CandidateViewOptions = CLIENT_ONLY) {
+  const client = opts.audience === "CLIENT";
+  const r = redactor(a, opts);
+  const safe = opts.clientSafe;
+  const mediaOk = (kind: "video" | "recording", id: string) => !client || (kind === "video" ? !!safe?.videoIds.has(id) : !!safe?.recordingIds.has(id));
   return {
     id: a.id,
-    displayName: a.displayName,
-    headline: a.headline,
+    name: client ? opts.legalName ?? clientLabelOf(a) : a.displayName,
+    identityDisclosed: client ? !!opts.legalName : false,
+    partnerTeam: partnerTeamFor(a),
+    talentType: a.talentType,
+    headline: r(a.headline),
     primaryRole: a.primaryRole,
-    summary: a.summary,
+    summary: r(a.summary),
     photoKey: a.photoKey,
     yearsExperience: a.yearsExperience,
     experienceLevel: a.experienceLevel,
@@ -114,12 +157,16 @@ export function toCandidateClientView(a: AgentSelfRecord) {
     availabilityStatus: a.availabilityStatus,
     availableFrom: a.availableFrom,
     skills: a.skills.map((s) => ({ name: s.skill.name, category: s.skill.category, level: s.level, yearsUsed: s.yearsUsed, verified: !!s.verifiedById })),
-    experiences: a.experiences.map((e) => ({ title: e.title, industry: e.industry, startDate: e.startDate, endDate: e.endDate, description: e.description, isCampaign: e.isCampaign, campaignType: e.campaignType })),
+    experiences: a.experiences.map((e) => ({ title: e.title, industry: e.industry, startDate: e.startDate, endDate: e.endDate, description: r(e.description), isCampaign: e.isCampaign, campaignType: e.campaignType })),
     industries: a.industryExperiences.map((i) => ({ industry: i.industry, years: i.years })),
     software: a.softwareExperiences.map((s) => ({ name: s.software.name, level: s.level })),
-    videos: a.videos.filter((v) => v.status === "APPROVED").map((v) => ({ id: v.id, durationSec: v.durationSec })),
-    recordings: a.recordings.filter((r) => r.status === "APPROVED").map((r) => ({ id: r.id, kind: r.kind, title: r.title, durationSec: r.durationSec })),
-    portfolio: a.portfolioItems.filter((p) => p.status === "APPROVED").map((p) => ({ id: p.id, title: p.title, description: p.description, url: p.url })),
+    videos: a.videos.filter((v) => v.status === "APPROVED" && mediaOk("video", v.id)).map((v) => ({ id: v.id, durationSec: v.durationSec })),
+    recordings: a.recordings.filter((x) => x.status === "APPROVED" && mediaOk("recording", x.id)).map((x) => ({ id: x.id, kind: x.kind, title: x.title, durationSec: x.durationSec })),
+    // Portfolio links and files reach a client only as an approved client-safe document (decision 3).
+    portfolio: a.portfolioItems
+      .filter((item) => item.status === "APPROVED" && (!client || safe?.portfolio.has(item.id)))
+      .map((item) => ({ id: item.id, title: item.title, description: r(item.description), documentId: client ? safe?.portfolio.get(item.id) ?? null : null, link: client ? null : item.url })),
+    documents: client ? safe?.documents ?? [] : [],
     // Academy (Section 6): approved certifications, the best assessment label, and a client-visible coach evaluation.
     certifications: certificationsForClient(a),
     assessment: assessmentSummaryForClient(a),
@@ -131,12 +178,16 @@ export function toCandidateClientView(a: AgentSelfRecord) {
 
 export type CandidateCardView = ReturnType<typeof toCandidateCardView> & { shortlisted?: boolean; tzDiffHours?: number | null };
 
-/** Search result card for clients: the smallest client-safe subset. */
-export function toCandidateCardView(a: AgentSelfRecord) {
+/** Search result card: a subset of the client view. */
+export function toCandidateCardView(a: AgentSelfRecord, opts: CandidateViewOptions = CLIENT_ONLY) {
+  const client = opts.audience === "CLIENT";
+  const r = redactor(a, opts);
+  const safe = opts.clientSafe;
   return {
     id: a.id,
-    displayName: a.displayName,
-    headline: a.headline,
+    name: client ? clientLabelOf(a) : a.displayName,
+    partnerTeam: partnerTeamFor(a),
+    headline: r(a.headline),
     primaryRole: a.primaryRole,
     photoKey: a.photoKey,
     yearsExperience: a.yearsExperience,
@@ -151,8 +202,8 @@ export function toCandidateCardView(a: AgentSelfRecord) {
     approvedAt: a.approvedAt,
     skills: a.skills.slice(0, 6).map((s) => ({ name: s.skill.name, level: s.level })),
     industries: a.industryExperiences.map((i) => i.industry),
-    hasVideo: a.videos.some((v) => v.status === "APPROVED"),
-    approvedRecordings: a.recordings.filter((r) => r.status === "APPROVED").length,
+    hasVideo: a.videos.some((v) => v.status === "APPROVED" && (!client || !!safe?.videoIds.has(v.id))),
+    approvedRecordings: a.recordings.filter((x) => x.status === "APPROVED" && (!client || !!safe?.recordingIds.has(x.id))).length,
     campaignExperience: a.experiences.some((e) => e.isCampaign),
     certifications: a.certifications.filter((c) => c.status === "APPROVED").map((c) => ({ name: c.template.name, badgeKey: c.template.badgeKey })),
     assessmentLabel: assessmentSummaryForClient(a)?.label ?? null,

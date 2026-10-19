@@ -44,7 +44,7 @@ export default async function InterviewsPage() {
             {rows.map((r) => (
               <li key={r.id} className="flex items-center justify-between gap-4 py-3">
                 <div>
-                  <p className="text-[15px] font-semibold text-ink-900">{r.role} · {r.candidates.map((c) => c.displayName).join(", ")}</p>
+                  <p className="text-[15px] font-semibold text-ink-900">{r.role} · {r.candidates.map((c) => c.name).join(", ")}</p>
                   <p className="text-[12.5px] text-ink-400">Requested {fmtDate(r.createdAt)} · {r.interviews.length} interview(s) · {labelFor(r.status)}</p>
                 </div>
                 <div className="flex items-center gap-3"><StatusBadge status={r.status} /><Link href={`/interviews/${r.id}`} className="inline-flex items-center gap-1 text-[13px] font-semibold text-brand-600">Open <ArrowRight className="h-3.5 w-3.5" /></Link></div>

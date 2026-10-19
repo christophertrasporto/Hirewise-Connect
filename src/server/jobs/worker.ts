@@ -79,6 +79,9 @@ export async function runMaintenance(prisma: PrismaClient, now = new Date()): Pr
   await completeDueExits(prisma, now);
   await releaseDueSeats(prisma, now);
   await archiveFormerProfiles(prisma, now);
+  // v2 phase 5: client-safe rows for approved items and generated PDFs.
+  const { syncClientSafeDocuments } = await import("@/server/services/client-safe-document.service");
+  await syncClientSafeDocuments(prisma);
   return { expired, expiring, certificationsExpired: certs.expired, certificationsExpiring: certs.expiring };
 }
 

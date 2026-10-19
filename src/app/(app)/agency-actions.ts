@@ -179,7 +179,7 @@ export async function setAgentAgencyAction(_prev: ActionResult, fd: FormData): P
 export async function updateAgencyProfileAction(_prev: ActionResult, fd: FormData): Promise<ActionResult> {
   try {
     const actor = await requireActor();
-    await updateAgencyProfile(prisma, actor, formString(fd, "agencyId"), { name: formString(fd, "name"), description: formString(fd, "description"), contactEmail: formString(fd, "contactEmail"), contactPhone: formString(fd, "contactPhone"), country: formString(fd, "country"), city: formString(fd, "city"), website: formString(fd, "website") });
+    await updateAgencyProfile(prisma, actor, formString(fd, "agencyId"), { name: formString(fd, "name"), description: formString(fd, "description"), contactEmail: formString(fd, "contactEmail"), contactPhone: formString(fd, "contactPhone"), country: formString(fd, "country"), city: formString(fd, "city"), website: formString(fd, "website"), legalName: formString(fd, "legalName"), addressLine: formString(fd, "addressLine"), registrationDetails: formString(fd, "registrationDetails"), billingEmail: formString(fd, "billingEmail") });
     revalidatePath("/agency", "layout");
     revalidateStaff();
     return { ok: true };

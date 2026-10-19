@@ -19,7 +19,7 @@ export default async function ProfileOverviewPage() {
 
   return (
     <>
-      <PageHeader eyebrow="My profile" title={profile.displayName} description={profile.headline ?? "Add a headline in the Professional section."} actions={<><StatusBadge status={profile.status} /><StatusBadge status={profile.verificationLevel} /></>} />
+      <PageHeader eyebrow="My profile" title={profile.displayName} description={<>{profile.headline ?? "Add a headline in the Professional section."} <span className="block text-[12.5px] text-ink-400">Clients see you as <span className="font-semibold text-ink-700">{profile.clientLabel}</span>{profile.partnerTeam ? <> of <span className="font-semibold text-ink-700">{profile.partnerTeam.name}</span></> : " (Hirewise Direct talent)"}; your full name is disclosed only by Hirewise.</span></>} actions={<><StatusBadge status={profile.status} /><StatusBadge status={profile.verificationLevel} /></>} />
 
       {profile.status === "REVISION_REQUIRED" && <div className="mb-6"><Banner tone="warn" title="Changes requested by Hirewise">Update the sections mentioned in your notification, then submit again.</Banner></div>}
 

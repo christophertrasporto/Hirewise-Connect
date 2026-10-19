@@ -19,7 +19,7 @@ export default async function PlacementsPage() {
             {rows.map((p) => (
               <li key={p.id} className="flex items-center justify-between gap-4 py-3">
                 <div>
-                  <Link href={`/placements/${p.id}`} className="text-[15px] font-semibold text-ink-900 hover:text-brand-700">{actor.role === "AGENT" ? `${p.positionTitle} at ${p.client.companyName}` : `${p.agent.displayName} · ${p.positionTitle}`}</Link>
+                  <Link href={`/placements/${p.id}`} className="text-[15px] font-semibold text-ink-900 hover:text-brand-700">{actor.role === "AGENT" ? `${p.positionTitle} at ${p.client.companyName}` : `${p.agent.name} · ${p.positionTitle}`}</Link>
                   <p className="text-[12.5px] text-ink-400">Selected {fmtDate(p.createdAt)}{p.schedule ? ` · ${p.schedule}` : ""}{p.startDate ? ` · target start ${fmtDate(p.startDate)}` : ""}</p>
                 </div>
                 <StatusBadge status={p.status} />

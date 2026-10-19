@@ -102,6 +102,9 @@ export const PERMISSIONS = {
   "agency.reports.read": { group: "agency-portal", description: "See the agency's reports" },
   "agency.billing.manage": { group: "agency-portal", description: "Request additional Agent Seats and buy seat packages" },
   "agency.settings.manage": { group: "agency-portal", description: "Manage managers, their permissions, and agency settings" },
+  // Client protection (v2 phase 5)
+  "disclosure.manage": { group: "client-protection", description: "Grant and revoke identity disclosures between clients, talent, and Partner Teams" },
+  "partner.identity.manage": { group: "client-protection", description: "Edit an agency's client-facing Partner Team name and specializations" },
   // System
   "audit.read": { group: "system", description: "Read the audit log" },
   "settings.manage": { group: "system", description: "Change platform settings" },

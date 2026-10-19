@@ -99,6 +99,12 @@ export function toAgencyOwnerView(a: AgencyRecord) {
     joinedAt: a.joinedAt,
     agentCount: a._count.primaryAgents,
     seats: a.users.map((u) => ({ userId: u.userId, email: u.user.email, role: u.role, permissions: u.permissions })),
+    // v2 phase 5: private identity (owner and Hirewise only) and the read-only client-facing identity.
+    legalName: a.legalName,
+    addressLine: a.addressLine,
+    registrationDetails: a.registrationDetails,
+    billingEmail: a.billingEmail,
+    clientFacing: a.clientFacingCode ? { code: a.clientFacingCode, name: a.clientFacingName ?? `Hirewise Certified Partner Team ${a.clientFacingCode}`, specializations: a.clientFacingSpecializations } : null,
   };
 }
 export type AgencyOwnerView = ReturnType<typeof toAgencyOwnerView>;

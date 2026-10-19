@@ -1,3 +1,4 @@
+import { clientLabelFrom } from "@/lib/client-redaction";
 import { beforeAll, afterAll, describe, expect, it } from "vitest";
 import { testDb, resetDb } from "../setup/db";
 import { createCourse, saveModule, saveLesson, deleteLesson, updateCourseSettings, submitCourseForApproval, publishCourse, enrol, getEnrollmentForAgent } from "@/server/services/academy.service";
@@ -173,7 +174,11 @@ describe("certificates", () => {
   it("public verification returns a minimal projection; unknown, revoked, and expired codes read as not valid", async () => {
     const code = (await db.certification.findUniqueOrThrow({ where: { id: ids.certId } })).verificationCode!;
     let r = await verifyCertificate(db, code.toLowerCase());
-    expect(r).toMatchObject({ found: true, valid: true, status: "APPROVED", learnerName: "Ana Lim", courseTitle: "Sequenced course", templateName: "Certified Setter" });
+    // Phase 5: the public page shows the client label, never the display or legal name.
+    const owner = await db.agentProfile.findFirstOrThrow({ where: { certifications: { some: { id: ids.certId } } }, include: { privateContact: true } });
+    const label = owner.clientLabel ?? clientLabelFrom(owner.privateContact?.fullLegalName, owner.displayName);
+    expect(label).not.toBe("Ana Lim");
+    expect(r).toMatchObject({ found: true, valid: true, status: "APPROVED", learnerName: label, courseTitle: "Sequenced course", templateName: "Certified Setter" });
     expect(JSON.stringify(r)).not.toContain("agent1@t.example");
     expect(await verifyCertificate(db, "ZZZZ-ZZZZ-ZZZZ")).toMatchObject({ found: false, valid: false });
     expect(await verifyCertificate(db, "not a code")).toMatchObject({ found: false, valid: false });

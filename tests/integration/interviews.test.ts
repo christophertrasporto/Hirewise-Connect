@@ -165,7 +165,7 @@ describe("interview request lifecycle (Sections 5.4, 8.5)", () => {
     const placements = await listPlacementsForClient(db, clientA());
     expect(placements.length).toBe(1);
     expect(placements[0].status).toBe("SELECTED");
-    expect(placements[0].agent.displayName).toBe("Maria S.");
+    expect(placements[0].agent.name).toBe("Maria S. Legal");
     expect((await listPlacementsForAgent(db, agent1()))[0].client.companyName).toBe("Acme Solar");
     expect((await listPlacementsForStaff(db, sales())).length).toBe(1);
     await expect(listPlacementsForStaff(db, makeActor("COACH"))).rejects.toThrow(ForbiddenError);

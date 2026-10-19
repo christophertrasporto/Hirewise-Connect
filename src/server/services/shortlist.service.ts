@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { clientSafeContextFor, agencyNameReplacements } from "@/server/services/client-safe-document.service";
+import { agentIdentityDisclosedTo } from "@/server/services/disclosure.service";
 import type { PrismaClient } from "@/server/db/types";
 import type { Actor } from "@/server/auth/actor";
 import { authorize, ForbiddenError, NotFoundError } from "@/server/policies/authorize";
@@ -61,10 +63,12 @@ export async function setShortlistNote(db: PrismaClient, actor: Actor, agentProf
 export async function getOwnShortlist(db: PrismaClient, actor: Actor) {
   const list = await ownDefaultList(db, actor);
   const entries = await shortlistRepository.activeEntries(db, list.id);
+  const approved = entries.filter((e) => e.agentProfile.status === "APPROVED");
+  const safe = await clientSafeContextFor(db, approved.map((e) => e.agentProfileId));
   return {
     id: list.id,
     name: list.name,
-    candidates: entries.filter((e) => e.agentProfile.status === "APPROVED").map((e) => ({ ...toCandidateCardView(e.agentProfile), note: e.note, addedAt: e.addedAt })),
+    candidates: approved.map((e) => ({ ...toCandidateCardView(e.agentProfile, { audience: "CLIENT", clientSafe: safe.get(e.agentProfileId) }), note: e.note, addedAt: e.addedAt })),
   };
 }
 
@@ -75,7 +79,10 @@ export async function compareShortlisted(db: PrismaClient, actor: Actor, ids: st
   const allowed = new Set(entries.map((e) => e.agentProfileId));
   const chosen = ids.filter((id) => allowed.has(id)).slice(0, 4);
   const rows = await agentRepository.findManyApproved(db, chosen);
-  return chosen.map((id) => rows.find((r) => r.id === id)).filter(Boolean).map((r) => toCandidateClientView(r!));
+  const safe = await clientSafeContextFor(db, chosen);
+  const disclosed = await agentIdentityDisclosedTo(db, list.clientId);
+  const names = await agencyNameReplacements(db);
+  return chosen.map((id) => rows.find((r) => r.id === id)).filter(Boolean).map((r) => toCandidateClientView(r!, { audience: "CLIENT", legalName: disclosed.has(r!.id) ? r!.privateContact?.fullLegalName ?? null : null, clientSafe: safe.get(r!.id), agencyNames: names }));
 }
 
 /** Staff: a shortlist by id, scoped to the actor (client owner, assigned Sales, or shortlist.read_all). */
@@ -83,7 +90,7 @@ export async function getShortlistForStaff(db: PrismaClient, actor: Actor, short
   const list = await shortlistRepository.findById(db, shortlistId);
   assertClientOwns(actor, list, "shortlist.read_all");
   const entries = await shortlistRepository.activeEntries(db, list.id);
-  return { id: list.id, clientId: list.clientId, name: list.name, candidates: entries.map((e) => ({ ...toCandidateCardView(e.agentProfile), note: e.note, addedAt: e.addedAt })) };
+  return { id: list.id, clientId: list.clientId, name: list.name, candidates: entries.map((e) => ({ ...toCandidateCardView(e.agentProfile, { audience: "STAFF" }), note: e.note, addedAt: e.addedAt })) };
 }
 
 /** Sales sees shortlist activity for assigned clients; admins and ops see all (Section 8.4). */
