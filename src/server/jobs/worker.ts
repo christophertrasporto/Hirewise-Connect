@@ -82,6 +82,9 @@ export async function runMaintenance(prisma: PrismaClient, now = new Date()): Pr
   // v2 phase 5: client-safe rows for approved items and generated PDFs.
   const { syncClientSafeDocuments } = await import("@/server/services/client-safe-document.service");
   await syncClientSafeDocuments(prisma);
+  // v2 phase 6a: every approved agent and active agency holds an email alias.
+  const { allocateMissingAliases } = await import("@/server/services/alias.service");
+  await allocateMissingAliases(prisma);
   return { expired, expiring, certificationsExpired: certs.expired, certificationsExpiring: certs.expiring };
 }
 

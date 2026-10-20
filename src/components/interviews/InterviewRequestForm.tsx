@@ -54,6 +54,7 @@ export function InterviewRequestForm({ candidates, preselected, requirements, de
           </Field>
         </div>
         <Field label="Interview notes" htmlFor="notes" error={fe.notes} hint="What you want to cover. Shared with Hirewise, not directly with candidates." className="mt-4"><Textarea id="notes" name="notes" rows={3} /></Field>
+        <Field label="Windows that work for you (optional)" htmlFor="requestedWindows" error={fe.requestedWindows} hint="One per line, in your timezone. Hirewise schedules and sends a Hirewise-owned meeting link." className="mt-4"><Textarea id="requestedWindows" name="requestedWindows" rows={3} placeholder={"Tue 9–11am\nWed 2–4pm"} /></Field>
       </div>
 
       {state.error && <FormAlert>{state.error}</FormAlert>}

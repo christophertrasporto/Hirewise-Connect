@@ -67,6 +67,10 @@ export type DomainEventMap = {
   // v2 phase 5: client protection
   CLIENT_SAFE_DOCUMENT_NEEDS_REVIEW: { documentId: string; agentProfileId: string; displayName: string; type: string };
   CLIENT_SAFE_DOCUMENT_REVIEWED: { documentId: string; agentProfileId: string; agentUserId: string; agentEmail: string; type: string; title: string; outcome: "APPROVED_FOR_CLIENT" | "REJECTED"; note: string | null };
+  // v2 phase 6a: communication and enforcement
+  THREAD_MESSAGE_POSTED: { threadId: string; messageId: string; kind: string; title: string; authorRole: string; visibleTo: string; recipientUserIds: string[]; preview: string; masked: boolean };
+  BYPASS_REPORTED: { reportId: string; reporterRole: string; reporterUserId: string; description: string; reportedLabel: string };
+  BYPASS_DECIDED: { reportId: string; status: string; reporterUserId: string; reportedUserId: string | null; reportedOwnerUserId: string | null; note: string | null };
   DISCLOSURE_CHANGED: { grantId: string; scope: "AGENT_IDENTITY" | "AGENCY_IDENTITY" | "CLIENT_IDENTITY"; action: "GRANTED" | "REVOKED"; clientId: string; companyName: string; subjectLabel: string; accountManagerUserId: string | null; grantedBy: "STAFF" | "SYSTEM" };
   AGENCY_STATUS_CHANGED: { agencyId: string; agencyName: string; status: "ACTIVE" | "SUSPENDED" | "INACTIVE"; reason: string; ownerUserId: string; ownerEmail: string };
   // Course Builder phase 7

@@ -1,4 +1,4 @@
-import { LayoutDashboard, UserCircle, Building2, FileSignature, Users, Bell, Film, Search, Bookmark, ClipboardCheck, ListChecks, CalendarClock, ClipboardList, Handshake, Lock, ShieldAlert, GraduationCap, Receipt, BarChart3, LineChart, UserCog, Settings, Rocket, Fingerprint, ShieldCheck } from "lucide-react";
+import { LayoutDashboard, UserCircle, Building2, FileSignature, Users, Bell, Film, Search, Bookmark, ClipboardCheck, ListChecks, CalendarClock, ClipboardList, Handshake, Lock, ShieldAlert, GraduationCap, Receipt, BarChart3, LineChart, UserCog, Settings, Rocket, Fingerprint, ShieldCheck, MessageSquare, Flag } from "lucide-react";
 import { prisma } from "@/server/db/client";
 import { requireAuth } from "@/server/auth/require-actor";
 import { can } from "@/server/policies/authorize";
@@ -46,6 +46,10 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   if (can(actor, "settings.manage")) nav.push({ href: "/staff/settings", label: "Settings", icon: <Settings /> });
   if (can(actor, "settings.manage")) nav.push({ href: "/staff/launch", label: "Launch readiness", icon: <Rocket /> });
   if (can(actor, "interview.coordinate") || can(actor, "flag.review")) nav.push({ href: "/staff/compliance", label: "Compliance", icon: <ShieldAlert /> });
+  if (actor.role === "CLIENT" || actor.role === "AGENT" || actor.agency) {
+    nav.push({ href: "/messages", label: "Messages", icon: <MessageSquare /> });
+    nav.push({ href: "/report-bypass", label: "Report a bypass attempt", icon: <Flag /> });
+  }
   if (actor.agency) nav.splice(1, 0, { href: "/agency", label: "My agency", icon: <Building2 /> });
   else if (actor.role === "AGENT" || actor.role === "CLIENT" || actor.role === "APPLICANT") nav.push({ href: "/apply/agency", label: "Apply for Agency", icon: <Building2 /> });
   if (actor.role === "AGENT" || actor.role === "CLIENT") nav.push({ href: "/account/agreements", label: "Agreements", icon: <FileSignature /> });

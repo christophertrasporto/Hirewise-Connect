@@ -93,6 +93,14 @@ export const RECORDING_KINDS: Array<{ value: "INTRODUCTION" | "COLD_CALL" | "CUS
 ];
 
 export const STATUS_LABELS: Record<string, string> = {
+  // v2 phase 6a: communication and enforcement
+  MEETING_LINK_REFUSED: "Meeting link refused",
+  WARNING_ISSUED: "Warning issued",
+  RESTRICTED: "Restricted",
+  REPORTED: "Reported",
+  PARTNER_ENQUIRY: "Partner Team enquiry",
+  INTERVIEW_REQUEST: "Interview request",
+  SUPPORT: "Hirewise support",
   // v2 phase 5: client-safe documents and disclosure
   APPROVED_FOR_CLIENT: "Approved for client",
   NEEDS_MANUAL_REVIEW: "Needs review",

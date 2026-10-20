@@ -1,7 +1,12 @@
 import { z } from "zod";
+import { ensureRequestThread } from "@/server/services/thread.service";
+import { threadRepository } from "@/server/repositories/thread.repository";
+import { isAllowedMeetingHost, meetingHostOf } from "@/lib/meeting-link";
+import { getSetting } from "@/server/services/setting.service";
+import { flagRepository } from "@/server/repositories/flag.repository";
 import { agentIdentityDisclosedTo, clientIdentityDisclosedTo, grantsAtSchedulingTx, grantsAtPlacementTx } from "@/server/services/disclosure.service";
 import { clientNameFor } from "@/server/views/interview.views";
-import type { PrismaClient, Tx } from "@/server/db/types";
+import type { Db, PrismaClient, Tx } from "@/server/db/types";
 import type { Actor } from "@/server/auth/actor";
 import { authorize, ForbiddenError, NotFoundError } from "@/server/policies/authorize";
 import { interviewRepository } from "@/server/repositories/interview.repository";
@@ -36,6 +41,8 @@ export const interviewRequestSchema = z.object({
   role: z.string().trim().min(2, "Role is required.").max(80),
   schedule: optionalText(200),
   targetStartDate: optionalText(20),
+  /** v2 phase 6a: windows the client can do, one per line. */
+  requestedWindows: optionalText(1000),
 });
 export type InterviewRequestInput = z.infer<typeof interviewRequestSchema>;
 
@@ -68,7 +75,10 @@ export async function createInterviewRequest(db: PrismaClient, actor: Actor, inp
       targetStartDate: input.targetStartDate ? new Date(input.targetStartDate) : null,
       assignedSalesUserId: client?.accountManagerUserId ?? null,
       candidateIds: ids,
+      requestedWindows: (input.requestedWindows ?? "").split(/\n/).map((w) => w.trim()).filter(Boolean).slice(0, 10),
     });
+    // v2 phase 6a: the mediated thread exists from the start.
+    await ensureRequestThread(tx, actor, r.id);
     for (const id of ids) await shortlistRepository.upsertIntroduction(tx, clientId, id, "INTERVIEW");
     if (input.requirementId) await requirementRepository.setStatus(tx, input.requirementId, "IN_PROGRESS");
     await audit(tx, { actor, action: "INTERVIEW_REQUESTED", entityType: "InterviewRequest", entityId: r.id, newValue: { candidates: ids, role: input.role } });
@@ -136,6 +146,11 @@ export async function listRequestsForStaff(db: PrismaClient, actor: Actor, filte
 async function move(tx: Tx, actor: Actor, r: RequestRecord, to: InterviewRequestStatus, opts: { reason?: string; system?: boolean; extra?: { assignedSalesUserId?: string; cancelledReason?: string } } = {}) {
   assertRequestTransition(actor, { status: r.status as InterviewRequestStatus, clientId: r.clientId }, to, opts.reason, opts.system);
   await interviewRepository.setStatus(tx, r.id, to, opts.extra ?? {});
+  // Phase 6a: the request thread closes with the request.
+  if (to === "CLOSED" || to === "CANCELLED") {
+    const thread = await threadRepository.findByRequest(tx, r.id);
+    if (thread && thread.status === "OPEN") await threadRepository.setStatus(tx, thread.id, "CLOSED");
+  }
   await audit(tx, { actor, action: "INTERVIEW_REQUEST_STATUS_CHANGED", entityType: "InterviewRequest", entityId: r.id, previousValue: { status: r.status }, newValue: { status: to }, reason: opts.reason });
 }
 
@@ -155,7 +170,8 @@ export async function proposeSlots(db: PrismaClient, actor: Actor, id: string, m
   const body = message.trim();
   if (body.length < 5) throw new Error("Describe the proposed times.");
   await db.$transaction(async (tx) => {
-    await interviewRepository.createMessage(tx, { interviewRequestId: r.id, authorUserId: actor.userId, authorRole: actor.role, body, visibleTo: "CLIENT_AND_HIREWISE", heldForReview: false });
+    const thread = await ensureRequestThread(tx, actor, r.id);
+    await threadRepository.createMessage(tx, { threadId: thread.id, authorUserId: actor.userId, authorRole: actor.role, body, originalBody: null, findings: [], visibleTo: "CLIENT_AND_HIREWISE", heldForReview: false, maskedAt: null });
     await move(tx, actor, r, "CLIENT_CONFIRMATION");
     const contactUserId = r.client.contacts[0]?.userId;
     if (contactUserId) await publishEvent(tx, "INTERVIEW_SLOTS_PROPOSED", { requestId: r.id, userId: contactUserId, email: r.client.contacts[0]!.businessEmail, role: r.role, audience: "CLIENT" });
@@ -167,7 +183,10 @@ export async function clientConfirmSlots(db: PrismaClient, actor: Actor, id: str
   const r = await loadRequest(db, id);
   if (assertStaffOrOwner(actor, r, "interview.coordinate") === "AGENT") throw new ForbiddenError("Not allowed");
   await db.$transaction(async (tx) => {
-    if (message?.trim()) await interviewRepository.createMessage(tx, { interviewRequestId: r.id, authorUserId: actor.userId, authorRole: actor.role, body: message.trim(), visibleTo: "CLIENT_AND_HIREWISE", heldForReview: false });
+    if (message?.trim()) {
+      const thread = await ensureRequestThread(tx, actor, r.id);
+      await threadRepository.createMessage(tx, { threadId: thread.id, authorUserId: actor.userId, authorRole: actor.role, body: message.trim(), originalBody: null, findings: [], visibleTo: "CLIENT_AND_HIREWISE", heldForReview: false, maskedAt: null });
+    }
     await move(tx, actor, r, "CANDIDATE_CONFIRMATION");
     for (const c of r.candidates.filter((c) => c.status !== "DECLINED" && c.status !== "WITHDRAWN")) {
       await publishEvent(tx, "CANDIDATE_CONFIRMATION_REQUESTED", { requestId: r.id, agentProfileId: c.agentProfileId, userId: c.agentProfile.userId, email: c.agentProfile.user.email, role: r.role, schedule: r.schedule, timezone: r.timezone });
@@ -189,9 +208,19 @@ export async function candidateRespond(db: PrismaClient, actor: Actor, id: strin
 }
 
 export const scheduleSchema = z.object({
-  items: z.array(z.object({ agentProfileId: z.string().min(1), scheduledAt: z.string().min(1, "Pick a date and time."), durationMin: z.coerce.number().int().min(15).max(180).default(30), meetingLink: z.string().trim().url("Enter a full meeting link").optional().or(z.literal("")) })).min(1, "Schedule at least one candidate."),
+  items: z.array(z.object({ agentProfileId: z.string().min(1), scheduledAt: z.string().min(1, "Pick a date and time."), durationMin: z.coerce.number().int().min(15).max(180).default(30), meetingLink: z.string().trim().url("Enter a full meeting link").optional().or(z.literal("")), participants: z.string().trim().max(300).optional().or(z.literal("")) })).min(1, "Schedule at least one candidate."),
   timezone: z.string().trim().min(2).max(80),
 });
+
+/** v2 phase 6a, decision 2: a pasted link must sit on an allowed host; anything else is refused and flagged. */
+async function assertMeetingLinkAllowed(db: Db, actor: Actor, requestId: string, url: string) {
+  const s = await getSetting(db, "meetings");
+  if (s.requireProvider) throw new Error("Interview links come from the configured meeting provider; leave the link empty.");
+  if (isAllowedMeetingHost(url, s.allowedHosts)) return;
+  await flagRepository.create(db, { userId: actor.userId, rule: "MEETING_LINK_REFUSED", details: { host: meetingHostOf(url) }, relatedType: "InterviewRequest", relatedId: requestId });
+  await audit(db, { actor, action: "MEETING_LINK_REFUSED", entityType: "InterviewRequest", entityId: requestId, newValue: { host: meetingHostOf(url) } });
+  throw new Error(`Meeting links must be on a Hirewise-approved host (${s.allowedHosts.join(", ")}). Agency or personal links are not allowed.`);
+}
 
 /** Sales creates Interview rows, moves the request to SCHEDULED, sets availability, and queues reminders. */
 export async function scheduleInterviews(db: PrismaClient, actor: Actor, id: string, input: z.infer<typeof scheduleSchema>) {
@@ -200,6 +229,7 @@ export async function scheduleInterviews(db: PrismaClient, actor: Actor, id: str
   const candidateIds = new Set(r.candidates.filter((c) => c.status !== "DECLINED" && c.status !== "WITHDRAWN").map((c) => c.agentProfileId));
   const items = input.items.filter((i) => candidateIds.has(i.agentProfileId));
   if (items.length === 0) throw new Error("None of the chosen candidates are eligible.");
+  for (const it of items) if (it.meetingLink) await assertMeetingLinkAllowed(db, actor, r.id, it.meetingLink);
   await db.$transaction(async (tx) => {
     for (const it of items) {
       const scheduledAt = new Date(it.scheduledAt);
@@ -207,6 +237,8 @@ export async function scheduleInterviews(db: PrismaClient, actor: Actor, id: str
       const round = r.interviews.filter((x) => x.agentProfileId === it.agentProfileId).reduce((m, x) => Math.max(m, x.round), 0) + 1;
       let meetingLink = it.meetingLink || null;
       let meeting: { provider: string; externalId: string } | null = null;
+      const linkSource: "PROVIDER" | "STAFF_PASTED" | null = meetingLink ? "STAFF_PASTED" : null;
+      const participants = (it.participants ?? "").split(/[,\n]/).map((p) => p.trim()).filter(Boolean).slice(0, 8).map((label) => ({ label, role: "PARTICIPANT" }));
       if (!meetingLink) {
         const created = await getMeetingProvider().createMeeting({ topic: `Hirewise interview: ${r.role} (round ${round})`, startAt: scheduledAt, durationMin: it.durationMin, timezone: input.timezone, agenda: "Coordinated by Hirewise Connect. Please keep commercial discussion with Hirewise." }).catch(() => null);
         if (created) {
@@ -214,7 +246,7 @@ export async function scheduleInterviews(db: PrismaClient, actor: Actor, id: str
           meeting = { provider: created.provider, externalId: created.externalId };
         }
       }
-      const iv = await interviewRepository.createInterview(tx, { interviewRequestId: r.id, agentProfileId: it.agentProfileId, round, scheduledAt, timezone: input.timezone, durationMin: it.durationMin, meetingLink, coordinatorUserId: actor.userId, meetingProvider: meeting?.provider ?? null, meetingExternalId: meeting?.externalId ?? null });
+      const iv = await interviewRepository.createInterview(tx, { interviewRequestId: r.id, agentProfileId: it.agentProfileId, round, scheduledAt, timezone: input.timezone, durationMin: it.durationMin, meetingLink, coordinatorUserId: actor.userId, meetingProvider: meeting?.provider ?? null, meetingExternalId: meeting?.externalId ?? null, participants, linkSource: meeting ? "PROVIDER" : linkSource });
       if (meeting) await audit(tx, { actor, action: "MEETING_CREATED", entityType: "Interview", entityId: iv.id, newValue: { provider: meeting.provider, externalId: meeting.externalId } });
       const cand = r.candidates.find((c) => c.agentProfileId === it.agentProfileId)!;
       // Phase 5: disclosures the system makes at scheduling, per the disclosure setting (decision 6).

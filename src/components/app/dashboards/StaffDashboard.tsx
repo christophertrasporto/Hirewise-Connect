@@ -63,6 +63,8 @@ export function StaffDashboard({ role, stats, notifications }: Props) {
             <StatTile label="Open requirements" value={stats.requirementsOpen} hint="Client hiring requirements" />
             <StatTile label="Held messages" value={stats.heldMessages} href="/staff/compliance" hint="Awaiting release or block" />
             <StatTile label="Open flags" value={stats.openFlags} href="/staff/compliance" />
+            <StatTile label="Bypass cases" value={stats.bypassOpen} href="/staff/compliance/bypass" hint="Reported, under review, or sanctioned" />
+            <StatTile label="Docs awaiting client clearance" value={stats.documentsWaiting} href="/staff/media" />
           </div>
         </section>
       )}

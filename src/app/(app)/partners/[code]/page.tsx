@@ -1,4 +1,6 @@
 import type { Metadata } from "next";
+import { ReportBypassForm } from "@/components/communication/Forms";
+import { openEnquiryAction } from "@/app/(app)/communication-actions";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, ShieldCheck } from "lucide-react";
@@ -33,6 +35,14 @@ export default async function PartnerTeamPage({ params }: { params: Promise<{ co
         <StatTile label="Certified professionals" value={team.certifiedMembers} hint={team.certifications.slice(0, 2).map((c) => c.name).join(", ") || "No certifications yet"} />
         <StatTile label="Training completion" value={team.trainingCompletionPct === null ? "—" : `${team.trainingCompletionPct}%`} hint={team.avgYearsExperience !== null ? `${team.avgYearsExperience} yrs average experience` : "Experience on request"} />
       </div>
+      {actor.role === "CLIENT" && (
+        <Card title="Talk to Hirewise about this team" description={`Written contact goes through Hirewise${team.contactAlias ? ` (${team.contactAlias})` : ""}; the team never receives your details directly.`} className="mb-6">
+          <div className="flex flex-wrap items-center gap-3">
+            <form action={openEnquiryAction}><input type="hidden" name="code" value={team.code} /><button type="submit" className="inline-flex h-10 items-center rounded-full bg-brand-500 px-4 text-[13.5px] font-semibold text-white hover:bg-brand-600">Message Hirewise about this team</button></form>
+            <ReportBypassForm relatedType="Agency" relatedId={team.code} subjectLabel={team.name} compact />
+          </div>
+        </Card>
+      )}
       {team.specializations.length > 0 && <Card title="Specializations" className="mb-6"><div className="flex flex-wrap gap-1.5">{team.specializations.map((s) => <span key={s} className="rounded-full bg-ink-100 px-2.5 py-1 text-[12.5px] font-medium text-ink-700">{s}</span>)}</div></Card>}
       <h2 className="mb-3 text-[15px] font-bold text-ink-900">Professionals on this team</h2>
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">

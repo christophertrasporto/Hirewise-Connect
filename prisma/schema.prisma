@@ -149,6 +149,7 @@ enum DocumentOwnerType {
   AGREEMENT
   AGENCY_APPLICATION
   AGENCY
+  BYPASS_REPORT
 }
 
 enum DocumentVisibility {
@@ -422,6 +423,11 @@ model User {
   membershipApprovals       AgencyMembership[]         @relation("MembershipApprover")
   clientSafeDocumentReviews ClientSafeDocument[]       @relation("ClientSafeDocumentReviewer")
   disclosureGrantsGiven     DisclosureGrant[]          @relation("DisclosureGrantedBy")
+  messagesAuthored          Message[]                  @relation("MessageAuthor")
+  threadsAssigned           MessageThread[]            @relation("ThreadStaff")
+  bypassReportsFiled        BypassReport[]             @relation("BypassReporter")
+  bypassReportsAgainst      BypassReport[]             @relation("BypassReported")
+  bypassReportsAssigned     BypassReport[]             @relation("BypassAssignee")
 
   @@index([roleId])
   @@index([status])
@@ -503,6 +509,8 @@ model Client {
   invoices          Invoice[]
   savedSearches     SavedSearch[]
   disclosureGrants  DisclosureGrant[]
+  threads           MessageThread[]
+  bypassReports     BypassReport[]
 
   @@index([status])
   @@index([accountManagerUserId])
@@ -656,6 +664,7 @@ model AgentProfile {
   clientLabelOverride   Boolean                     @default(false)
   clientSafeDocuments   ClientSafeDocument[]
   disclosureGrants      DisclosureGrant[]
+  threads               MessageThread[]
 
   @@index([status])
   @@index([userId])
@@ -1071,6 +1080,8 @@ enum MessageVisibility {
   HIREWISE_ONLY
   CLIENT_AND_HIREWISE
   AGENT_AND_HIREWISE
+  /// v2 phase 6a: Partner Team enquiries.
+  AGENCY_AND_HIREWISE
 }
 
 enum PlacementStatus {
@@ -1092,6 +1103,8 @@ enum FlagRule {
   PROFILE_VIEW_BURST
   SHORTLIST_CHURN
   CONTACT_INFO_IN_PROFILE
+  /// v2 phase 6a: a pasted meeting link outside the allowed hosts.
+  MEETING_LINK_REFUSED
 }
 
 model InterviewRequest {
@@ -1117,10 +1130,13 @@ model InterviewRequest {
   createdAt           DateTime               @default(now())
   updatedAt           DateTime               @updatedAt
 
-  candidates InterviewRequestCandidate[]
-  interviews Interview[]
-  messages   InterviewMessage[]
-  placements Placement[]
+  candidates       InterviewRequestCandidate[]
+  interviews       Interview[]
+  messages         InterviewMessage[]
+  placements       Placement[]
+  /// v2 phase 6a: windows the client offered, free text per window.
+  requestedWindows Json?
+  thread           MessageThread?
 
   @@index([clientId, status])
   @@index([status, createdAt])
@@ -1164,7 +1180,10 @@ model Interview {
   createdAt          DateTime         @default(now())
   updatedAt          DateTime         @updatedAt
 
-  placements Placement[]
+  placements   Placement[]
+  /// v2 phase 6a: participants (labels and roles only) and whether the link came from the provider or was pasted by staff.
+  participants Json?
+  linkSource   MeetingLinkSource?
 
   @@index([interviewRequestId])
   @@index([agentProfileId])
@@ -2369,6 +2388,8 @@ model Agency {
   registrationDetails         String?
   billingEmail                String?
   disclosureGrants            DisclosureGrant[]
+  threads                     MessageThread[]
+  bypassReports               BypassReport[]
 
   @@index([status])
   @@index([ownerUserId])
@@ -2972,4 +2993,155 @@ model DisclosureGrant {
   @@index([clientId, scope])
   @@index([agentProfileId])
   @@index([agencyId])
+}
+
+// ---------------------------------------------------------------------------
+// v2 phase 6a: communication and enforcement
+// ---------------------------------------------------------------------------
+
+enum ThreadKind {
+  INTERVIEW_REQUEST
+  PARTNER_ENQUIRY
+  SUPPORT
+  /// Reserved for phase 6b.
+  OPPORTUNITY
+  SUBMISSION
+}
+
+enum ThreadStatus {
+  OPEN
+  CLOSED
+}
+
+enum MeetingLinkSource {
+  PROVIDER
+  STAFF_PASTED
+}
+
+enum AliasOwnerType {
+  AGENT_PROFILE
+  AGENCY
+  CLIENT
+}
+
+enum BypassReportStatus {
+  REPORTED
+  UNDER_REVIEW
+  WARNING_ISSUED
+  RESTRICTED
+  SUSPENDED
+  CLOSED
+}
+
+/// One mediated conversation. Clients, agents, and Partner Teams never address each other directly: Hirewise is always in the thread.
+model MessageThread {
+  id                  String            @id @default(cuid())
+  kind                ThreadKind
+  subjectType         String?
+  subjectId           String?
+  interviewRequestId  String?           @unique
+  interviewRequest    InterviewRequest? @relation(fields: [interviewRequestId], references: [id], onDelete: Cascade)
+  clientId            String?
+  client              Client?           @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  agencyId            String?
+  agency              Agency?           @relation(fields: [agencyId], references: [id], onDelete: Cascade)
+  agentProfileId      String?
+  agentProfile        AgentProfile?     @relation(fields: [agentProfileId], references: [id], onDelete: Cascade)
+  title               String
+  status              ThreadStatus      @default(OPEN)
+  assignedStaffUserId String?
+  assignedStaff       User?             @relation("ThreadStaff", fields: [assignedStaffUserId], references: [id])
+  lastMessageAt       DateTime?
+  createdAt           DateTime          @default(now())
+  closedAt            DateTime?
+  messages            Message[]
+
+  @@index([clientId, status])
+  @@index([agencyId, status])
+  @@index([agentProfileId, status])
+  @@index([kind, status])
+}
+
+model Message {
+  id            String            @id @default(cuid())
+  threadId      String
+  thread        MessageThread     @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  authorUserId  String
+  author        User              @relation("MessageAuthor", fields: [authorUserId], references: [id])
+  authorRole    RoleKey
+  /// What recipients see. When masked, the contact details are replaced by "[removed]".
+  body          String
+  /// The text as typed, kept only when masking changed it. Staff only.
+  originalBody  String?
+  findings      String[]          @default([])
+  visibleTo     MessageVisibility @default(ALL)
+  heldForReview Boolean           @default(false)
+  maskedAt      DateTime?
+  releasedById  String?
+  releasedAt    DateTime?
+  blockedAt     DateTime?
+  createdAt     DateTime          @default(now())
+
+  @@index([threadId, createdAt])
+  @@index([heldForReview, createdAt])
+}
+
+/// Platform addresses shown in place of real ones. Routing is a design for inbound email; outbound uses them as Reply-To once enabled.
+model EmailAlias {
+  id            String         @id @default(cuid())
+  alias         String         @unique
+  ownerType     AliasOwnerType
+  ownerId       String
+  routingTarget String?
+  active        Boolean        @default(true)
+  createdAt     DateTime       @default(now())
+
+  @@unique([ownerType, ownerId])
+}
+
+/// "Report Direct Contact / Bypass Attempt". A case, never an automatic sanction.
+model BypassReport {
+  id                  String              @id @default(cuid())
+  reporterUserId      String
+  reporter            User                @relation("BypassReporter", fields: [reporterUserId], references: [id])
+  reporterRole        RoleKey
+  reportedUserId      String?
+  reportedUser        User?               @relation("BypassReported", fields: [reportedUserId], references: [id])
+  reportedAgencyId    String?
+  reportedAgency      Agency?             @relation(fields: [reportedAgencyId], references: [id])
+  reportedClientId    String?
+  reportedClient      Client?             @relation(fields: [reportedClientId], references: [id])
+  relatedType         String?
+  relatedId           String?
+  description         String
+  evidenceDocumentIds String[]            @default([])
+  status              BypassReportStatus  @default(REPORTED)
+  assignedToUserId    String?
+  assignedTo          User?               @relation("BypassAssignee", fields: [assignedToUserId], references: [id])
+  decisionNotes       String?
+  restrictionEndsAt   DateTime?
+  decidedById         String?
+  decidedAt           DateTime?
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
+  events              BypassReportEvent[]
+
+  @@index([status, createdAt])
+  @@index([reportedUserId])
+  @@index([reportedAgencyId])
+  @@index([reportedClientId])
+}
+
+/// Append-only case history.
+model BypassReportEvent {
+  id         String              @id @default(cuid())
+  reportId   String
+  report     BypassReport        @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  fromStatus BypassReportStatus?
+  toStatus   BypassReportStatus
+  byUserId   String?
+  note       String?
+  createdAt  DateTime            @default(now())
+
+  @@index([reportId, createdAt])
 }

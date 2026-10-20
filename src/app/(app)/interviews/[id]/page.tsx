@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { ReportBypassForm } from "@/components/communication/Forms";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { ArrowLeft, Video, CalendarPlus } from "lucide-react";
@@ -74,7 +75,7 @@ export default async function InterviewRequestPage({ params }: { params: Promise
               )}
             </Card>
           </div>
-          <Card title="Messages with Hirewise"><MessageThread requestId={r.id} messages={messages} audience="AGENT" closed={closed} /></Card>
+          <Card title="Messages with Hirewise" description="Contact details, links, and rate talk are removed automatically; Hirewise relays what is needed."><MessageThread requestId={r.id} messages={messages} audience="AGENT" closed={closed} /><div className="mt-4"><ReportBypassForm relatedType="InterviewRequest" relatedId={r.id} compact /></div></Card>
         </div>
       </>
     );
@@ -123,7 +124,7 @@ export default async function InterviewRequestPage({ params }: { params: Promise
             {!closed && !["COMPLETED", "CLIENT_DECISION_PENDING"].includes(r.status) && <div className="mt-4"><WorkflowButton requestId={r.id} op="CANCEL" label="Cancel request" variant="outline" withReason /></div>}
           </Card>
         </div>
-        <Card title="Messages with Hirewise"><MessageThread requestId={r.id} messages={messages} audience="CLIENT" closed={closed} /></Card>
+        <Card title="Messages with Hirewise" description="Contact details, links, and rate talk are removed automatically; Hirewise relays what is needed."><MessageThread requestId={r.id} messages={messages} audience="CLIENT" closed={closed} /><div className="mt-4"><ReportBypassForm relatedType="InterviewRequest" relatedId={r.id} compact /></div></Card>
       </div>
     </>
   );

@@ -7,6 +7,7 @@ import { postMessage, listMessages, reviewHeldMessage, listHeldMessages } from "
 import { reserveForClient, expireReservations, extendReservation, releaseReservation, AlreadyReservedError } from "@/server/services/reservation.service";
 import { listPlacementsForClient, listPlacementsForAgent, listPlacementsForStaff } from "@/server/services/placement.service";
 import { makeActor } from "@/server/auth/actor";
+import { setSetting } from "@/server/services/setting.service";
 import { ForbiddenError, NotFoundError } from "@/server/policies/authorize";
 import { runWorkerOnce } from "@/server/jobs/worker";
 import { ConsoleEmailChannel, setEmailChannelForTests } from "@/server/adapters/email";
@@ -112,6 +113,8 @@ describe("interview request lifecycle (Sections 5.4, 8.5)", () => {
   });
 
   it("a client message with a phone number is held, flagged, and hidden from the agent; Sales can release it", async () => {
+    // Phase 6a: masking is the default; this scenario exercises the BLOCK setting.
+    await setSetting(db, makeActor("SUPER_ADMIN", { userId: "admin_1" }), "messaging", { contactDetails: "BLOCK", flagRateTalk: true });
     const r = await postMessage(db, clientA(), ids.requestId, "Great, can Maria text me at +1 555 010 0199 before the call?");
     expect(r.held).toBe(true);
     expect(r.reasons).toContain("phone number");
@@ -131,12 +134,13 @@ describe("interview request lifecycle (Sections 5.4, 8.5)", () => {
     expect(a.held).toBe(false);
     expect(a.rateTalk).toBe(true);
     expect(await db.activityFlag.count({ where: { userId: ids.agent1User, rule: "RATE_DISCUSSION_IN_MESSAGE" } })).toBe(1);
+    await setSetting(db, makeActor("SUPER_ADMIN", { userId: "admin_1" }), "messaging", { contactDetails: "MASK", flagRateTalk: true });
   });
 
   it("scheduling creates interviews, sets availability to INTERVIEWING, queues reminders, and discloses the company to the candidate", async () => {
     const when = new Date(Date.now() + 3 * 86_400_000).toISOString();
-    await expect(scheduleInterviews(db, makeActor("OPERATIONS"), ids.requestId, { timezone: "America/Los_Angeles", items: [{ agentProfileId: ids.agent1, scheduledAt: when, durationMin: 30, meetingLink: "https://meet.example/abc" }] })).rejects.toThrow(ForbiddenError);
-    await scheduleInterviews(db, sales(), ids.requestId, { timezone: "America/Los_Angeles", items: [{ agentProfileId: ids.agent1, scheduledAt: when, durationMin: 30, meetingLink: "https://meet.example/abc" }, { agentProfileId: ids.agent2, scheduledAt: when, durationMin: 30, meetingLink: "" }] });
+    await expect(scheduleInterviews(db, makeActor("OPERATIONS"), ids.requestId, { timezone: "America/Los_Angeles", items: [{ agentProfileId: ids.agent1, scheduledAt: when, durationMin: 30, meetingLink: "https://zoom.us/j/abc" }] })).rejects.toThrow(ForbiddenError);
+    await scheduleInterviews(db, sales(), ids.requestId, { timezone: "America/Los_Angeles", items: [{ agentProfileId: ids.agent1, scheduledAt: when, durationMin: 30, meetingLink: "https://zoom.us/j/abc" }, { agentProfileId: ids.agent2, scheduledAt: when, durationMin: 30, meetingLink: "" }] });
     const r = await getRequest(db, sales(), ids.requestId);
     expect(r.request.status).toBe("SCHEDULED");
     const staff = r.request as { interviews: Array<{ id: string; agentProfileId: string }>; candidates: Array<{ legalName: string | null }> };

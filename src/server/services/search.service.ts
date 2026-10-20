@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { contactAliasFor } from "@/server/services/alias.service";
 import type { PrismaClient } from "@/server/db/types";
 import type { Actor } from "@/server/auth/actor";
 import { ForbiddenError, NotFoundError } from "@/server/policies/authorize";
@@ -130,7 +131,7 @@ export async function getCandidateForClient(db: PrismaClient, actor: Actor, agen
   const audience: Audience = opts.previewAsClient ? "CLIENT" : audienceFor(actor);
   // Phase 5: the legal name only through an active AGENT_IDENTITY grant for this client; media only with approved client-safe rows.
   const disclosed = access.clientId ? (await agentIdentityDisclosedTo(db, access.clientId)).has(p.id) : false;
-  const view = toCandidateClientView(p, { audience, legalName: disclosed ? p.privateContact?.fullLegalName ?? null : null, clientSafe: audience === "CLIENT" ? (await clientSafeContextFor(db, [p.id])).get(p.id) : undefined, agencyNames: audience === "CLIENT" ? await agencyNameReplacements(db) : undefined });
+  const view = toCandidateClientView(p, { audience, legalName: disclosed ? p.privateContact?.fullLegalName ?? null : null, clientSafe: audience === "CLIENT" ? (await clientSafeContextFor(db, [p.id])).get(p.id) : undefined, agencyNames: audience === "CLIENT" ? await agencyNameReplacements(db) : undefined, contactAlias: audience === "CLIENT" ? await contactAliasFor(db, "AGENT_PROFILE", p.id) : null });
   let shortlisted = false;
   if (access.clientId) {
     await shortlistRepository.recordView(db, access.clientId, p.id);

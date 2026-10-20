@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { contactAliasFor } from "@/server/services/alias.service";
 import type { Db, PrismaClient } from "@/server/db/types";
 import type { Actor } from "@/server/auth/actor";
 import { authorize, ForbiddenError, NotFoundError } from "@/server/policies/authorize";
@@ -57,7 +58,7 @@ export function assertNoClientFacingKeys(raw: Record<string, unknown>) {
 
 async function teamView(db: Db, team: PartnerTeamRecord, disclosed: boolean): Promise<PartnerTeamClientView> {
   const members = await partnerRepository.memberStats(db, team.id);
-  return toPartnerTeamClientView(team, computeTeamStats(members), disclosed ? await partnerRepository.findById(db, team.id).then((a) => (a ? { name: a.name } : null)) : null);
+  return toPartnerTeamClientView(team, computeTeamStats(members), disclosed ? await partnerRepository.findById(db, team.id).then((a) => (a ? { name: a.name } : null)) : null, await contactAliasFor(db, "AGENCY", team.id));
 }
 
 /** Partner Teams a client may browse. Staff with marketplace access see the same list. */

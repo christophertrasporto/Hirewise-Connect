@@ -296,7 +296,7 @@ export async function createInterviewRequestAction(_prev: ActionResult, fd: Form
     const actor = await requireActor();
     id = await createInterviewRequest(prisma, actor, interviewRequestSchema.parse({
       candidateIds: formList(fd, "candidateIds"), requirementId: formString(fd, "requirementId"), preferredDate: formString(fd, "preferredDate"), preferredTime: formString(fd, "preferredTime"),
-      timezone: formString(fd, "timezone"), notes: formString(fd, "notes"), role: formString(fd, "role"), schedule: formString(fd, "schedule"), targetStartDate: formString(fd, "targetStartDate"),
+      timezone: formString(fd, "timezone"), notes: formString(fd, "notes"), requestedWindows: formString(fd, "requestedWindows"), role: formString(fd, "role"), schedule: formString(fd, "schedule"), targetStartDate: formString(fd, "targetStartDate"),
     }));
   } catch (e) {
     return toActionError(e);
@@ -341,7 +341,7 @@ export async function scheduleInterviewsAction(_prev: ActionResult, fd: FormData
   try {
     const actor = await requireActor();
     const agentIds = formList(fd, "agentProfileId");
-    const items = agentIds.map((agentProfileId) => ({ agentProfileId, scheduledAt: formString(fd, `scheduledAt:${agentProfileId}`), durationMin: formString(fd, `durationMin:${agentProfileId}`) || "30", meetingLink: formString(fd, `meetingLink:${agentProfileId}`) })).filter((i) => i.scheduledAt);
+    const items = agentIds.map((agentProfileId) => ({ agentProfileId, scheduledAt: formString(fd, `scheduledAt:${agentProfileId}`), durationMin: formString(fd, `durationMin:${agentProfileId}`) || "30", meetingLink: formString(fd, `meetingLink:${agentProfileId}`), participants: formString(fd, `participants:${agentProfileId}`) })).filter((i) => i.scheduledAt);
     await scheduleInterviews(prisma, actor, id, scheduleSchema.parse({ items, timezone: formString(fd, "timezone") }));
     refreshRequest(id);
     return { ok: true };
@@ -373,14 +373,15 @@ export async function clientDecisionAction(_prev: ActionResult, fd: FormData): P
   }
 }
 
-export async function postMessageAction(_prev: ActionResult<{ held: boolean; reasons: string[] }>, fd: FormData): Promise<ActionResult<{ held: boolean; reasons: string[] }>> {
+export async function postMessageAction(_prev: ActionResult<{ held: boolean; masked?: boolean; reasons: string[] }>, fd: FormData): Promise<ActionResult<{ held: boolean; masked?: boolean; reasons: string[] }>> {
   const id = formString(fd, "requestId");
   try {
     const actor = await requireActor();
     const visibleTo = formString(fd, "visibleTo") as "ALL" | "HIREWISE_ONLY" | "CLIENT_AND_HIREWISE" | "AGENT_AND_HIREWISE" | "";
     const r = await postMessage(prisma, actor, id, formString(fd, "body"), visibleTo || undefined);
     refreshRequest(id);
-    return { ok: true, data: { held: r.held, reasons: r.reasons } };
+    revalidatePath("/messages", "layout");
+    return { ok: true, data: { held: r.held, masked: r.masked, reasons: r.reasons } };
   } catch (e) {
     return toActionError(e);
   }
