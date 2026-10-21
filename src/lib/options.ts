@@ -93,6 +93,11 @@ export const RECORDING_KINDS: Array<{ value: "INTRODUCTION" | "COLD_CALL" | "CUS
 ];
 
 export const STATUS_LABELS: Record<string, string> = {
+  // v2 phase 6b: opportunities
+  NOT_SELECTED: "Not selected",
+  ALL_AGENCIES: "All Partner Teams and direct talent",
+  SELECTED_AGENCIES: "Selected Partner Teams",
+  DIRECT_ONLY: "Hirewise Direct talent only",
   // v2 phase 6a: communication and enforcement
   MEETING_LINK_REFUSED: "Meeting link refused",
   WARNING_ISSUED: "Warning issued",

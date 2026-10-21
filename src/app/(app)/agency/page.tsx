@@ -1,4 +1,6 @@
 import type { Metadata } from "next";
+import { agencyReport } from "@/server/services/agency-report.service";
+import { listOpportunitiesForAgency } from "@/server/services/opportunity.service";
 import Link from "next/link";
 import { Users, GraduationCap, Briefcase, Handshake, Armchair } from "lucide-react";
 import { prisma } from "@/server/db/client";
@@ -13,13 +15,16 @@ export const metadata: Metadata = { title: "My agency" };
 export default async function AgencyOverviewPage() {
   const actor = await requireActor();
   const [agency, agents, seats] = await Promise.all([myAgency(prisma, actor), actor.permissions.has("agency.team.read") ? agencyAgents(prisma, actor) : Promise.resolve([]), seatSummary(prisma, actor)]);
+  // v2 phase 6b: opportunities, training, and placements from the tenant-scoped report.
+  const report = actor.permissions.has("agency.reports.read") ? await agencyReport(prisma, actor).catch(() => null) : null;
+  const openOpportunities = actor.permissions.has("agency.opportunities.read") && agency.status === "ACTIVE" ? await listOpportunitiesForAgency(prisma, actor).then((d) => d.opportunities.length).catch(() => null) : null;
   const available = agents.filter((a) => a.availabilityStatus === "AVAILABLE" || a.availabilityStatus === "AVAILABLE_SOON").length;
   const tiles = [
     { icon: Users, label: "Agents", value: agents.length || agency.agentCount, href: "/agency/team", note: `${available} available` },
     { icon: Armchair, label: "Agent Seats", value: `${seats.totals.used} / ${seats.totals.total}`, href: "/agency/settings#seats", note: seats.plan ? `${seats.totals.available} available${seats.totals.pendingRelease ? ` · ${seats.totals.pendingRelease} pending release` : ""}` : "No plan assigned yet" },
-    { icon: GraduationCap, label: "In training", value: "—", href: "/agency/training", note: "Training marketplace arrives in phase A3" },
-    { icon: Briefcase, label: "Open opportunities", value: "—", href: "/agency/opportunities", note: "Opportunities arrive in phase A4" },
-    { icon: Handshake, label: "Active placements", value: "—", href: "/agency/opportunities", note: "Placements arrive in phase A5" },
+    { icon: GraduationCap, label: "In training", value: report ? report.training.enrolled : "—", href: "/agency/training", note: report ? `${report.training.completed} completed` : "Reports permission needed" },
+    { icon: Briefcase, label: "Open opportunities", value: openOpportunities ?? "—", href: "/agency/opportunities", note: report ? `${report.submissions.pending + report.submissions.approved + report.submissions.interviewing} open submission(s)` : "Shared by Hirewise" },
+    { icon: Handshake, label: "Active placements", value: report ? report.placements.active : "—", href: "/agency/reports", note: report ? `${report.placements.inPipeline} in pipeline` : "Reports permission needed" },
   ];
   return (
     <div className="space-y-5">

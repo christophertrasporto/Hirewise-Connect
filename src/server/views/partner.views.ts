@@ -51,7 +51,13 @@ export function computeTeamStats(members: PartnerMemberStats[]): TeamStats {
   };
 }
 
-export function toPartnerTeamClientView(t: PartnerTeamRecord, stats: TeamStats, disclosed: { name: string } | null = null, contactAlias: string | null = null) {
+/** Decision 7: placements that reached ACTIVE over selected submissions, shown only after five data points. */
+export function performanceRatingFrom(inputs: { selected: number; active: number } | null): number | null {
+  if (!inputs || inputs.selected < 5) return null;
+  return Math.round(Math.min(1, inputs.active / inputs.selected) * 100);
+}
+
+export function toPartnerTeamClientView(t: PartnerTeamRecord, stats: TeamStats, disclosed: { name: string } | null = null, contactAlias: string | null = null, rating: { selected: number; active: number } | null = null) {
   const code = t.clientFacingCode ?? "";
   return {
     code,
@@ -68,8 +74,8 @@ export function toPartnerTeamClientView(t: PartnerTeamRecord, stats: TeamStats, 
     trainingCompletionPct: stats.trainingCompletionPct,
     certifications: stats.certifications,
     avgYearsExperience: stats.avgYearsExperience,
-    /** Filled by Phase 6 reporting. */
-    performanceRating: null as number | null,
+    /** Percent of selected submissions that reached an active placement (phase 6b, decision 7); null below five data points. */
+    performanceRating: performanceRatingFrom(rating),
     /** Only with an active AGENCY_IDENTITY grant for the requesting client. */
     disclosed: disclosed ? { agencyName: disclosed.name } : null,
   };

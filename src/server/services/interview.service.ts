@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { syncSubmissionOutcomeTx } from "@/server/services/opportunity.service";
 import { ensureRequestThread } from "@/server/services/thread.service";
 import { threadRepository } from "@/server/repositories/thread.repository";
 import { isAllowedMeetingHost, meetingHostOf } from "@/lib/meeting-link";
@@ -310,6 +311,7 @@ export async function recordClientDecision(db: PrismaClient, actor: Actor, inter
       // The hold belongs to the account manager, who is warned before it expires.
       await reserveForClient(tx, actor, { agentProfileId: iv.agentProfileId, clientId: r.clientId, placementId: placement.id, reason: `Selected after interview (${r.id})`, system: true, reservedById: r.assignedSalesUserId ?? r.client.accountManagerUserId ?? null });
       await audit(tx, { actor, action: "CANDIDATE_SELECTED", entityType: "Placement", entityId: placement.id, newValue: { agentProfileId: iv.agentProfileId, requestId: r.id } });
+      await syncSubmissionOutcomeTx(tx, actor, { interviewRequestId: r.id, agentProfileId: iv.agentProfileId, decision: "SELECTED" });
       await publishEvent(tx, "CANDIDATE_SELECTED", { placementId: placement.id, requestId: r.id, clientId: r.clientId, companyName: r.client.companyName, agentProfileId: iv.agentProfileId, agentUserId: iv.agentProfile.userId, agentEmail: iv.agentProfile.user.email, displayName: iv.agentProfile.displayName, salesUserId: r.assignedSalesUserId });
     } else if (input.decision === "SECOND_INTERVIEW") {
       await interviewRepository.setCandidateStatus(tx, r.id, iv.agentProfileId, "PENDING");
@@ -317,6 +319,7 @@ export async function recordClientDecision(db: PrismaClient, actor: Actor, inter
       if (r.assignedSalesUserId) await publishEvent(tx, "SECOND_INTERVIEW_REQUESTED", { requestId: r.id, salesUserId: r.assignedSalesUserId, companyName: r.client.companyName, displayName: iv.agentProfile.displayName });
       return;
     } else if (input.decision === "NOT_SELECTED") {
+      await syncSubmissionOutcomeTx(tx, actor, { interviewRequestId: r.id, agentProfileId: iv.agentProfileId, decision: "NOT_SELECTED" });
       await publishEvent(tx, "CANDIDATE_NOT_SELECTED", { requestId: r.id, agentUserId: iv.agentProfile.userId, agentEmail: iv.agentProfile.user.email, role: r.role });
     }
 

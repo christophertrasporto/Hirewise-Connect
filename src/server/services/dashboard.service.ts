@@ -1,4 +1,5 @@
 import type { PrismaClient } from "@/server/db/types";
+import { opportunityRepository } from "@/server/repositories/opportunity.repository";
 import { threadRepository } from "@/server/repositories/thread.repository";
 import { bypassRepository } from "@/server/repositories/bypass.repository";
 import { clientSafeDocumentRepository } from "@/server/repositories/client-safe-document.repository";
@@ -50,6 +51,7 @@ export async function staffDashboard(db: PrismaClient, actor: Actor) {
     requirementsOpen: actor.permissions.has("requirement.read") ? await requirementRepository.countOpen(db) : 0,
     heldMessages: actor.permissions.has("interview.coordinate") || actor.permissions.has("thread.moderate") ? await threadRepository.countHeld(db) : 0,
     bypassOpen: actor.permissions.has("bypass.review") ? await bypassRepository.countOpen(db) : 0,
+    submissionsPending: actor.permissions.has("opportunity.manage") ? await opportunityRepository.countPendingReview(db) : 0,
     documentsWaiting: actor.permissions.has("media.review") ? await clientSafeDocumentRepository.countOpen(db) : 0,
     openFlags: actor.permissions.has("flag.review") ? await flagRepository.countOpen(db) : 0,
     tasks: { queue: queueTasks.map(taskView), mine: myTasks.map(taskView) },

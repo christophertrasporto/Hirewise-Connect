@@ -71,6 +71,11 @@ export type DomainEventMap = {
   THREAD_MESSAGE_POSTED: { threadId: string; messageId: string; kind: string; title: string; authorRole: string; visibleTo: string; recipientUserIds: string[]; preview: string; masked: boolean };
   BYPASS_REPORTED: { reportId: string; reporterRole: string; reporterUserId: string; description: string; reportedLabel: string };
   BYPASS_DECIDED: { reportId: string; status: string; reporterUserId: string; reportedUserId: string | null; reportedOwnerUserId: string | null; note: string | null };
+  // v2 phase 6b: opportunities and submissions
+  OPPORTUNITY_PUBLISHED: { opportunityId: string; title: string; visibility: "ALL_AGENCIES" | "SELECTED_AGENCIES" | "DIRECT_ONLY"; agencyIds: string[] };
+  SUBMISSION_CREATED: { submissionId: string; opportunityId: string; title: string; agencyName: string | null; displayName: string; accountManagerUserId: string | null };
+  SUBMISSION_REVIEWED: { submissionId: string; opportunityId: string; title: string; outcome: "APPROVED_FOR_CLIENT" | "DECLINED"; submitterUserId: string; agentUserId: string; displayName: string; clientUserId: string | null; note: string | null };
+  SUBMISSION_WITHDRAWN: { submissionId: string; opportunityId: string; title: string; displayName: string; agencyName: string | null; reason: string; accountManagerUserId: string | null; byExit: boolean };
   DISCLOSURE_CHANGED: { grantId: string; scope: "AGENT_IDENTITY" | "AGENCY_IDENTITY" | "CLIENT_IDENTITY"; action: "GRANTED" | "REVOKED"; clientId: string; companyName: string; subjectLabel: string; accountManagerUserId: string | null; grantedBy: "STAFF" | "SYSTEM" };
   AGENCY_STATUS_CHANGED: { agencyId: string; agencyName: string; status: "ACTIVE" | "SUSPENDED" | "INACTIVE"; reason: string; ownerUserId: string; ownerEmail: string };
   // Course Builder phase 7
