@@ -1,4 +1,4 @@
-import { LayoutDashboard, UserCircle, Building2, FileSignature, Users, Bell, Film, Search, Bookmark, ClipboardCheck, ListChecks, CalendarClock, ClipboardList, Handshake, Lock, ShieldAlert, GraduationCap, Receipt, BarChart3, LineChart, UserCog, Settings, Rocket, Fingerprint, ShieldCheck, MessageSquare, Flag } from "lucide-react";
+import { LayoutDashboard, UserCircle, Building2, FileSignature, Users, Bell, Film, Search, Bookmark, ClipboardCheck, ListChecks, CalendarClock, ClipboardList, Handshake, Lock, ShieldAlert, GraduationCap, Receipt, BarChart3, LineChart, UserCog, Settings, Rocket, Fingerprint, ShieldCheck, MessageSquare, Flag, Briefcase } from "lucide-react";
 import { prisma } from "@/server/db/client";
 import { requireAuth } from "@/server/auth/require-actor";
 import { can } from "@/server/policies/authorize";
@@ -15,6 +15,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   if (actor.role === "AGENT" && actor.agentProfileId) {
     nav.push({ href: "/profile", label: "My profile", icon: <UserCircle /> });
     nav.push({ href: "/profile/media", label: "Video & voice", icon: <Film /> });
+    nav.push({ href: "/opportunities", label: "Opportunities", icon: <Briefcase /> });
     nav.push({ href: "/interviews", label: "Interviews", icon: <CalendarClock /> });
     nav.push({ href: "/placements", label: "Placements", icon: <Handshake /> });
     nav.push({ href: "/courses", label: "Courses", icon: <GraduationCap /> });
@@ -22,6 +23,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   if (actor.role === "CLIENT") {
     nav.push({ href: "/talent", label: "Find talent", icon: <Search /> });
     nav.push({ href: "/partners", label: "Partner Teams", icon: <ShieldCheck /> });
+    nav.push({ href: "/opportunities", label: "Opportunities", icon: <Briefcase /> });
     nav.push({ href: "/shortlist", label: "Shortlist", icon: <Bookmark /> });
     nav.push({ href: "/interviews", label: "Interviews", icon: <CalendarClock /> });
     nav.push({ href: "/requirements", label: "Requirements", icon: <ClipboardList /> });
@@ -33,6 +35,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   if (can(actor, "agent.read_public") && actor.role !== "COACH") nav.push({ href: "/staff/talent", label: "Talent", icon: <Users /> });
   if (can(actor, "media.review")) nav.push({ href: "/staff/media", label: "Media review", icon: <ClipboardCheck /> });
   if (can(actor, "shortlist.read_all")) nav.push({ href: "/staff/shortlists", label: "Shortlist activity", icon: <ListChecks /> });
+  if (can(actor, "opportunity.manage") || can(actor, "requirement.read")) nav.push({ href: "/staff/opportunities", label: "Opportunities", icon: <Briefcase /> });
   if (can(actor, "interview.read_all")) nav.push({ href: "/staff/interviews", label: "Interview requests", icon: <CalendarClock /> });
   if (can(actor, "placement.read_all")) nav.push({ href: "/staff/placements", label: "Placements", icon: <Handshake /> });
   if (can(actor, "reservation.manage")) nav.push({ href: "/staff/reservations", label: "Reservations", icon: <Lock /> });

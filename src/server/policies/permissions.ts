@@ -108,6 +108,8 @@ export const PERMISSIONS = {
   // Communication and enforcement (v2 phase 6a)
   "thread.moderate": { group: "communication", description: "Read every message thread, release or block held messages, see masked originals, close threads" },
   "bypass.review": { group: "communication", description: "Work bypass report cases: review, warn, restrict, suspend, close" },
+  // Opportunities (v2 phase 6b)
+  "opportunity.manage": { group: "communication", description: "Publish and close opportunities and review submissions" },
   // System
   "audit.read": { group: "system", description: "Read the audit log" },
   "settings.manage": { group: "system", description: "Change platform settings" },
@@ -142,6 +144,7 @@ export const ROLE_PERMISSIONS: Record<RoleKey, readonly PermissionKey[]> = {
   SALES: [
     "thread.moderate",
     "bypass.review",
+    "opportunity.manage",
     "agency.read",
     "agent.read_public",
     "client.read",

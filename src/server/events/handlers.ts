@@ -1,4 +1,6 @@
 import type { Db } from "@/server/db/types";
+import { withdrawSubmissionsOnExit } from "@/server/services/opportunity.service";
+import { agencyRepository } from "@/server/repositories/agency.repository";
 import { ensureMediaRowById, ensureProfileRow, ensureCertificateRow } from "@/server/services/client-safe-document.service";
 import type { DomainEventMap, DomainEventType } from "./events";
 import { notifyUser } from "@/server/services/notification.service";
@@ -6,6 +8,12 @@ import { userRepository } from "@/server/repositories/user.repository";
 import { taskRepository } from "@/server/repositories/task.repository";
 
 export type EventHandler<T extends DomainEventType> = (db: Db, payload: DomainEventMap[T]) => Promise<void>;
+
+/** Owner user ids of active agencies, or of the given agencies only. */
+async function agencyOwnerIds(db: Db, agencyIds: string[] | null): Promise<string[]> {
+  const rows = await agencyRepository.listAgencies(db, { status: "ACTIVE" });
+  return rows.filter((a) => !agencyIds || agencyIds.includes(a.id)).map((a) => a.ownerUserId);
+}
 
 async function notifyStaff(db: Db, roles: Array<"SUPER_ADMIN" | "ADMIN" | "SALES" | "RECRUITER" | "OPERATIONS">, n: { type: string; title: string; body: string; dedupeKey: string; email?: boolean }) {
   const staff = await userRepository.idsByRole(db, roles);
@@ -175,6 +183,35 @@ export const EVENT_HANDLERS: { [T in DomainEventType]: EventHandler<T> } = {
     for (const id of recipients) await notifyUser(db, { userId: id, type: "MESSAGE_POSTED", title: "New message on an interview request", body: p.preview, dedupeKey: `MSG:${p.messageId}:${id}` });
   },
 
+  // v2 phase 6b: opportunities and submissions
+  OPPORTUNITY_PUBLISHED: async (db, p) => {
+    const owners = p.visibility === "DIRECT_ONLY" ? [] : await agencyOwnerIds(db, p.visibility === "SELECTED_AGENCIES" ? p.agencyIds : null);
+    for (const id of owners) await notifyUser(db, { userId: id, type: "OPPORTUNITY_PUBLISHED", title: `New opportunity: ${p.title}`, body: "Review the role under My agency → Opportunities and submit eligible agents.", dedupeKey: `OPP:${p.opportunityId}:${id}` });
+  },
+
+  SUBMISSION_CREATED: async (db, p) => {
+    const body = `${p.displayName}${p.agencyName ? ` from ${p.agencyName}` : " (direct)"} was submitted for ${p.title}. Review it under Opportunities.`;
+    if (p.accountManagerUserId) await notifyUser(db, { userId: p.accountManagerUserId, type: "SUBMISSION_CREATED", title: "Submission to review", body, dedupeKey: `SUB:${p.submissionId}:am` });
+    else await notifyStaff(db, ["SALES"], { type: "SUBMISSION_CREATED", title: "Submission to review", body, dedupeKey: `SUB:${p.submissionId}` });
+    const existing = await taskRepository.findOpenByRelated(db, "REVIEW_SUBMISSION", "Submission", p.submissionId);
+    if (!existing) await taskRepository.create(db, { type: "REVIEW_SUBMISSION", title: `Review submission: ${p.displayName} for ${p.title}`, assigneeUserId: p.accountManagerUserId ?? undefined, queueRole: p.accountManagerUserId ? undefined : "SALES", dueAt: new Date(Date.now() + 2 * 24 * 60 * 60_000), relatedType: "Submission", relatedId: p.submissionId });
+  },
+
+  SUBMISSION_REVIEWED: async (db, p) => {
+    const ok = p.outcome === "APPROVED_FOR_CLIENT";
+    await notifyUser(db, { userId: p.submitterUserId, type: "SUBMISSION_REVIEWED", title: ok ? `${p.displayName} approved for ${p.title}` : `${p.displayName} not approved for ${p.title}`, body: ok ? "The client can now see the candidate and request an interview." : `${p.note ?? "Hirewise declined the submission."}`, dedupeKey: `SUBR:${p.submissionId}:submitter` });
+    if (p.agentUserId !== p.submitterUserId) await notifyUser(db, { userId: p.agentUserId, type: "SUBMISSION_REVIEWED", title: ok ? `You were put forward for ${p.title}` : `Update on ${p.title}`, body: ok ? "Hirewise approved the submission; the client may request an interview." : "Hirewise did not take this submission forward.", dedupeKey: `SUBR:${p.submissionId}:agent` });
+    if (ok && p.clientUserId) await notifyUser(db, { userId: p.clientUserId, type: "SUBMISSION_REVIEWED", title: `New candidate for ${p.title}`, body: "A candidate was approved for your opportunity. Open it to review and request an interview.", dedupeKey: `SUBR:${p.submissionId}:client` });
+    await taskRepository.completeByRelated(db, "REVIEW_SUBMISSION", "Submission", p.submissionId);
+  },
+
+  SUBMISSION_WITHDRAWN: async (db, p) => {
+    const body = `${p.displayName}${p.agencyName ? ` (${p.agencyName})` : ""} withdrawn from ${p.title}: ${p.reason}`;
+    if (p.accountManagerUserId) await notifyUser(db, { userId: p.accountManagerUserId, type: "SUBMISSION_WITHDRAWN", title: p.byExit ? "Submission withdrawn after an agency exit" : "Submission withdrawn", body, dedupeKey: `SUBW:${p.submissionId}` });
+    else await notifyStaff(db, ["SALES"], { type: "SUBMISSION_WITHDRAWN", title: p.byExit ? "Submission withdrawn after an agency exit" : "Submission withdrawn", body, dedupeKey: `SUBW:${p.submissionId}` });
+    await taskRepository.completeByRelated(db, "REVIEW_SUBMISSION", "Submission", p.submissionId);
+  },
+
   // v2 phase 6a: mediated threads, bypass cases
   THREAD_MESSAGE_POSTED: async (db, p) => {
     const title = p.kind === "INTERVIEW_REQUEST" ? "New message on an interview request" : p.kind === "PARTNER_ENQUIRY" ? "New message on a Partner Team enquiry" : `New message: ${p.title}`;
@@ -319,6 +356,8 @@ export const EVENT_HANDLERS: { [T in DomainEventType]: EventHandler<T> } = {
     // v2 phase 4: agency-sponsored credentials stop counting; course seats return to the agency.
     const { revokeAgencySponsoredOnExit } = await import("@/server/services/credential.service");
     await revokeAgencySponsoredOnExit(db, { agencyId: p.agencyId, agencyName: p.agencyName, agentProfileId: p.agentProfileId, agentUserId: p.agentUserId, ownerUserId: p.ownerUserId, displayName: p.displayName, membershipId: p.membershipId, reason: p.reason });
+    // v2 phase 6b: the agency's open submissions for the leaving agent are withdrawn.
+    await withdrawSubmissionsOnExit(db, { agentProfileId: p.agentProfileId, agencyId: p.agencyId, agencyName: p.agencyName, displayName: p.displayName, reason: p.reason });
     if (p.agentUserId) await notifyUser(db, { userId: p.agentUserId, type: "AGENCY_EXIT_COMPLETED", title: `Your membership of ${p.agencyName} has ended`, body: "Your profile is now a former agency profile. Agency-sponsored training and certifications stop counting for platform use; independent reapplication opens in the next phase.", dedupeKey: `EXITDONE:${p.membershipId}` });
     await notifyUser(db, { userId: p.ownerUserId, type: "AGENCY_EXIT_COMPLETED", title: `${p.displayName} left ${p.agencyName}`, body: `${p.reason}. Their Agent Seat is released per your seat release rule.`, dedupeKey: `EXITDONEO:${p.membershipId}` });
   },

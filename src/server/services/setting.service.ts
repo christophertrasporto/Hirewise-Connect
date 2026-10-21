@@ -98,6 +98,8 @@ export const SETTING_SCHEMAS = {
   meetings: z.object({ allowedHosts: z.array(z.string().trim().min(3)).default(["meet.hirewise.example", "zoom.us", "meet.google.com", "teams.microsoft.com", "teams.live.com"]), requireProvider: z.boolean().default(false) }).default(() => ({ allowedHosts: ["meet.hirewise.example", "zoom.us", "meet.google.com", "teams.microsoft.com", "teams.live.com"], requireProvider: false })),
   /** v2 phase 6a: email aliases. Inbound routing stays off until the email provider can deliver to the webhook. */
   email: z.object({ aliasDomain: z.string().trim().min(3).default("hirewiseconnect.com"), inboundEnabled: z.boolean().default(false) }).default(() => ({ aliasDomain: "hirewiseconnect.com", inboundEnabled: false })),
+  /** v2 phase 6b: submission eligibility (decision 6). */
+  opportunities: z.object({ requireActiveCredentials: z.boolean().default(true), maxSubmissionsPerAgency: z.number().int().min(1).max(50).default(5) }).default(() => ({ requireActiveCredentials: true, maxSubmissionsPerAgency: 5 })),
   /** Section 8.8 thresholds. */
   profileViewBurstPerHour: z.number().int().positive().default(60),
   shortlistChurnPerDay: z.number().int().positive().default(12),

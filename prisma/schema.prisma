@@ -428,6 +428,8 @@ model User {
   bypassReportsFiled        BypassReport[]             @relation("BypassReporter")
   bypassReportsAgainst      BypassReport[]             @relation("BypassReported")
   bypassReportsAssigned     BypassReport[]             @relation("BypassAssignee")
+  opportunitiesPublished    Opportunity[]              @relation("OpportunityPublisher")
+  submissionsMade           Submission[]               @relation("SubmissionSubmitter")
 
   @@index([roleId])
   @@index([status])
@@ -511,6 +513,7 @@ model Client {
   disclosureGrants  DisclosureGrant[]
   threads           MessageThread[]
   bypassReports     BypassReport[]
+  opportunities     Opportunity[]
 
   @@index([status])
   @@index([accountManagerUserId])
@@ -574,6 +577,7 @@ model ClientRequirement {
   createdAt           DateTime           @default(now())
   updatedAt           DateTime           @updatedAt
   interviewRequests   InterviewRequest[]
+  opportunity         Opportunity?
 
   @@index([clientId])
   @@index([status])
@@ -665,6 +669,7 @@ model AgentProfile {
   clientSafeDocuments   ClientSafeDocument[]
   disclosureGrants      DisclosureGrant[]
   threads               MessageThread[]
+  submissions           Submission[]
 
   @@index([status])
   @@index([userId])
@@ -1137,6 +1142,7 @@ model InterviewRequest {
   /// v2 phase 6a: windows the client offered, free text per window.
   requestedWindows Json?
   thread           MessageThread?
+  submissions      Submission[]
 
   @@index([clientId, status])
   @@index([status, createdAt])
@@ -2390,6 +2396,8 @@ model Agency {
   disclosureGrants            DisclosureGrant[]
   threads                     MessageThread[]
   bypassReports               BypassReport[]
+  opportunityShares           OpportunityAgency[]
+  submissions                 Submission[]
 
   @@index([status])
   @@index([ownerUserId])
@@ -3144,4 +3152,108 @@ model BypassReportEvent {
   createdAt  DateTime            @default(now())
 
   @@index([reportId, createdAt])
+}
+
+// ---------------------------------------------------------------------------
+// v2 phase 6b: opportunities and submissions
+// ---------------------------------------------------------------------------
+
+enum OpportunityStatus {
+  DRAFT
+  OPEN
+  INTERVIEWING
+  FILLED
+  CLOSED
+}
+
+enum OpportunityVisibility {
+  /// Every active agency plus direct talent.
+  ALL_AGENCIES
+  /// Only the agencies listed in OpportunityAgency.
+  SELECTED_AGENCIES
+  /// Hirewise Direct and independent talent only.
+  DIRECT_ONLY
+}
+
+enum OpportunitySubmissionStatus {
+  PENDING_REVIEW
+  APPROVED_FOR_CLIENT
+  DECLINED
+  WITHDRAWN
+  INTERVIEWING
+  SELECTED
+  NOT_SELECTED
+}
+
+/// A client requirement published by Hirewise to agencies and direct talent, with the client masked (phase 5 labels).
+model Opportunity {
+  id                String                @id @default(cuid())
+  requirementId     String                @unique
+  requirement       ClientRequirement     @relation(fields: [requirementId], references: [id], onDelete: Cascade)
+  clientId          String
+  client            Client                @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  title             String
+  roleSummary       String
+  /// "Healthcare client, United States": what agencies and talent see instead of the company.
+  maskedClientLabel String
+  skills            String[]              @default([])
+  software          String[]              @default([])
+  industry          String?
+  experienceLevel   ExperienceLevel?
+  schedule          String?
+  timezone          String?
+  startDate         DateTime?
+  headcount         Int                   @default(1)
+  visibility        OpportunityVisibility @default(ALL_AGENCIES)
+  status            OpportunityStatus     @default(OPEN)
+  publishedById     String
+  publishedBy       User                  @relation("OpportunityPublisher", fields: [publishedById], references: [id])
+  publishedAt       DateTime              @default(now())
+  closedAt          DateTime?
+  closedReason      String?
+  createdAt         DateTime              @default(now())
+  updatedAt         DateTime              @updatedAt
+  agencies          OpportunityAgency[]
+  submissions       Submission[]
+
+  @@index([status, publishedAt])
+  @@index([clientId])
+}
+
+model OpportunityAgency {
+  opportunityId String
+  opportunity   Opportunity @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
+  agencyId      String
+  agency        Agency      @relation(fields: [agencyId], references: [id], onDelete: Cascade)
+  createdAt     DateTime    @default(now())
+
+  @@id([opportunityId, agencyId])
+  @@index([agencyId])
+}
+
+/// An agency (or direct talent) putting an agent forward. Hirewise reviews before the client sees the candidate.
+model Submission {
+  id                 String                      @id @default(cuid())
+  opportunityId      String
+  opportunity        Opportunity                 @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
+  agentProfileId     String
+  agentProfile       AgentProfile                @relation(fields: [agentProfileId], references: [id], onDelete: Cascade)
+  agencyId           String?
+  agency             Agency?                     @relation(fields: [agencyId], references: [id])
+  submittedById      String
+  submittedBy        User                        @relation("SubmissionSubmitter", fields: [submittedById], references: [id])
+  note               String?
+  status             OpportunitySubmissionStatus @default(PENDING_REVIEW)
+  reviewNote         String?
+  reviewedById       String?
+  reviewedAt         DateTime?
+  withdrawnReason    String?
+  interviewRequestId String?
+  interviewRequest   InterviewRequest?           @relation(fields: [interviewRequestId], references: [id])
+  createdAt          DateTime                    @default(now())
+  updatedAt          DateTime                    @updatedAt
+
+  @@index([opportunityId, status])
+  @@index([agencyId, status])
+  @@index([agentProfileId])
 }

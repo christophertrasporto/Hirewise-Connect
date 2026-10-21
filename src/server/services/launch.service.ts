@@ -155,6 +155,7 @@ export const SETTING_META: Record<SettingKey, { label: string; help: string; kin
   onboardingWelcomeVideo: { label: "Welcome video (onboarding)", help: "Configured under Staff → Academy → Onboarding; shown here read-only.", kind: "json" },
   identity: { label: "Identity and duplicate detection", help: "Fresh profile on rejoining an agency, phone matching, emailing the existing address on a duplicate sign-up, continuation link validity (Identity phase 1).", kind: "json" },
   terms: { label: "Unified terms", help: "Whether staff accounts must also accept the Terms & Platform Agreement (off by default to avoid locking out the admin on deploy).", kind: "json" },
+  opportunities: { label: "Opportunities and submissions", help: "Whether a submitted agent needs an active certification or final assessment, and how many open submissions an agency may hold per opportunity (v2 phase 6b).", kind: "json" },
   messaging: { label: "Platform messaging", help: "MASK delivers messages with contact details replaced by [removed] and raises a flag; BLOCK holds them for Sales review as before (v2 phase 6a).", kind: "json" },
   meetings: { label: "Interview meeting links", help: "Hosts staff may paste interview links from; the configured provider is always allowed. Other hosts are refused and flagged (v2 phase 6a).", kind: "json" },
   email: { label: "Email aliases", help: "Alias domain shown to clients and whether inbound routing to threads is enabled (needs an inbound webhook from the email provider) (v2 phase 6a).", kind: "json" },
