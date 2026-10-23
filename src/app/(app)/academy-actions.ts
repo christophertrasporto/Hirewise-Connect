@@ -398,6 +398,7 @@ export async function saveTemplateAction(_prev: ActionResult, fd: FormData): Pro
       requiresCoachReview: fd.get("requiresCoachReview") === "on",
       minResultLabelRank: formString(fd, "minResultLabelRank"),
       isActive: fd.get("isActive") === "on",
+      skillId: formString(fd, "skillId"),
     });
     await saveTemplate(prisma, actor, input);
     revalidatePath("/staff/academy", "layout");

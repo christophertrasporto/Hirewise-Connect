@@ -183,6 +183,15 @@ export const EVENT_HANDLERS: { [T in DomainEventType]: EventHandler<T> } = {
     for (const id of recipients) await notifyUser(db, { userId: id, type: "MESSAGE_POSTED", title: "New message on an interview request", body: p.preview, dedupeKey: `MSG:${p.messageId}:${id}` });
   },
 
+  // Skills system
+  SKILL_TAG_REQUESTED: async (db, p) => {
+    await notifyStaff(db, ["ADMIN"], { type: "SKILL_TAG_REQUESTED", title: `Tag requested: #${p.text.replace(/\s+/g, "")}`, body: "Decide it under Academy → Skill tags → Requests.", dedupeKey: `TAGREQ:${p.requestId}` });
+  },
+  SKILL_TAG_REQUEST_DECIDED: async (db, p) => {
+    const copy = p.decision === "APPROVE" ? "Your requested tag was added to the list and to your profile." : p.decision === "MERGE" ? "Your request matched an existing tag, which was added to your profile." : `Your tag request was not added.${p.note ? ` Note: ${p.note}` : ""}`;
+    await notifyUser(db, { userId: p.requesterUserId, type: "SKILL_TAG_REQUEST_DECIDED", title: `Tag request: ${p.text}`, body: copy, dedupeKey: `TAGDEC:${p.requestId}` });
+  },
+
   // v2 phase 6b: opportunities and submissions
   OPPORTUNITY_PUBLISHED: async (db, p) => {
     const owners = p.visibility === "DIRECT_ONLY" ? [] : await agencyOwnerIds(db, p.visibility === "SELECTED_AGENCIES" ? p.agencyIds : null);

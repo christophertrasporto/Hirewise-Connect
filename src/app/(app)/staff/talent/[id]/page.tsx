@@ -95,7 +95,7 @@ export default async function StaffAgentPage({ params }: { params: Promise<{ id:
 
           <Card title="Skills and software">
             <div className="flex flex-wrap gap-1.5">
-              {a.skills.map((s) => <span key={s.skillId} className="rounded-full bg-ink-100 px-2.5 py-1 text-[12.5px] font-medium text-ink-700">{s.name} · {labelFor(s.level)}{s.yearsUsed ? ` · ${s.yearsUsed}y` : ""}</span>)}
+              {a.skills.map((s) => <span key={s.skillId} className="rounded-full bg-ink-100 px-2.5 py-1 text-[12.5px] font-medium text-ink-700">{s.hashtag}{s.verified ? " · verified" : ""}</span>)}
               {a.skills.length === 0 && <span className="text-[13.5px] text-ink-400">None</span>}
             </div>
             <div className="mt-3 flex flex-wrap gap-1.5">

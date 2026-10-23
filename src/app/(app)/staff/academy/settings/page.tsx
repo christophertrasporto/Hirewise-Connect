@@ -8,13 +8,15 @@ import { getRequirements, LEVELS } from "@/server/services/verification.service"
 import { Card } from "@/components/app/ui";
 import { TemplateForm, LabelForm, RequirementForm } from "@/components/academy/SettingsForms";
 import { labelFor } from "@/lib/options";
+import { skillsRepository } from "@/server/repositories/skills.repository";
 
 export const metadata: Metadata = { title: "Academy · Settings" };
 
 export default async function StaffAcademySettingsPage() {
   const actor = await requireActor();
   authorize(actor, "verification.manage");
-  const [templates, labels, requirements] = await Promise.all([listTemplates(prisma), listLabels(prisma), getRequirements(prisma, actor)]);
+  const [templates, labels, requirements, tags] = await Promise.all([listTemplates(prisma), listLabels(prisma), getRequirements(prisma, actor), skillsRepository.listTags(prisma, true)]);
+  const tagOpts = tags.map((s) => ({ id: s.id, hashtag: s.hashtag ?? `#${s.name.replace(/\s+/g, "")}` }));
 
   return (
     <div className="space-y-5">
@@ -33,12 +35,12 @@ export default async function StaffAcademySettingsPage() {
           {templates.map((t) => (
             <details key={t.id} className="rounded-2xl border border-ink-100 p-4" open={false}>
               <summary className="cursor-pointer text-[14.5px] font-semibold text-ink-900">{t.name} <span className="font-normal text-ink-400">· {t.validityMonths ? `${t.validityMonths} months` : "no expiry"} · {t.requiresCoachReview ? "coach review" : "exam only"}{!t.isActive ? " · inactive" : ""}</span></summary>
-              <div className="mt-4"><TemplateForm t={t} /></div>
+              <div className="mt-4"><TemplateForm t={t} tags={tagOpts} /></div>
             </details>
           ))}
           <details className="rounded-2xl border border-dashed border-ink-200 p-4">
             <summary className="cursor-pointer text-[14.5px] font-semibold text-brand-700">+ New template</summary>
-            <div className="mt-4"><TemplateForm /></div>
+            <div className="mt-4"><TemplateForm tags={tagOpts} /></div>
           </details>
         </div>
       </Card>

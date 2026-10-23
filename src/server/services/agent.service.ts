@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { skillsRepository } from "@/server/repositories/skills.repository";
+import { recomputeSkillVerification } from "@/server/services/skill-verification.service";
 import { clientLabelFrom } from "@/lib/client-redaction";
 import { joinAgencyTx } from "@/server/services/seat.service";
 import { acceptTermsTx, requireTermsAccepted } from "@/server/services/terms.service";
@@ -80,7 +82,8 @@ export const professionalSchema = z.object({
 });
 
 export const skillsSchema = z.object({
-  skills: z.array(z.object({ skillId: z.string().min(1), level: z.enum(["BASIC", "INTERMEDIATE", "ADVANCED", "EXPERT"]), yearsUsed: z.coerce.number().int().min(0).max(50).optional() })).min(3, "Add at least three skills.").max(25),
+  /** Skills system: declared tags only; verification is derived and never part of this input. */
+  skills: z.array(z.string().min(1)).min(3, "Add at least three skill tags.").max(25),
   software: z.array(z.object({ softwareId: z.string().min(1), level: z.enum(["BASIC", "INTERMEDIATE", "ADVANCED", "EXPERT"]) })).max(25),
 });
 
@@ -225,12 +228,14 @@ export async function updateProfessional(db: PrismaClient, actor: Actor, input: 
   return recomputeCompletion(db, p.id);
 }
 
-export async function updateSkills(db: PrismaClient, actor: Actor, input: z.infer<typeof skillsSchema>) {
+export async function updateSkills(db: PrismaClient, actor: Actor, raw: z.input<typeof skillsSchema>) {
+  const input = skillsSchema.parse(raw);
   const p = await loadOwn(db, actor);
-  const validSkills = new Set((await taxonomyRepository.skillIdsExist(db, input.skills.map((s) => s.skillId))).map((s) => s.id));
+  const validSkills = new Set((await taxonomyRepository.skillIdsExist(db, input.skills)).map((s) => s.id));
   const validSoftware = new Set((await taxonomyRepository.softwareIdsExist(db, input.software.map((s) => s.softwareId))).map((s) => s.id));
-  await agentRepository.replaceSkills(db, p.id, input.skills.filter((s) => validSkills.has(s.skillId)).map((s) => ({ skillId: s.skillId, level: s.level, yearsUsed: s.yearsUsed ?? null })));
+  await skillsRepository.replaceDeclaredTags(db, p.id, [...new Set(input.skills.filter((id) => validSkills.has(id)))]);
   await agentRepository.replaceSoftware(db, p.id, input.software.filter((s) => validSoftware.has(s.softwareId)));
+  await recomputeSkillVerification(db, p.id);
   return recomputeCompletion(db, p.id);
 }
 

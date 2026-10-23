@@ -92,7 +92,24 @@ export const RECORDING_KINDS: Array<{ value: "INTRODUCTION" | "COLD_CALL" | "CUS
   { value: "CUSTOM_CAMPAIGN", label: "Custom campaign sample" },
 ];
 
+/** Skills system: how a tag earns Verified by Hirewise. */
+export const SKILL_VERIFICATION_MODES = [
+  { value: "NONE", label: "Not verifiable" },
+  { value: "ANY_COURSE", label: "Any mapped course" },
+  { value: "REQUIRED_COURSE", label: "One required course" },
+  { value: "PATHWAY", label: "A pathway" },
+] as const;
+export const modeLabel = (m: string) => SKILL_VERIFICATION_MODES.find((x) => x.value === m)?.label ?? m;
+
 export const STATUS_LABELS: Record<string, string> = {
+  // Skills system
+  ANY_COURSE: "Any mapped course",
+  REQUIRED_COURSE: "One required course",
+  PATHWAY: "A pathway",
+  DECLARED: "Declared",
+  VERIFIED: "Verified",
+  CERTIFIED: "Certified",
+  MERGED: "Merged",
   // v2 phase 6b: opportunities
   NOT_SELECTED: "Not selected",
   ALL_AGENCIES: "All Partner Teams and direct talent",

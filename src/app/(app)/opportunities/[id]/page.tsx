@@ -43,7 +43,7 @@ export default async function ClientOpportunityPage({ params }: { params: Promis
         </div>
         <div className="space-y-5">
           <Card title="Request interviews" description="Hirewise schedules on a Hirewise-owned link and relays everything."><RequestInterviewsFromOpportunityForm opportunityId={o.id} candidates={approved.map((c) => ({ id: c.id, name: c.name, primaryRole: c.primaryRole }))} defaultTimezone={client.timezone ?? "America/Los_Angeles"} /></Card>
-          <Card title="Role"><p className="whitespace-pre-line text-[14px] text-ink-700">{o.roleSummary}</p>{o.skills.length > 0 && <p className="mt-2 text-[12.5px] text-ink-500">Skills: {o.skills.join(", ")}</p>}</Card>
+          <Card title="Role"><p className="whitespace-pre-line text-[14px] text-ink-700">{o.roleSummary}</p>{o.skills.length > 0 && <p className="mt-2 text-[12.5px] text-ink-500">Skills: {o.skills.join(", ")}</p>}{o.requirements.length > 0 && <p className="mt-1 text-[12.5px] text-ink-500">Requirements: {o.requirements.map((r) => r.label).join(", ")}</p>}</Card>
         </div>
       </div>
     </>

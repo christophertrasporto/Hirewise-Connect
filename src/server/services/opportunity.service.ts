@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { seedRequirementsFromSkills, unmetRequirements, opportunityRequirements } from "@/server/services/skills.service";
 import type { Db, PrismaClient } from "@/server/db/types";
 import type { Actor } from "@/server/auth/actor";
 import { systemActor } from "@/server/auth/actor";
@@ -84,6 +85,7 @@ export async function publishOpportunity(db: PrismaClient, actor: Actor, raw: z.
     });
     if (req.status === "OPEN") await requirementRepository.setStatus(tx, req.id, "IN_PROGRESS");
     await audit(tx, { actor, action: "OPPORTUNITY_PUBLISHED", entityType: "Opportunity", entityId: o.id, newValue: { requirementId: req.id, visibility: input.visibility, agencyIds: o.agencies.map((a) => a.agencyId), headcount: o.headcount } });
+    await seedRequirementsFromSkills(tx, o.id, req.skills);
     await publishEvent(tx, "OPPORTUNITY_PUBLISHED", { opportunityId: o.id, title: o.title, visibility: o.visibility, agencyIds: o.agencies.map((a) => a.agencyId) });
     return toOpportunityStaffView(o);
   });
@@ -115,7 +117,7 @@ export async function getOpportunityForStaff(db: PrismaClient, actor: Actor, id:
   if (!actor.permissions.has("opportunity.manage")) authorize(actor, "requirement.read");
   const o = await opportunityRepository.findById(db, id);
   if (!o) throw new NotFoundError();
-  return toOpportunityStaffView(o);
+  return { ...toOpportunityStaffView(o), requirements: await opportunityRequirements(db, o.id) };
 }
 
 export async function reviewSubmission(db: PrismaClient, actor: Actor, submissionId: string, decision: "APPROVE" | "DECLINE", note?: string) {
@@ -157,7 +159,15 @@ export async function listOpportunitiesForAgency(db: PrismaClient, actor: Actor)
   const [rows, members] = await Promise.all([opportunityRepository.listForAgency(db, agencyId), opportunityRepository.agencyMembersForSubmission(db, agencyId)]);
   const eligibleMembers = await Promise.all(members.filter((m) => m.status === "ACTIVE").map(async (m) => ({ id: m.agentProfile.id, displayName: m.agentProfile.displayName, primaryRole: m.agentProfile.primaryRole, availabilityStatus: m.agentProfile.availabilityStatus, verificationLevel: m.agentProfile.verificationLevel, activeCertifications: m.agentProfile._count.certifications, finalAssessments: m.agentProfile._count.assessments, ...(await eligibilityFor(db, { status: m.agentProfile.status, availabilityStatus: m.agentProfile.availabilityStatus, certifications: m.agentProfile._count.certifications, assessments: m.agentProfile._count.assessments }, "AGENCY")) })));
   const settings = await getSetting(db, "opportunities");
-  return { opportunities: rows.map((o) => toOpportunityAgencyView(o, agencyId)), members: eligibleMembers, maxSubmissionsPerAgency: settings.maxSubmissionsPerAgency };
+  // Skills system: per opportunity, which requirements each eligible member still misses.
+  const requirements: Record<string, Awaited<ReturnType<typeof opportunityRequirements>>> = {};
+  const unmet: Record<string, Record<string, string[]>> = {};
+  for (const o of rows) {
+    requirements[o.id] = await opportunityRequirements(db, o.id);
+    unmet[o.id] = {};
+    if (requirements[o.id].length) for (const m of eligibleMembers) unmet[o.id][m.id] = await unmetRequirements(db, m.id, o.id);
+  }
+  return { opportunities: rows.map((o) => ({ ...toOpportunityAgencyView(o, agencyId), requirements: requirements[o.id] })), members: eligibleMembers, unmet, maxSubmissionsPerAgency: settings.maxSubmissionsPerAgency };
 }
 
 export async function agencySubmissions(db: PrismaClient, actor: Actor, agencyId?: string) {
@@ -207,6 +217,8 @@ export async function submitAgent(db: PrismaClient, actor: Actor, raw: z.input<t
   }
   const eligibility = await eligibilityFor(db, { status: facts.status, availabilityStatus: facts.availabilityStatus, certifications: facts._count.certifications, assessments: facts._count.assessments }, agencyId ? "AGENCY" : "DIRECT");
   if (!eligibility.eligible) throw new Error(eligibility.reason ?? "Not eligible.");
+  const missing = await unmetRequirements(db, facts.id, o.id);
+  if (missing.length) throw new Error(`Requirements not met: ${missing.join("; ")}.`);
   if (await opportunityRepository.openSubmission(db, o.id, facts.id)) throw new Error("This agent already has an open submission on this opportunity.");
   if (agencyId) {
     const open = await opportunityRepository.countOpenForAgency(db, o.id, agencyId);
@@ -274,7 +286,7 @@ export async function getOpportunityForClient(db: PrismaClient, actor: Actor, id
   if (!access.clientId) throw new ForbiddenError("Only clients see their opportunities");
   const o = await opportunityRepository.findById(db, id);
   if (!o || o.clientId !== access.clientId) throw new NotFoundError();
-  return { opportunity: toOpportunityClientView(o), candidates: await clientCandidates(db, o) };
+  return { opportunity: { ...toOpportunityClientView(o), requirements: await opportunityRequirements(db, o.id) }, candidates: await clientCandidates(db, o) };
 }
 
 /** The client requests interviews with approved candidates on their opportunity (no shortlist needed). */

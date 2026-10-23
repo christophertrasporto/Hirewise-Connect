@@ -3,11 +3,11 @@
 import { useActionState } from "react";
 import { saveTemplateAction, saveLabelAction, saveRequirementAction } from "@/app/(app)/academy-actions";
 import { idle } from "@/server/http/action-result";
-import { Field, Input, Textarea, Checkbox, SubmitButton, FormAlert } from "@/components/ui/Form";
+import { Field, Input, Textarea, Checkbox, Select, SubmitButton, FormAlert } from "@/components/ui/Form";
 
-type Template = { id?: string; name: string; description: string | null; validityMonths: number | null; requiresCompletion: boolean; minExamScore: number | null; requiresCoachReview: boolean; minResultLabelRank: number | null; isActive: boolean };
+type Template = { id?: string; name: string; description: string | null; validityMonths: number | null; requiresCompletion: boolean; minExamScore: number | null; requiresCoachReview: boolean; minResultLabelRank: number | null; isActive: boolean; skillId?: string | null };
 
-export function TemplateForm({ t }: { t?: Template }) {
+export function TemplateForm({ t, tags = [] }: { t?: Template; tags?: Array<{ id: string; hashtag: string }> }) {
   const [state, action] = useActionState(saveTemplateAction, idle);
   const fe = state.fieldErrors ?? {};
   return (
@@ -20,6 +20,14 @@ export function TemplateForm({ t }: { t?: Template }) {
         <Field label="Min exam score %" htmlFor={`me-${t?.id ?? "new"}`} error={fe.minExamScore}><Input id={`me-${t?.id ?? "new"}`} name="minExamScore" type="number" min={0} max={100} defaultValue={t?.minExamScore ?? ""} className="h-10 text-[14px]" /></Field>
         <Field label="Min coach result rank" htmlFor={`mr-${t?.id ?? "new"}`} error={fe.minResultLabelRank}><Input id={`mr-${t?.id ?? "new"}`} name="minResultLabelRank" type="number" min={0} max={10} defaultValue={t?.minResultLabelRank ?? ""} className="h-10 text-[14px]" /></Field>
       </div>
+      {tags.length > 0 && (
+        <Field label="Validates skill tag" htmlFor={`sk-${t?.id ?? "new"}`} hint="When this certification is revoked or expires, the tag's Verified by Hirewise badge is cleared.">
+          <Select id={`sk-${t?.id ?? "new"}`} name="skillId" defaultValue={t?.skillId ?? ""} className="h-10 text-[14px]">
+            <option value="">None</option>
+            {tags.map((s) => <option key={s.id} value={s.id}>{s.hashtag}</option>)}
+          </Select>
+        </Field>
+      )}
       <div className="flex flex-wrap gap-4">
         <Checkbox name="requiresCompletion" defaultChecked={t?.requiresCompletion ?? true} label="Requires course completion" />
         <Checkbox name="requiresCoachReview" defaultChecked={t?.requiresCoachReview ?? false} label="Requires coach recommendation" />

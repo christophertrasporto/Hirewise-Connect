@@ -430,6 +430,7 @@ model User {
   bypassReportsAssigned     BypassReport[]             @relation("BypassAssignee")
   opportunitiesPublished    Opportunity[]              @relation("OpportunityPublisher")
   submissionsMade           Submission[]               @relation("SubmissionSubmitter")
+  skillTagRequests          SkillTagRequest[]          @relation("SkillTagRequester")
 
   @@index([roleId])
   @@index([status])
@@ -698,12 +699,27 @@ model AgentPrivateContact {
 }
 
 model Skill {
-  id        String       @id @default(cuid())
-  name      String       @unique
-  category  String
-  isActive  Boolean      @default(true)
-  createdAt DateTime     @default(now())
-  agents    AgentSkill[]
+  id                      String                   @id @default(cuid())
+  name                    String                   @unique
+  category                String
+  isActive                Boolean                  @default(true)
+  createdAt               DateTime                 @default(now())
+  agents                  AgentSkill[]
+  /// Skills system: the tag as shown (#ColdCalling) and how it becomes verified. Verification is derived, never set by hand.
+  slug                    String?                  @unique
+  hashtag                 String?
+  description             String?
+  verificationMode        SkillVerificationMode    @default(NONE)
+  requiredCourseId        String?
+  requiredCourse          AcademyCourse?           @relation("SkillRequiredCourse", fields: [requiredCourseId], references: [id])
+  requiredPathwayId       String?
+  requiredPathway         SkillPathway?            @relation(fields: [requiredPathwayId], references: [id])
+  minAssessmentScore      Int                      @default(80)
+  courses                 CourseSkillTag[]
+  certificationTemplates  CertificationTemplate[]
+  opportunityRequirements OpportunityRequirement[]
+  requestsMerged          SkillTagRequest[]        @relation("SkillTagRequestMerged")
+  requestsCreated         SkillTagRequest[]        @relation("SkillTagRequestCreated")
 }
 
 model AgentSkill {
@@ -711,15 +727,15 @@ model AgentSkill {
   agentProfile   AgentProfile @relation(fields: [agentProfileId], references: [id], onDelete: Cascade)
   skillId        String
   skill          Skill        @relation(fields: [skillId], references: [id])
-  level          SkillLevel   @default(BASIC)
-  yearsUsed      Int?
-  /// Set only by assessment or admin; agents cannot self-verify.
-  verifiedById   String?
+  /// Derived by skill-verification.service only; a user action never writes it.
+  verifiedAt     DateTime?
+  verifiedVia    String?
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
 
   @@id([agentProfileId, skillId])
   @@index([skillId])
+  @@index([skillId, verifiedAt])
 }
 
 model Experience {
@@ -1391,15 +1407,18 @@ model AcademyCourse {
   createdAt                         DateTime               @default(now())
   updatedAt                         DateTime               @updatedAt
 
-  coaches         CourseCoach[]
-  enrollments     CourseEnrollment[]
-  exam            Exam?
-  assessments     Assessment[]
-  modules         CourseModule[]
-  prerequisites   CoursePrerequisite[] @relation("CoursePrerequisiteOf")
-  prerequisiteFor CoursePrerequisite[] @relation("CoursePrerequisiteRequires")
-  progress        CourseProgress[]
-  questions       Question[]
+  coaches           CourseCoach[]
+  enrollments       CourseEnrollment[]
+  exam              Exam?
+  assessments       Assessment[]
+  modules           CourseModule[]
+  prerequisites     CoursePrerequisite[] @relation("CoursePrerequisiteOf")
+  prerequisiteFor   CoursePrerequisite[] @relation("CoursePrerequisiteRequires")
+  progress          CourseProgress[]
+  questions         Question[]
+  skillTags         CourseSkillTag[]
+  pathwayCourses    PathwayCourse[]
+  requiredForSkills Skill[]              @relation("SkillRequiredCourse")
 
   @@index([status, category])
   @@index([ownerCoachUserId])
@@ -1912,8 +1931,12 @@ model CertificationTemplate {
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
 
-  courses        AcademyCourse[]
-  certifications Certification[]
+  courses                 AcademyCourse[]
+  certifications          Certification[]
+  /// Skills system: the tag this certification validates.
+  skillId                 String?
+  skill                   Skill?                   @relation(fields: [skillId], references: [id])
+  opportunityRequirements OpportunityRequirement[]
 }
 
 /// Never agent-writable (INV-I1).
@@ -3187,34 +3210,35 @@ enum OpportunitySubmissionStatus {
 
 /// A client requirement published by Hirewise to agencies and direct talent, with the client masked (phase 5 labels).
 model Opportunity {
-  id                String                @id @default(cuid())
-  requirementId     String                @unique
-  requirement       ClientRequirement     @relation(fields: [requirementId], references: [id], onDelete: Cascade)
+  id                String                   @id @default(cuid())
+  requirementId     String                   @unique
+  requirement       ClientRequirement        @relation(fields: [requirementId], references: [id], onDelete: Cascade)
   clientId          String
-  client            Client                @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  client            Client                   @relation(fields: [clientId], references: [id], onDelete: Cascade)
   title             String
   roleSummary       String
   /// "Healthcare client, United States": what agencies and talent see instead of the company.
   maskedClientLabel String
-  skills            String[]              @default([])
-  software          String[]              @default([])
+  skills            String[]                 @default([])
+  software          String[]                 @default([])
   industry          String?
   experienceLevel   ExperienceLevel?
   schedule          String?
   timezone          String?
   startDate         DateTime?
-  headcount         Int                   @default(1)
-  visibility        OpportunityVisibility @default(ALL_AGENCIES)
-  status            OpportunityStatus     @default(OPEN)
+  headcount         Int                      @default(1)
+  visibility        OpportunityVisibility    @default(ALL_AGENCIES)
+  status            OpportunityStatus        @default(OPEN)
   publishedById     String
-  publishedBy       User                  @relation("OpportunityPublisher", fields: [publishedById], references: [id])
-  publishedAt       DateTime              @default(now())
+  publishedBy       User                     @relation("OpportunityPublisher", fields: [publishedById], references: [id])
+  publishedAt       DateTime                 @default(now())
   closedAt          DateTime?
   closedReason      String?
-  createdAt         DateTime              @default(now())
-  updatedAt         DateTime              @updatedAt
+  createdAt         DateTime                 @default(now())
+  updatedAt         DateTime                 @updatedAt
   agencies          OpportunityAgency[]
   submissions       Submission[]
+  requirements      OpportunityRequirement[]
 
   @@index([status, publishedAt])
   @@index([clientId])
@@ -3256,4 +3280,96 @@ model Submission {
   @@index([opportunityId, status])
   @@index([agencyId, status])
   @@index([agentProfileId])
+}
+
+// ---------------------------------------------------------------------------
+// Skills system: tags, pathways, requirements (docs/plan-skills-tags.md)
+// ---------------------------------------------------------------------------
+
+enum SkillVerificationMode {
+  NONE
+  ANY_COURSE
+  REQUIRED_COURSE
+  PATHWAY
+}
+
+enum RequirementLevel {
+  DECLARED
+  VERIFIED
+  CERTIFIED
+}
+
+enum SkillTagRequestStatus {
+  OPEN
+  APPROVED
+  MERGED
+  REJECTED
+}
+
+model CourseSkillTag {
+  courseId  String
+  course    AcademyCourse @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  skillId   String
+  skill     Skill         @relation(fields: [skillId], references: [id], onDelete: Cascade)
+  createdAt DateTime      @default(now())
+
+  @@id([courseId, skillId])
+  @@index([skillId])
+}
+
+model SkillPathway {
+  id          String          @id @default(cuid())
+  title       String
+  slug        String          @unique
+  description String?
+  isActive    Boolean         @default(true)
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+  courses     PathwayCourse[]
+  skills      Skill[]
+}
+
+model PathwayCourse {
+  pathwayId  String
+  pathway    SkillPathway  @relation(fields: [pathwayId], references: [id], onDelete: Cascade)
+  courseId   String
+  course     AcademyCourse @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  sortOrder  Int           @default(0)
+  isRequired Boolean       @default(true)
+
+  @@id([pathwayId, courseId])
+}
+
+/// What an opportunity demands of a candidate: a declared tag, a verified tag, or a certification.
+model OpportunityRequirement {
+  id                      String                 @id @default(cuid())
+  opportunityId           String
+  opportunity             Opportunity            @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
+  skillId                 String?
+  skill                   Skill?                 @relation(fields: [skillId], references: [id], onDelete: Cascade)
+  certificationTemplateId String?
+  certificationTemplate   CertificationTemplate? @relation(fields: [certificationTemplateId], references: [id], onDelete: Cascade)
+  requiredLevel           RequirementLevel       @default(DECLARED)
+  createdAt               DateTime               @default(now())
+
+  @@index([opportunityId])
+}
+
+/// "Request a tag": the curated list grows only through staff decisions.
+model SkillTagRequest {
+  id                String                @id @default(cuid())
+  text              String
+  requestedById     String
+  requestedBy       User                  @relation("SkillTagRequester", fields: [requestedById], references: [id])
+  status            SkillTagRequestStatus @default(OPEN)
+  note              String?
+  decidedById       String?
+  decidedAt         DateTime?
+  mergedIntoSkillId String?
+  mergedInto        Skill?                @relation("SkillTagRequestMerged", fields: [mergedIntoSkillId], references: [id])
+  createdSkillId    String?
+  createdSkill      Skill?                @relation("SkillTagRequestCreated", fields: [createdSkillId], references: [id])
+  createdAt         DateTime              @default(now())
+
+  @@index([status, createdAt])
 }

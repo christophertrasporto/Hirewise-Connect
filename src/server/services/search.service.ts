@@ -31,6 +31,8 @@ export const searchFiltersSchema = z.object({
   q: z.string().trim().max(120).optional(),
   role: z.string().trim().max(80).optional(),
   skills: z.array(z.string()).max(10).optional(),
+  /** Skills system: restrict tag filters to tags verified through Hirewise training. */
+  verifiedOnly: z.coerce.boolean().optional(),
   software: z.array(z.string()).max(10).optional(),
   industry: z.string().trim().max(80).optional(),
   level: z.array(z.enum(["ENTRY", "JUNIOR", "MID", "SENIOR", "LEAD"])).optional(),
@@ -83,6 +85,7 @@ export async function searchCandidates(db: PrismaClient, actor: Actor, filters: 
     text: filters.q || undefined,
     role: filters.role || undefined,
     skillIds: filters.skills?.length ? filters.skills : undefined,
+    verifiedOnly: filters.verifiedOnly || undefined,
     softwareIds: filters.software?.length ? filters.software : undefined,
     industry: filters.industry || undefined,
     experienceLevels: filters.level?.length ? filters.level : undefined,

@@ -203,7 +203,7 @@ describe("agent registration → profile → submission → review", () => {
     const actor = await resolveActor(db, agentUserId);
     expect(actor.agentProfileId).toBe(agentProfileId);
     const skills = await db.skill.findMany();
-    await updateSkills(db, actor, { skills: [...skills.map((s) => ({ skillId: s.id, level: "ADVANCED" as const, yearsUsed: 2 })), { skillId: "not-a-skill", level: "EXPERT" as const }], software: [] });
+    await updateSkills(db, actor, { skills: [...skills.map((s) => s.id), "not-a-skill"], software: [] });
     const view = await getOwnProfile(db, actor);
     expect(view.skills.length).toBe(3);
     const other = makeActor("AGENT", { userId: "x", agentProfileId: "someone-else" });

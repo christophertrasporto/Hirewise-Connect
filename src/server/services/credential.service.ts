@@ -1,4 +1,5 @@
 import type { Db } from "@/server/db/types";
+import { recomputeSkillVerification } from "@/server/services/skill-verification.service";
 import type { Actor } from "@/server/auth/actor";
 import { systemActor } from "@/server/auth/actor";
 import { trainingRepository } from "@/server/repositories/training.repository";
@@ -54,6 +55,8 @@ export async function revokeAgencySponsoredOnExit(db: Db, p: { agencyId: string;
     for (const s of assignments) await trainingRepository.revokeAssignment(tx, s.id, reason);
     await audit(tx, { actor, action: "CREDENTIALS_REVOKED_ON_EXIT", entityType: "AgentProfile", entityId: p.agentProfileId, newValue: { agencyId: p.agencyId, membershipId: p.membershipId, enrollments: enrollments.map((e) => e.id), certifications: certifications.map((c) => c.id), assessments: assessments.map((a) => a.id), seatsReturned: assignments.length }, reason });
     await recomputeVerification(tx, p.agentProfileId, actor);
+    // Skills system (decision 4): revoked sponsored completions no longer verify tags.
+    await recomputeSkillVerification(tx, p.agentProfileId);
     await publishEvent(tx, "CREDENTIALS_REVOKED", { agencyId: p.agencyId, agencyName: p.agencyName, agentProfileId: p.agentProfileId, agentUserId: p.agentUserId, ownerUserId: p.ownerUserId, displayName: p.displayName, courses: enrollments.map((e) => e.course.title), certifications: certifications.map((c) => c.template.name), assessments: assessments.length, seatsReturned: assignments.length });
   }
   return { enrollments: enrollments.length, certifications: certifications.length, assessments: assessments.length, seatsReturned: assignments.length };

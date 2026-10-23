@@ -13,6 +13,7 @@ export default async function StaffAcademyLayout({ children }: { children: React
     can(actor, "course.manage") ? { href: "/staff/academy/onboarding", label: "Onboarding" } : null,
     can(actor, "certification.review") ? { href: "/staff/academy/certifications", label: "Certifications" } : null,
     can(actor, "verification.manage") ? { href: "/staff/academy/settings", label: "Templates & verification" } : null,
+    can(actor, "skills.manage") ? { href: "/staff/academy/skills", label: "Skill tags" } : null,
   ].filter((t): t is { href: string; label: string } => !!t);
   if (tabs.length === 0) return <Banner tone="warn" title="No access">Your role has no Academy administration permissions.</Banner>;
   return (

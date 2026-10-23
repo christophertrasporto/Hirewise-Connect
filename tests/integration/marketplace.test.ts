@@ -58,7 +58,7 @@ beforeAll(async () => {
       data: {
         userId: u.id, displayName: email.split("@")[0], clientLabel: email.split("@")[0], headline: `Headline for ${email}`, primaryRole: opts.role ?? "Customer Service Representative", status, availabilityStatus: opts.availability ?? "AVAILABLE", timezone: opts.tz ?? "Asia/Manila", verificationLevel: opts.verification ?? "PROFILE_VERIFIED", approvedAt: status === "APPROVED" ? new Date() : undefined, languages: ["English"],
         privateContact: { create: { fullLegalName: email, personalEmail: email, phone: "+63" } },
-        skills: opts.skill ? { create: { skillId: opts.skill, level: "ADVANCED" } } : undefined,
+        skills: opts.skill ? { create: { skillId: opts.skill } } : undefined,
         experiences: { create: { title: "Rep", startDate: new Date("2023-01-01"), isCampaign: true } },
       },
     });

@@ -6,6 +6,8 @@ export type SearchWhere = {
   text?: string;
   role?: string;
   skillIds?: string[];
+  /** Skills system: only tags verified through Hirewise training count. */
+  verifiedOnly?: boolean;
   softwareIds?: string[];
   industry?: string;
   experienceLevels?: ExperienceLevel[];
@@ -95,11 +97,6 @@ export const agentRepository = {
     return db.agentProfile.update({ where: { id }, data: d });
   },
 
-  async replaceSkills(db: Db, id: string, skills: Array<{ skillId: string; level: SkillLevel; yearsUsed: number | null }>) {
-    await db.agentSkill.deleteMany({ where: { agentProfileId: id } });
-    if (skills.length) await db.agentSkill.createMany({ data: skills.map((s) => ({ agentProfileId: id, skillId: s.skillId, level: s.level, yearsUsed: s.yearsUsed ?? undefined })) });
-  },
-
   async replaceSoftware(db: Db, id: string, items: Array<{ softwareId: string; level: SkillLevel }>) {
     await db.softwareExperience.deleteMany({ where: { agentProfileId: id } });
     if (items.length) await db.softwareExperience.createMany({ data: items.map((s) => ({ agentProfileId: id, softwareId: s.softwareId, level: s.level })) });
@@ -170,7 +167,7 @@ export const agentRepository = {
         ...(f.workSetup ? { workSetup: f.workSetup } : {}),
         ...(f.languages?.length ? { languages: { hasEvery: f.languages } } : {}),
         ...(f.minVerification ? { verificationLevel: { in: f.minVerification } } : {}),
-        ...(f.skillIds?.length ? { AND: f.skillIds.map((skillId) => ({ skills: { some: { skillId } } })) } : {}),
+        ...(f.skillIds?.length ? { AND: f.skillIds.map((skillId) => ({ skills: { some: { skillId, ...(f.verifiedOnly ? { verifiedAt: { not: null } } : {}) } } })) } : f.verifiedOnly ? { skills: { some: { verifiedAt: { not: null } } } } : {}),
         ...(f.softwareIds?.length ? { softwareExperiences: { some: { softwareId: { in: f.softwareIds } } } } : {}),
         ...(f.industry ? { industryExperiences: { some: { industry: { equals: f.industry, mode: "insensitive" } } } } : {}),
         ...(f.campaignOnly ? { experiences: { some: { isCampaign: true } } } : {}),

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { recomputeSkillVerification } from "@/server/services/skill-verification.service";
 import { clientLabelFrom } from "@/lib/client-redaction";
 import { inheritedSource } from "@/server/services/credential.service";
 import type { Db, PrismaClient } from "@/server/db/types";
@@ -19,6 +20,8 @@ export const templateSchema = z.object({
   requiresCoachReview: z.coerce.boolean().default(false),
   minResultLabelRank: z.coerce.number().int().min(0).max(10).optional().or(z.literal("")),
   isActive: z.coerce.boolean().default(true),
+  /** Skills system: the tag this certification validates (optional). */
+  skillId: z.string().optional().or(z.literal("")),
 });
 
 export async function listTemplates(db: PrismaClient) {
@@ -37,6 +40,7 @@ export async function saveTemplate(db: PrismaClient, actor: Actor, input: z.infe
       minExamScore: input.minExamScore === "" || input.minExamScore === undefined ? null : input.minExamScore,
       requiresCoachReview: input.requiresCoachReview,
       minResultLabelRank: input.minResultLabelRank === "" || input.minResultLabelRank === undefined ? null : input.minResultLabelRank,
+      skillId: input.skillId || null,
       isActive: input.isActive,
     });
     await audit(tx, { actor, action: "CERTIFICATION_TEMPLATE_CHANGED", entityType: "CertificationTemplate", entityId: row.id, newValue: { name: row.name, validityMonths: row.validityMonths, minExamScore: row.minExamScore, requiresCoachReview: row.requiresCoachReview } });
@@ -94,6 +98,7 @@ export async function issueCertification(db: PrismaClient, actor: Actor, p: { ag
     await audit(tx, { actor, action: "CERTIFICATION_ISSUED", entityType: "Certification", entityId: cert.id, newValue: { templateId: template.id, origin: "ADMIN_ISSUED" }, reason: p.reason });
     await publishEvent(tx, "CERTIFICATION_APPROVED", { certificationId: cert.id, templateName: template.name, agentProfileId: p.agentProfileId, agentUserId: cert.agentProfile.userId, agentEmail: cert.agentProfile.user.email, expiresAt: cert.expiresAt?.toISOString() ?? null });
     await recomputeVerification(tx, p.agentProfileId, actor);
+    await recomputeSkillVerification(tx, p.agentProfileId);
   });
 }
 
@@ -112,6 +117,7 @@ export async function reviewCertification(db: PrismaClient, actor: Actor, id: st
       await audit(tx, { actor, action: "CERTIFICATION_REMOVED", entityType: "Certification", entityId: id, previousValue: { status: "PENDING_REVIEW" }, newValue: { status: "REVOKED" }, reason });
     }
     await recomputeVerification(tx, c.agentProfileId, actor);
+    await recomputeSkillVerification(tx, c.agentProfileId);
   });
 }
 
@@ -125,6 +131,7 @@ export async function revokeCertification(db: PrismaClient, actor: Actor, id: st
     await audit(tx, { actor, action: "CERTIFICATION_REVOKED", entityType: "Certification", entityId: id, reason });
     await publishEvent(tx, "CERTIFICATION_REVOKED", { certificationId: id, templateName: c.template.name, agentUserId: c.agentProfile.userId, agentEmail: c.agentProfile.user.email, reason });
     await recomputeVerification(tx, c.agentProfileId, actor);
+    await recomputeSkillVerification(tx, c.agentProfileId);
   });
 }
 
@@ -142,6 +149,7 @@ export async function expireCertifications(db: PrismaClient, now = new Date()): 
       await certificationRepository.setStatus(tx, c.id, "EXPIRED");
       await audit(tx, { actor: system, action: "CERTIFICATION_EXPIRED", entityType: "Certification", entityId: c.id });
       await recomputeVerification(tx, c.agentProfileId, system);
+      await recomputeSkillVerification(tx, c.agentProfileId);
     });
   }
   const soon = await certificationRepository.expiringBetween(db, now, new Date(now.getTime() + 30 * 86_400_000));

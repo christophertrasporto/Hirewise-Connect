@@ -115,7 +115,7 @@ async function profileLines(db: Db, agentProfileId: string): Promise<PdfLine[] |
     lines.push({ text: "Summary", bold: true, gap: 8 });
     for (const l of wrap(v.summary)) lines.push({ text: l, size: 10 });
   }
-  if (v.skills.length) lines.push({ text: "Skills", bold: true, gap: 8 }, ...wrap(v.skills.map((s) => `${s.name} (${s.level.toLowerCase()})`).join(", ")).map((text) => ({ text, size: 10 })));
+  if (v.skills.length) lines.push({ text: "Skills", bold: true, gap: 8 }, ...wrap(v.skills.map((s) => `${s.hashtag}${s.verified ? " (verified)" : ""}`).join(", ")).map((text) => ({ text, size: 10 })));
   if (v.software.length) lines.push({ text: "Software", bold: true, gap: 6 }, ...wrap(v.software.map((s) => s.name).join(", ")).map((text) => ({ text, size: 10 })));
   if (v.experiences.length) {
     lines.push({ text: "Experience", bold: true, gap: 8 });
