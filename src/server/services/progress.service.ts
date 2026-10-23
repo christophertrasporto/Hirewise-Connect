@@ -1,4 +1,5 @@
 import type { Db } from "@/server/db/types";
+import { recomputeSkillVerification } from "@/server/services/skill-verification.service";
 import type { Actor } from "@/server/auth/actor";
 import { ForbiddenError } from "@/server/policies/authorize";
 import { academyRepository } from "@/server/repositories/academy.repository";
@@ -124,6 +125,8 @@ export async function recalculateCourseProgress(db: Db, courseId: string, agentP
     coachReviewRequired: enrollment.course.requiresCoachReview,
   });
   await evaluateCertification(db, system, { agentProfileId, courseId, templateId: enrollment.course.certificationTemplateId, examScore, assessment: null, completed: true });
+  // Skills system: a completion may verify declared tags.
+  await recomputeSkillVerification(db, agentProfileId);
   return { requiredTotal: required.length, requiredDone, percent, completedNow: true };
 }
 

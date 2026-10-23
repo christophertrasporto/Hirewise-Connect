@@ -3,6 +3,8 @@ import type { Actor } from "@/server/auth/actor";
 import { NotFoundError } from "@/server/policies/authorize";
 import { assertClientOwns } from "@/server/policies/ownership";
 import { requirementRepository } from "@/server/repositories/requirement.repository";
+import { opportunityRepository } from "@/server/repositories/opportunity.repository";
+import { skillsRepository } from "@/server/repositories/skills.repository";
 import { agentRepository } from "@/server/repositories/agent.repository";
 import { shortlistRepository } from "@/server/repositories/shortlist.repository";
 import { taxonomyRepository } from "@/server/repositories/taxonomy.repository";
@@ -127,6 +129,9 @@ export async function matchCandidates(db: PrismaClient, actor: Actor, requiremen
   const req = await requirementRepository.findById(db, requirementId);
   if (!req) throw new NotFoundError();
   assertClientOwns(actor, req, "requirement.read");
+  // Skills system: once the requirement is published as an opportunity, its VERIFIED and CERTIFIED requirements are hard rules (DECLARED stays the soft skills score).
+  const opportunity = await opportunityRepository.findByRequirement(db, req.id);
+  const hardRequirements = opportunity ? (await skillsRepository.requirementsFor(db, opportunity.id)).filter((r) => r.requiredLevel !== "DECLARED") : [];
   const includeSoon = opts.includeSoon ?? true;
   const [weights, hours, rows, skills, software] = await Promise.all([
     getSetting(db, "matchWeights"),
@@ -150,6 +155,10 @@ export async function matchCandidates(db: PrismaClient, actor: Actor, requiremen
       weights,
       { includeSoon, hoursPerMonth: hours },
     );
+    for (const h of hardRequirements) {
+      if (h.requiredLevel === "VERIFIED" && h.skillId && !r.skills.some((s) => s.skillId === h.skillId && s.verifiedAt)) scored.hardFails.push(`${h.skill?.hashtag ?? h.skill?.name ?? "Skill"} must be Verified by Hirewise`);
+      if (h.requiredLevel === "CERTIFIED" && h.certificationTemplateId && !r.certifications.some((c) => c.templateId === h.certificationTemplateId && c.status === "APPROVED")) scored.hardFails.push(`${h.certificationTemplate?.name ?? "Certification"} required`);
+    }
     return { candidate: { ...toCandidateCardView(r, { audience: "STAFF" }), shortlisted: shortlisted.has(r.id) }, score: scored.score, maxScore: scored.maxScore, percent: Math.round((scored.score / scored.maxScore) * 100), reasons: scored.reasons, hardFails: scored.hardFails };
   });
 

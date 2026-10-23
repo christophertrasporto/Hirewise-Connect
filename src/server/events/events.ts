@@ -76,6 +76,9 @@ export type DomainEventMap = {
   SUBMISSION_CREATED: { submissionId: string; opportunityId: string; title: string; agencyName: string | null; displayName: string; accountManagerUserId: string | null };
   SUBMISSION_REVIEWED: { submissionId: string; opportunityId: string; title: string; outcome: "APPROVED_FOR_CLIENT" | "DECLINED"; submitterUserId: string; agentUserId: string; displayName: string; clientUserId: string | null; note: string | null };
   SUBMISSION_WITHDRAWN: { submissionId: string; opportunityId: string; title: string; displayName: string; agencyName: string | null; reason: string; accountManagerUserId: string | null; byExit: boolean };
+  // Skills system
+  SKILL_TAG_REQUESTED: { requestId: string; text: string; requesterUserId: string };
+  SKILL_TAG_REQUEST_DECIDED: { requestId: string; text: string; requesterUserId: string; decision: "APPROVE" | "MERGE" | "REJECT"; note: string | null };
   DISCLOSURE_CHANGED: { grantId: string; scope: "AGENT_IDENTITY" | "AGENCY_IDENTITY" | "CLIENT_IDENTITY"; action: "GRANTED" | "REVOKED"; clientId: string; companyName: string; subjectLabel: string; accountManagerUserId: string | null; grantedBy: "STAFF" | "SYSTEM" };
   AGENCY_STATUS_CHANGED: { agencyId: string; agencyName: string; status: "ACTIVE" | "SUSPENDED" | "INACTIVE"; reason: string; ownerUserId: string; ownerEmail: string };
   // Course Builder phase 7

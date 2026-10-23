@@ -185,7 +185,9 @@ export async function seedFoundation(prisma: PrismaClient): Promise<FoundationId
   // Taxonomies
   const skillIds = new Map<string, string>();
   for (const [name, category] of SKILLS) {
-    const s = await prisma.skill.upsert({ where: { name }, create: { name, category }, update: { category } });
+    const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
+    const hashtag = "#" + name.replace(/[^A-Za-z0-9]+/g, " ").split(" ").filter(Boolean).map((w) => w[0].toUpperCase() + w.slice(1)).join("");
+    const s = await prisma.skill.upsert({ where: { name }, create: { name, category, slug, hashtag }, update: { category, slug, hashtag } });
     skillIds.set(name, s.id);
   }
   const softwareIds = new Map<string, string>();

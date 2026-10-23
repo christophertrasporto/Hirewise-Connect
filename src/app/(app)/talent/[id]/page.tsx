@@ -73,7 +73,7 @@ export default async function CandidatePage({ params, searchParams }: { params: 
         <div className="space-y-5">
           <Card title="Summary"><p className="text-[15px] leading-relaxed whitespace-pre-line text-ink-700">{c.summary ?? "—"}</p></Card>
           <Card title="Skills, software, industries">
-            <div className="flex flex-wrap gap-1.5">{c.skills.map((s) => <span key={s.name} className="rounded-full bg-ink-100 px-2.5 py-1 text-[12.5px] font-medium text-ink-700">{s.name} · {labelFor(s.level)}{s.yearsUsed ? ` · ${s.yearsUsed}y` : ""}{s.verified ? " ✓" : ""}</span>)}</div>
+            <div className="flex flex-wrap gap-1.5">{c.skills.map((s) => <span key={s.name} className="rounded-full bg-ink-100 px-2.5 py-1 text-[12.5px] font-medium text-ink-700">{s.hashtag}{s.verified ? " ✓ Verified by Hirewise" : ""}</span>)}</div>
             <div className="mt-3 flex flex-wrap gap-1.5">{c.software.map((s) => <span key={s.name} className="rounded-full bg-brand-50 px-2.5 py-1 text-[12.5px] font-medium text-brand-700">{s.name} · {labelFor(s.level)}</span>)}</div>
             {c.industries.length > 0 && <p className="mt-3 text-[13.5px] text-ink-500">Industries: {c.industries.map((i) => `${i.industry} (${i.years}y)`).join(", ")}</p>}
           </Card>

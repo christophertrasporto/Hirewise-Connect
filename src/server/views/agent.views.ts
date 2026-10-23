@@ -77,7 +77,7 @@ export function toAgentSelfView(a: AgentSelfRecord) {
     privateContact: a.privateContact
       ? { fullLegalName: a.privateContact.fullLegalName, personalEmail: a.privateContact.personalEmail, phone: a.privateContact.phone, addressLine: a.privateContact.addressLine, hasResume: !!a.privateContact.resumeKey }
       : null,
-    skills: a.skills.map((s) => ({ skillId: s.skillId, name: s.skill.name, category: s.skill.category, level: s.level, yearsUsed: s.yearsUsed, verified: !!s.verifiedById })),
+    skills: a.skills.map((s) => ({ skillId: s.skillId, name: s.skill.name, hashtag: s.skill.hashtag ?? `#${s.skill.name.replace(/\s+/g, "")}`, category: s.skill.category, verified: !!s.verifiedAt, verifiedAt: s.verifiedAt, verifiedVia: s.verifiedVia, verifiable: s.skill.verificationMode !== "NONE" })),
     experiences: a.experiences.map((e) => ({ id: e.id, company: e.company, title: e.title, industry: e.industry, startDate: e.startDate, endDate: e.endDate, description: e.description, isCampaign: e.isCampaign, campaignType: e.campaignType })),
     industries: a.industryExperiences.map((i) => ({ industry: i.industry, years: i.years })),
     software: a.softwareExperiences.map((s) => ({ softwareId: s.softwareId, name: s.software.name, level: s.level })),
@@ -159,7 +159,7 @@ export function toCandidateClientView(a: AgentSelfRecord, opts: CandidateViewOpt
     verificationLevel: a.verificationLevel,
     availabilityStatus: a.availabilityStatus,
     availableFrom: a.availableFrom,
-    skills: a.skills.map((s) => ({ name: s.skill.name, category: s.skill.category, level: s.level, yearsUsed: s.yearsUsed, verified: !!s.verifiedById })),
+    skills: a.skills.map((s) => ({ name: s.skill.name, hashtag: s.skill.hashtag ?? `#${s.skill.name.replace(/\s+/g, "")}`, category: s.skill.category, verified: !!s.verifiedAt })),
     experiences: a.experiences.map((e) => ({ title: e.title, industry: e.industry, startDate: e.startDate, endDate: e.endDate, description: r(e.description), isCampaign: e.isCampaign, campaignType: e.campaignType })),
     industries: a.industryExperiences.map((i) => ({ industry: i.industry, years: i.years })),
     software: a.softwareExperiences.map((s) => ({ name: s.software.name, level: s.level })),
@@ -203,7 +203,8 @@ export function toCandidateCardView(a: AgentSelfRecord, opts: CandidateViewOptio
     availabilityStatus: a.availabilityStatus,
     availableFrom: a.availableFrom,
     approvedAt: a.approvedAt,
-    skills: a.skills.slice(0, 6).map((s) => ({ name: s.skill.name, level: s.level })),
+    skills: a.skills.slice(0, 6).map((s) => ({ name: s.skill.name, hashtag: s.skill.hashtag ?? `#${s.skill.name.replace(/\s+/g, "")}`, verified: !!s.verifiedAt })),
+    verifiedSkillCount: a.skills.filter((s) => !!s.verifiedAt).length,
     industries: a.industryExperiences.map((i) => i.industry),
     hasVideo: a.videos.some((v) => v.status === "APPROVED" && (!client || !!safe?.videoIds.has(v.id))),
     approvedRecordings: a.recordings.filter((x) => x.status === "APPROVED" && (!client || !!safe?.recordingIds.has(x.id))).length,

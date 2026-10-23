@@ -25,7 +25,7 @@ export default async function TalentSearchPage({ searchParams }: { searchParams:
   const parsed = searchFiltersSchema.safeParse({
     q: str(sp.q), role: str(sp.role), skills: arr(sp.skills), software: arr(sp.software), industry: str(sp.industry), level: arr(sp.level),
     availability: arr(sp.availability), setup: str(sp.setup), languages: arr(sp.languages), verification: str(sp.verification),
-    campaign: str(sp.campaign), tzWithin: str(sp.tzWithin), sort: str(sp.sort),
+    campaign: str(sp.campaign), verifiedOnly: str(sp.verifiedOnly), tzWithin: str(sp.tzWithin), sort: str(sp.sort),
     certifications: arr(sp.certifications), courses: arr(sp.courses), minAssessment: str(sp.minAssessment),
   });
   const filters = parsed.success ? parsed.data : {};

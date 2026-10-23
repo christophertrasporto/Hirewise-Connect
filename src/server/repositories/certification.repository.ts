@@ -20,8 +20,8 @@ export const certificationRepository = {
     return db.certificationTemplate.findUnique({ where: { id } });
   },
 
-  upsertTemplate(db: Db, d: { id?: string; name: string; description: string | null; validityMonths: number | null; requiresCompletion: boolean; minExamScore: number | null; requiresCoachReview: boolean; minResultLabelRank: number | null; isActive: boolean }) {
-    const data = { name: d.name, description: d.description ?? undefined, validityMonths: d.validityMonths, requiresCompletion: d.requiresCompletion, minExamScore: d.minExamScore, requiresCoachReview: d.requiresCoachReview, minResultLabelRank: d.minResultLabelRank, isActive: d.isActive };
+  upsertTemplate(db: Db, d: { id?: string; name: string; description: string | null; validityMonths: number | null; requiresCompletion: boolean; minExamScore: number | null; requiresCoachReview: boolean; minResultLabelRank: number | null; isActive: boolean; skillId?: string | null }) {
+    const data = { name: d.name, description: d.description ?? undefined, validityMonths: d.validityMonths, requiresCompletion: d.requiresCompletion, minExamScore: d.minExamScore, requiresCoachReview: d.requiresCoachReview, minResultLabelRank: d.minResultLabelRank, isActive: d.isActive, skillId: d.skillId === undefined ? undefined : d.skillId };
     return d.id ? db.certificationTemplate.update({ where: { id: d.id }, data }) : db.certificationTemplate.create({ data });
   },
 

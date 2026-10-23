@@ -22,7 +22,7 @@ export default async function ComparePage({ searchParams }: { searchParams: Prom
     { label: "Timezone", render: (c) => c.timezone ?? "—" },
     { label: "Setup · shift", render: (c) => `${c.workSetup ? labelFor(c.workSetup) : "—"}${c.preferredShift ? ` · ${c.preferredShift}` : ""}` },
     { label: "Languages", render: (c) => c.languages.join(", ") || "—" },
-    { label: "Skills", render: (c) => <span className="text-[13px]">{c.skills.map((s) => `${s.name} (${labelFor(s.level)})`).join(", ") || "—"}</span> },
+    { label: "Skills", render: (c) => <span className="text-[13px]">{c.skills.map((s) => `${s.hashtag}${s.verified ? " ✓" : ""}`).join(", ") || "—"}</span> },
     { label: "Software", render: (c) => <span className="text-[13px]">{c.software.map((s) => s.name).join(", ") || "—"}</span> },
     { label: "Industries", render: (c) => c.industries.map((i) => `${i.industry} ${i.years}y`).join(", ") || "—" },
     { label: "Campaign experience", render: (c) => (c.experiences.some((e) => e.isCampaign) ? "Yes" : "No") },

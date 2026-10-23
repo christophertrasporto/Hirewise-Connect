@@ -21,7 +21,11 @@ export default async function AgencyOpportunitiesPage() {
   }
   const submissions = await agencySubmissions(prisma, actor);
   const canSubmit = actor.permissions.has("agency.submissions.create") && actor.agency?.status === "ACTIVE";
-  const members = data.members.map((m) => ({ id: m.id, displayName: m.displayName, primaryRole: m.primaryRole, eligible: m.eligible, reason: m.reason }));
+  // Skills system: a member who misses a hard requirement is listed but cannot be submitted to that opportunity.
+  const membersFor = (oppId: string) => data.members.map((m) => {
+    const missing = data.unmet[oppId]?.[m.id] ?? [];
+    return { id: m.id, displayName: m.displayName, primaryRole: m.primaryRole, eligible: m.eligible && missing.length === 0, reason: m.reason ?? (missing.length ? missing.join(", ") : null) };
+  });
   return (
     <div className="space-y-5">
       <Card title={`Open opportunities (${data.opportunities.length})`} description={`Clients are shown as a masked label until Hirewise schedules an interview. Up to ${data.maxSubmissionsPerAgency} open submissions per opportunity. Only agents with an active membership, an approved profile, availability, and an active credential can be submitted.`}>
@@ -31,9 +35,9 @@ export default async function AgencyOpportunitiesPage() {
               <div key={o.id} className="rounded-2xl border border-ink-100 p-4">
                 <div className="flex items-start justify-between gap-3"><div><p className="text-[15px] font-bold text-ink-900">{o.title}</p><p className="text-[12.5px] text-ink-500">{o.clientLabel} · {o.schedule ?? "schedule to be confirmed"}{o.timezone ? ` · ${o.timezone}` : ""} · {o.openSlots} open slot(s)</p></div><StatusBadge status={o.status} /></div>
                 <p className="mt-2 text-[13.5px] text-ink-700">{o.roleSummary.slice(0, 280)}{o.roleSummary.length > 280 ? "…" : ""}</p>
-                {o.skills.length > 0 && <div className="mt-2 flex flex-wrap gap-1">{o.skills.map((s) => <span key={s} className="rounded-full bg-ink-100 px-2 py-0.5 text-[11.5px] font-medium text-ink-700">{s}</span>)}</div>}
+                {o.requirements.length > 0 ? <div className="mt-2 flex flex-wrap gap-1">{o.requirements.map((r) => <span key={r.id} className={`rounded-full px-2 py-0.5 text-[11.5px] font-medium ${r.requiredLevel === "DECLARED" ? "bg-ink-100 text-ink-700" : "bg-brand-50 text-brand-700 ring-1 ring-inset ring-brand-200"}`}>{r.label}</span>)}</div> : o.skills.length > 0 && <div className="mt-2 flex flex-wrap gap-1">{o.skills.map((s) => <span key={s} className="rounded-full bg-ink-100 px-2 py-0.5 text-[11.5px] font-medium text-ink-700">{s}</span>)}</div>}
                 {o.mySubmissions.length > 0 && <ul className="mt-3 space-y-1 text-[13px]">{o.mySubmissions.map((s) => <li key={s.id} className="flex items-center justify-between gap-2"><span>{s.displayName} · {labelFor(s.status)}{s.reviewNote ? <span className="text-ink-500"> · {s.reviewNote}</span> : null}</span>{canSubmit && (s.status === "PENDING_REVIEW" || s.status === "APPROVED_FOR_CLIENT") && <WithdrawSubmissionForm submissionId={s.id} />}</li>)}</ul>}
-                {canSubmit && <div className="mt-3"><SubmitAgentForm opportunityId={o.id} members={members} disabledReason={members.length === 0 ? "No active members to submit yet." : null} /></div>}
+                {canSubmit && <div className="mt-3"><SubmitAgentForm opportunityId={o.id} members={membersFor(o.id)} disabledReason={data.members.length === 0 ? "No active members to submit yet." : null} /></div>}
               </div>
             ))}
           </div>

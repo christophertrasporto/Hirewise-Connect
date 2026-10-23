@@ -44,6 +44,7 @@ export function SearchFilters({ filters, skills, software, hasClientTimezone, ce
             </Select>
             <div className="mt-2 space-y-1">{EXPERIENCE_LEVELS.map((l) => <Checkbox key={l.value} name="level" value={l.value} defaultChecked={filters.level?.includes(l.value)} label={l.label} />)}</div>
             <div className="mt-2"><Checkbox name="campaign" value="true" defaultChecked={!!filters.campaign} label="Campaign experience only" /></div>
+            <div className="mt-2"><Checkbox name="verifiedOnly" value="true" defaultChecked={!!filters.verifiedOnly} label="Only skills Verified by Hirewise" /></div>
           </Group>
           <Group title="Availability, setup, verification">
             <div className="space-y-1">
@@ -93,7 +94,7 @@ export function SearchFilters({ filters, skills, software, hasClientTimezone, ce
 }
 
 function hasAdvanced(f: Filters) {
-  return !!(f.certifications?.length || f.courses?.length || f.minAssessment) || !!(f.skills?.length || f.software?.length || f.industry || f.level?.length || f.availability?.length || f.setup || f.verification || f.languages?.length || f.campaign || f.tzWithin);
+  return !!(f.certifications?.length || f.courses?.length || f.minAssessment) || !!(f.skills?.length || f.software?.length || f.industry || f.level?.length || f.availability?.length || f.setup || f.verification || f.languages?.length || f.campaign || f.verifiedOnly || f.tzWithin);
 }
 
 function Group({ title, children }: { title: string; children: React.ReactNode }) {

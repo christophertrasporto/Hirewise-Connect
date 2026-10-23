@@ -85,6 +85,9 @@ export async function runMaintenance(prisma: PrismaClient, now = new Date()): Pr
   // v2 phase 6a: every approved agent and active agency holds an email alias.
   const { allocateMissingAliases } = await import("@/server/services/alias.service");
   await allocateMissingAliases(prisma);
+  // Skills system: derived verification safety net.
+  const { recomputeAllSkillVerifications } = await import("@/server/services/skill-verification.service");
+  await recomputeAllSkillVerifications(prisma);
   return { expired, expiring, certificationsExpired: certs.expired, certificationsExpiring: certs.expiring };
 }
 

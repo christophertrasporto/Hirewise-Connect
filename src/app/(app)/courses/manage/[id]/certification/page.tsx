@@ -4,6 +4,9 @@ import { prisma } from "@/server/db/client";
 import { listTemplatesForAdmin } from "@/server/services/academy.service";
 import { Card, Banner } from "@/components/app/ui";
 import { CertificationTemplateForm } from "@/components/academy/CertificationTemplateForm";
+import { CourseSkillTagsForm } from "@/components/academy/SkillTagForms";
+import { courseSkillTags } from "@/server/services/skills.service";
+import { skillsRepository } from "@/server/repositories/skills.repository";
 import { loadBuilderCourse } from "../load";
 
 export const metadata: Metadata = { title: "Certification" };
@@ -13,6 +16,7 @@ export default async function CertificationPage({ params }: { params: Promise<{ 
   const { actor, course } = await loadBuilderCourse(id);
   const isAdmin = actor.permissions.has("course.manage");
   const templates = isAdmin ? await listTemplatesForAdmin(prisma, actor) : [];
+  const [courseTags, allTags] = await Promise.all([courseSkillTags(prisma, actor, course.id), skillsRepository.listTags(prisma, true)]);
   const finalAssessment = [...course.modules.flatMap((m) => m.lessons)].reverse().find((l) => l.contentType === "ASSESSMENT");
 
   return (
@@ -24,6 +28,9 @@ export default async function CertificationPage({ params }: { params: Promise<{ 
           ) : (
             <p className="text-[14px] text-ink-600">{course.certificationTemplate ? `Linked: ${course.certificationTemplate.name}.` : "No certification template linked yet. Admin links one when publishing."}</p>
           )}
+        </Card>
+        <Card title="Skill tags this course verifies" description="Learners who pass this course earn Verified by Hirewise for each tag below whose verification mode is “Any mapped course”. Tags with another mode are verified by their required course or pathway instead.">
+          <CourseSkillTagsForm courseId={course.id} tags={allTags.map((t) => ({ id: t.id, name: t.name, hashtag: t.hashtag ?? `#${t.name.replace(/s+/g, "")}`, category: t.category, verifiable: t.verificationMode === "ANY_COURSE" }))} selected={courseTags.map((t) => t.id)} />
         </Card>
         <Card title="What a learner must do">
           <ul className="space-y-2 text-[14px] text-ink-700">

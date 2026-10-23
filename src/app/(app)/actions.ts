@@ -70,11 +70,10 @@ export async function saveProfessionalAction(_prev: ActionResult, fd: FormData):
 export async function saveSkillsAction(_prev: ActionResult, fd: FormData): Promise<ActionResult> {
   try {
     const actor = await requireActor();
-    const skills: Array<{ skillId: string; level: string; yearsUsed?: string }> = [];
+    const skills = formList(fd, "skills");
     const software: Array<{ softwareId: string; level: string }> = [];
     for (const [key, value] of fd.entries()) {
       if (typeof value !== "string" || !value) continue;
-      if (key.startsWith("skill:")) skills.push({ skillId: key.slice(6), level: value, yearsUsed: formString(fd, `skillYears:${key.slice(6)}`) || undefined });
       if (key.startsWith("software:")) software.push({ softwareId: key.slice(9), level: value });
     }
     await updateSkills(prisma, actor, skillsSchema.parse({ skills, software }));
