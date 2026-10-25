@@ -9,6 +9,7 @@ import { academyRepository } from "@/server/repositories/academy.repository";
 import { agencyRepository } from "@/server/repositories/agency.repository";
 import { audit } from "@/server/audit/audit";
 import { publishEvent } from "@/server/events/outbox";
+import { recordCommissionForPayment, reverseCommissionForSource } from "./commission.service";
 import { toCourseCatalogView, toCoursePurchaseView, toMemberTrainingView } from "@/server/views/training.views";
 
 /**
@@ -77,6 +78,8 @@ export async function recordCoursePurchase(db: PrismaClient, actor: Actor, id: s
   if (p.status !== "PENDING") throw new ForbiddenError("This purchase was already recorded.");
   if (input.outcome === "PAID" && !input.reference) throw Object.assign(new Error("Enter the payment reference."), { name: "RegistrationError", field: "reference" });
   return db.$transaction(async (tx) => {
+    // Referral program: a confirmed payment by the agency owner (idempotent per purchase).
+    if (input.outcome === "PAID") await recordCommissionForPayment(tx, { sourceType: "COURSE_PURCHASE", sourceId: p.id, buyerUserId: p.agency.ownerUserId, courseId: p.courseId, courseTitle: p.course.title, paidMinor: p.amountMinor, listMinor: p.amountMinor, currency: p.currency, paidAt: new Date() });
     const updated = await trainingRepository.recordPurchase(tx, p.id, { status: input.outcome, recordedById: actor.userId, paymentReference: input.reference || null, note: input.note || null, paidAt: input.outcome === "PAID" ? new Date() : null });
     await audit(tx, { actor, action: "COURSE_PURCHASE_RECORDED", entityType: "CoursePurchase", entityId: p.id, previousValue: { status: "PENDING" }, newValue: { status: input.outcome, reference: input.reference || null }, reason: input.note || undefined });
     await publishEvent(tx, "COURSE_PURCHASE_RECORDED", { purchaseId: p.id, agencyId: p.agencyId, agencyName: p.agency.name, ownerUserId: p.agency.ownerUserId, ownerEmail: p.agency.owner.email, courseTitle: p.course.title, seatCount: p.seatCount, outcome: input.outcome });
@@ -84,7 +87,33 @@ export async function recordCoursePurchase(db: PrismaClient, actor: Actor, id: s
   });
 }
 
-export async function listCoursePurchases(db: PrismaClient, actor: Actor, status?: "PENDING" | "PAID" | "WAIVED" | "CANCELLED") {
+export const purchaseRefundSchema = z.object({
+  kind: z.enum(["REFUND", "CHARGEBACK"]),
+  reason: z.string().trim().min(3, "Say why the money went back.").max(500),
+});
+
+/** Staff records a refund or chargeback on a paid seat purchase: its seats lose access and any commission is reversed. */
+export async function recordCoursePurchaseRefund(db: PrismaClient, actor: Actor, id: string, raw: z.input<typeof purchaseRefundSchema>) {
+  authorize(actor, "agency.seats.manage");
+  const input = purchaseRefundSchema.parse(raw);
+  const p = await trainingRepository.findPurchase(db, id);
+  if (!p) throw new NotFoundError();
+  if (p.status !== "PAID") throw new Error("Only a paid purchase can be refunded.");
+  const reason = `${input.kind === "REFUND" ? "Refunded" : "Chargeback"}: ${input.reason}`;
+  await db.$transaction(async (tx) => {
+    const changed = await trainingRepository.refundPurchase(tx, p.id, input);
+    if (changed !== 1) throw new Error("This purchase was already refunded.");
+    for (const a of await trainingRepository.openAssignmentsForPurchase(tx, p.id)) {
+      await trainingRepository.revokeAssignment(tx, a.id, reason);
+      const e = a.enrollmentId ? await trainingRepository.enrollmentAccess(tx, a.enrollmentId) : null;
+      if (e && !e.accessRevokedAt) await trainingRepository.revokeEnrollment(tx, e.id, { status: e.status === "COMPLETED" ? null : "REVOKED", reason });
+    }
+    const reversal = await reverseCommissionForSource(tx, actor, { sourceType: "COURSE_PURCHASE", sourceId: p.id, reason: `${input.kind.toLowerCase()}: ${input.reason}` });
+    await audit(tx, { actor, action: "COURSE_PURCHASE_REFUNDED", entityType: "CoursePurchase", entityId: p.id, previousValue: { status: "PAID" }, newValue: { status: "REFUNDED", kind: input.kind, commissionReversed: reversal.reversed }, reason: input.reason });
+  });
+}
+
+export async function listCoursePurchases(db: PrismaClient, actor: Actor, status?: "PENDING" | "PAID" | "WAIVED" | "CANCELLED" | "REFUNDED") {
   authorize(actor, "agency.read");
   const [rows, counts] = await Promise.all([trainingRepository.listPurchases(db, { status }), trainingRepository.purchaseCounts(db)]);
   return { rows: rows.map(toCoursePurchaseView), counts };

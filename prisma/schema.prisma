@@ -432,8 +432,24 @@ model User {
   submissionsMade           Submission[]               @relation("SubmissionSubmitter")
   skillTagRequests          SkillTagRequest[]          @relation("SkillTagRequester")
 
+  // Referral program: the personal code, who referred this user (write-once, enforced by a trigger), and the relations.
+  referralCode            String?                @unique
+  referredByUserId        String?
+  referredAt              DateTime?
+  referredBy              User?                  @relation("UserReferrals", fields: [referredByUserId], references: [id])
+  referrals               User[]                 @relation("UserReferrals")
+  referralClicks          ReferralClick[]
+  commissionsEarned       Commission[]           @relation("CommissionReferrer")
+  commissionsBought       Commission[]           @relation("CommissionBuyer")
+  commissionAdjustments   CommissionAdjustment[]
+  payouts                 Payout[]
+  payoutDetails           PayoutDetails?
+  referralFlagsAsReferrer ReferralFlag[]         @relation("FlagReferrer")
+  referralFlagsAsReferred ReferralFlag[]         @relation("FlagReferred")
+
   @@index([roleId])
   @@index([status])
+  @@index([referredByUserId])
 }
 
 model Role {
@@ -1319,6 +1335,7 @@ enum CoursePaymentStatus {
   PENDING
   PAID
   WAIVED
+  REFUNDED
 }
 
 enum ExamStatus {
@@ -1780,6 +1797,11 @@ model CourseEnrollment {
 
   completion CourseCompletion?
   attempts   ExamAttempt[]
+
+  /// Referral program: a recorded refund or chargeback (staff action). Access ends with it.
+  refundedAt   DateTime?
+  refundKind   RefundKind?
+  refundReason String?
 
   @@unique([courseId, agentProfileId])
   @@index([agentProfileId, status])
@@ -2860,6 +2882,7 @@ enum CoursePurchaseStatus {
   PAID
   WAIVED
   CANCELLED
+  REFUNDED
 }
 
 enum IndependentAccessStatus {
@@ -2888,6 +2911,10 @@ model CoursePurchase {
   updatedAt        DateTime             @updatedAt
 
   assignments CourseSeatAssignment[]
+
+  refundedAt   DateTime?
+  refundKind   RefundKind?
+  refundReason String?
 
   @@index([agencyId, status])
   @@index([status, createdAt])
@@ -3372,4 +3399,165 @@ model SkillTagRequest {
   createdAt         DateTime              @default(now())
 
   @@index([status, createdAt])
+}
+
+// ---------------------------------------------------------------------------
+// Referral affiliate program
+// ---------------------------------------------------------------------------
+
+enum RefundKind {
+  REFUND
+  CHARGEBACK
+}
+
+enum CommissionSourceType {
+  ENROLLMENT
+  COURSE_PURCHASE
+}
+
+enum CommissionStatus {
+  ON_HOLD
+  PAYABLE
+  PAID
+  REVERSED
+}
+
+enum AdjustmentKind {
+  REFUND_AFTER_PAYOUT
+  MANUAL
+}
+
+enum PayoutStatus {
+  REQUESTED
+  APPROVED
+  PAID
+  REJECTED
+}
+
+enum PayoutMethodKind {
+  GCASH
+  BANK_TRANSFER
+}
+
+enum ReferralFlagKind {
+  EMAIL_ALIAS
+  SAME_IP
+  SAME_PHONE
+}
+
+/// A visit to a referral link. The IP is stored only as a keyed hash.
+model ReferralClick {
+  id         String   @id @default(cuid())
+  referrerId String
+  referrer   User     @relation(fields: [referrerId], references: [id])
+  landingUrl String
+  ipHash     String?
+  userAgent  String?
+  createdAt  DateTime @default(now())
+
+  @@index([referrerId, createdAt])
+}
+
+/// Earnings ledger. One row per confirmed payment (unique source), with the rate locked at the time of sale.
+model Commission {
+  id               String               @id @default(cuid())
+  referrerId       String
+  referrer         User                 @relation("CommissionReferrer", fields: [referrerId], references: [id])
+  buyerId          String
+  buyer            User                 @relation("CommissionBuyer", fields: [buyerId], references: [id])
+  sourceType       CommissionSourceType
+  sourceId         String
+  courseId         String
+  courseTitle      String
+  /// Amount confirmed as paid, minus taxes and fees, in minor units.
+  saleAmount       Int
+  rateBps          Int
+  commissionAmount Int
+  currency         String               @db.Char(3)
+  status           CommissionStatus     @default(ON_HOLD)
+  availableAt      DateTime
+  paidAt           DateTime?
+  payoutId         String?
+  payout           Payout?              @relation(fields: [payoutId], references: [id])
+  reversedAt       DateTime?
+  reversedReason   String?
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime             @updatedAt
+
+  adjustments CommissionAdjustment[]
+
+  @@unique([sourceType, sourceId])
+  @@index([referrerId, status])
+  @@index([status, availableAt])
+}
+
+/// Signed balance changes: a negative row when a paid commission is refunded, or a manual change with a note.
+model CommissionAdjustment {
+  id              String         @id @default(cuid())
+  referrerId      String
+  referrer        User           @relation(fields: [referrerId], references: [id])
+  commissionId    String?
+  commission      Commission?    @relation(fields: [commissionId], references: [id])
+  kind            AdjustmentKind
+  amount          Int
+  currency        String         @db.Char(3)
+  note            String
+  createdById     String
+  /// Set when a payout absorbed this adjustment.
+  settledPayoutId String?
+  createdAt       DateTime       @default(now())
+
+  @@index([referrerId, settledPayoutId])
+}
+
+model Payout {
+  id           String           @id @default(cuid())
+  referrerId   String
+  referrer     User             @relation(fields: [referrerId], references: [id])
+  amount       Int
+  currency     String           @db.Char(3)
+  method       PayoutMethodKind
+  /// Masked account for the staff queue; the full details stay in PayoutDetails.
+  accountLabel String
+  reference    String?
+  status       PayoutStatus     @default(REQUESTED)
+  rejectReason String?
+  requestedAt  DateTime         @default(now())
+  decidedById  String?
+  decidedAt    DateTime?
+  paidAt       DateTime?
+  createdAt    DateTime         @default(now())
+
+  commissions Commission[]
+
+  @@index([referrerId, status])
+  @@index([status, requestedAt])
+}
+
+model PayoutDetails {
+  userId           String           @id
+  user             User             @relation(fields: [userId], references: [id])
+  method           PayoutMethodKind
+  accountName      String
+  /// AES-256-GCM with AUTH_SECRET, like MFA secrets. Never returned by any view in full.
+  accountNumberEnc String
+  bankName         String?
+  updatedAt        DateTime         @updatedAt
+}
+
+/// Evidence that a referred sign-up looks related to the referrer. Flag only, never an automatic block.
+model ReferralFlag {
+  id             String           @id @default(cuid())
+  referrerId     String
+  referrer       User             @relation("FlagReferrer", fields: [referrerId], references: [id])
+  referredUserId String
+  referredUser   User             @relation("FlagReferred", fields: [referredUserId], references: [id])
+  kind           ReferralFlagKind
+  detail         String?
+  createdAt      DateTime         @default(now())
+  reviewedAt     DateTime?
+  reviewedById   String?
+
+  @@unique([referredUserId, kind])
+  @@index([referrerId])
 }

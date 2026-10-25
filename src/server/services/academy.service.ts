@@ -9,6 +9,7 @@ import { certificationRepository } from "@/server/repositories/certification.rep
 import { audit } from "@/server/audit/audit";
 import { publishEvent } from "@/server/events/outbox";
 import { evaluateCertification } from "./certification.service";
+import { recordCommissionForPayment, reverseCommissionForSource } from "./commission.service";
 import { toCourseAgentView, toCourseCoachView, toEnrollmentAgentView } from "@/server/views/academy.views";
 import { getStorage, newStorageKey } from "@/server/adapters/storage";
 import { rateLimit } from "@/server/auth/rate-limit";
@@ -600,9 +601,36 @@ export async function recordCoursePayment(db: PrismaClient, actor: Actor, enroll
     await academyRepository.recordPayment(tx, e.id, { paidCents, paymentReference: p.reference?.trim() || null, waived: p.waived, recordedById: actor.userId });
     // v2 phase 4: a waived payment is a Hirewise assignment, not an independent purchase.
     if (p.waived) await trainingRepository.setEnrollmentSource(tx, e.id, "ADMIN_ASSIGNMENT");
+    // Referral program: the confirmed payment is the only moment a commission can be created (idempotent per enrolment).
+    else await recordCommissionForPayment(tx, { sourceType: "ENROLLMENT", sourceId: e.id, buyerUserId: e.agentProfile.userId, courseId: e.courseId, courseTitle: e.course.title, paidMinor: paidCents ?? 0, listMinor: e.priceCents, currency: e.course.currency, paidAt: new Date() });
     await audit(tx, { actor, action: "COURSE_PAYMENT_RECORDED", entityType: "CourseEnrollment", entityId: e.id, newValue: { paidCents, waived: p.waived, reference: p.reference ?? null, currency: "USD" }, reason: p.reason });
     await publishEvent(tx, "COURSE_PAYMENT_RECORDED", { enrollmentId: e.id, courseTitle: e.course.title, agentUserId: e.agentProfile.userId, agentEmail: e.agentProfile.user.email, waived: p.waived });
   });
+}
+
+export const refundSchema = z.object({
+  kind: z.enum(["REFUND", "CHARGEBACK"]),
+  reason: z.string().trim().min(3, "Say why the money went back.").max(500),
+});
+
+/** Staff records that a paid enrolment was refunded or charged back: access ends and any commission is reversed. */
+export async function recordCourseRefund(db: PrismaClient, actor: Actor, enrollmentId: string, raw: z.input<typeof refundSchema>) {
+  authorize(actor, "course.payment.record");
+  const input = refundSchema.parse(raw);
+  const e = await academyRepository.findEnrollmentById(db, enrollmentId);
+  if (!e) throw new NotFoundError();
+  if (e.paymentStatus !== "PAID") throw new Error("Only a paid enrolment can be refunded.");
+  await db.$transaction(async (tx) => {
+    const changed = await academyRepository.refundEnrollment(tx, e.id, { kind: input.kind, reason: input.reason, completed: e.status === "COMPLETED" });
+    if (changed !== 1) throw new Error("This enrolment was already refunded.");
+    const reversal = await reverseCommissionForSource(tx, actor, { sourceType: "ENROLLMENT", sourceId: e.id, reason: `${input.kind.toLowerCase()}: ${input.reason}` });
+    await audit(tx, { actor, action: "COURSE_PAYMENT_REFUNDED", entityType: "CourseEnrollment", entityId: e.id, previousValue: { paymentStatus: "PAID" }, newValue: { paymentStatus: "REFUNDED", kind: input.kind, commissionReversed: reversal.reversed }, reason: input.reason });
+  });
+}
+
+export async function listRecentPaidEnrollments(db: PrismaClient, actor: Actor) {
+  authorize(actor, "course.payment.record");
+  return academyRepository.listRecentPaid(db);
 }
 
 export async function listPendingCoursePayments(db: PrismaClient, actor: Actor) {

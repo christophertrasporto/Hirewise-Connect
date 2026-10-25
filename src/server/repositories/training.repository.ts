@@ -32,6 +32,16 @@ export const trainingRepository = {
   recordPurchase(db: Db, id: string, d: { status: CoursePurchaseStatus; recordedById: string; paymentReference: string | null; note: string | null; paidAt: Date | null }) {
     return db.coursePurchase.update({ where: { id }, data: { status: d.status, recordedById: d.recordedById, paymentReference: d.paymentReference ?? undefined, note: d.note ?? undefined, paidAt: d.paidAt ?? undefined }, include: purchaseInclude });
   },
+  async refundPurchase(db: Db, id: string, d: { kind: "REFUND" | "CHARGEBACK"; reason: string }) {
+    const r = await db.coursePurchase.updateMany({ where: { id, status: "PAID" }, data: { status: "REFUNDED", refundedAt: new Date(), refundKind: d.kind, refundReason: d.reason } });
+    return r.count;
+  },
+  openAssignmentsForPurchase(db: Db, coursePurchaseId: string) {
+    return db.courseSeatAssignment.findMany({ where: { coursePurchaseId, revokedAt: null }, select: { id: true, enrollmentId: true } });
+  },
+  enrollmentAccess(db: Db, id: string) {
+    return db.courseEnrollment.findUnique({ where: { id }, select: { id: true, status: true, accessRevokedAt: true } });
+  },
   async purchaseCounts(db: Db) {
     const rows = await db.coursePurchase.groupBy({ by: ["status"], _count: { _all: true } });
     return Object.fromEntries(rows.map((r) => [r.status, r._count._all])) as Partial<Record<CoursePurchaseStatus, number>>;

@@ -124,6 +124,16 @@ export const SETTING_SCHEMAS = {
       videoKey: z.string().default("v1"),
     })
     .default(() => ({ enabled: false, title: "Welcome to Hirewise", instructions: "", videoUrl: null, storageKey: null, fileName: null, durationSec: null, requiredPercent: 90, lockCourses: true, appliesTo: "NEW" as const, effectiveFrom: null, videoKey: "v1" })),
+  /** Referral affiliate program. Money is integer minor units of payoutCurrency (USD cents by default). */
+  referrals: z
+    .object({
+      commissionRateBps: z.number().int().min(0).max(10000).default(1500),
+      holdDays: z.number().int().min(0).max(365).default(30),
+      cookieDays: z.number().int().min(1).max(365).default(30),
+      minimumPayoutMinor: z.number().int().min(0).default(1000),
+      payoutCurrency: z.string().length(3).default("USD"),
+    })
+    .default(() => ({ commissionRateBps: 1500, holdDays: 30, cookieDays: 30, minimumPayoutMinor: 1000, payoutCurrency: "USD" })),
 } as const;
 
 export type SettingKey = keyof typeof SETTING_SCHEMAS;

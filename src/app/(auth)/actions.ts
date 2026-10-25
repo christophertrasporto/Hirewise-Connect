@@ -1,5 +1,7 @@
 "use server";
 
+import { cookies } from "next/headers";
+import { REFERRAL_COOKIE } from "@/server/services/referral.service";
 import { registerViaInvite } from "@/server/services/invite.service";
 import { redirect } from "next/navigation";
 import { applicantRegistrationSchema, registerApplicant } from "@/server/services/agency-application.service";
@@ -10,6 +12,11 @@ import { loginWithPassword, logout, requestMagicLink, requestPasswordReset, rese
 import { registerClient, clientRegistrationSchema } from "@/server/services/client.service";
 import { registerAgent, agentRegistrationSchema } from "@/server/services/agent.service";
 import { toActionError, formList, formString, type ActionResult } from "@/server/http/action-result";
+
+/** The first-party referral cookie set by /join?ref=CODE (last click wins), or null. */
+async function referralCookie(): Promise<string | null> {
+  return (await cookies()).get(REFERRAL_COOKIE)?.value ?? null;
+}
 
 export async function loginAction(_prev: ActionResult, fd: FormData): Promise<ActionResult> {
   try {
@@ -80,7 +87,7 @@ export async function registerClientAction(_prev: ActionResult, fd: FormData): P
       termsAccepted: fd.get("termsAccepted") === "on",
     });
     const meta = await requestMeta();
-    const s = await registerClient(prisma, input, meta);
+    const s = await registerClient(prisma, input, meta, { referralCode: await referralCookie() });
     await writeSessionCookie(s.token, s.expiresAt);
   } catch (e) {
     return toActionError(e);
@@ -93,7 +100,7 @@ export async function registerApplicantAction(_prev: ActionResult, fd: FormData)
   try {
     const input = applicantRegistrationSchema.parse({ fullName: formString(fd, "fullName"), email: formString(fd, "email"), password: formString(fd, "password"), termsAccepted: fd.get("termsAccepted") === "on", continuationToken: formString(fd, "continuationToken") });
     const meta = await requestMeta();
-    const s = await registerApplicant(prisma, input, meta);
+    const s = await registerApplicant(prisma, input, meta, { referralCode: await referralCookie() });
     await writeSessionCookie(s.token, s.expiresAt);
   } catch (e) {
     return toActionError(e);
@@ -119,7 +126,8 @@ export async function registerAgentAction(_prev: ActionResult, fd: FormData): Pr
     });
     const meta = await requestMeta();
     const inviteToken = formString(fd, "inviteToken");
-    const s = inviteToken ? await registerViaInvite(prisma, input, inviteToken, meta) : await registerAgent(prisma, input, meta);
+    const referralCode = await referralCookie();
+    const s = inviteToken ? await registerViaInvite(prisma, input, inviteToken, meta, { referralCode }) : await registerAgent(prisma, input, meta, undefined, { referralCode });
     await writeSessionCookie(s.token, s.expiresAt);
   } catch (e) {
     return toActionError(e);
