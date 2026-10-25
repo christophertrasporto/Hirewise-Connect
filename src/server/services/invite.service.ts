@@ -187,11 +187,11 @@ export async function joinAsExistingUser(db: PrismaClient, actor: Actor, token: 
 }
 
 /** A new talent account created from the invitation: the normal registration plus the membership, in one transaction. */
-export async function registerViaInvite(db: PrismaClient, input: AgentRegistrationInput, token: string, meta: RequestMeta) {
+export async function registerViaInvite(db: PrismaClient, input: AgentRegistrationInput, token: string, meta: RequestMeta, opts: { referralCode?: string | null } = {}) {
   const r = await resolveToken(db, token);
   if (!r) throw new NotFoundError("Invitation not found");
   const a = await acceptance(db, r);
   if (!a.accepting) throw new ForbiddenError(a.reason ?? "This invitation cannot be used.");
   if (r.email && normalizeEmail(r.email) !== normalizeEmail(input.email)) throw Object.assign(new Error(`This invitation was sent to ${r.email}. Use that email address.`), { name: "RegistrationError", field: "email" });
-  return registerAgent(db, input, meta, { agencyId: r.agency.id, source: r.kind === "EMAIL" ? "EMAIL_INVITE" : "UNIQUE_LINK", emailInviteId: r.emailInviteId, linkId: r.linkId, invitedEmail: r.email });
+  return registerAgent(db, input, meta, { agencyId: r.agency.id, source: r.kind === "EMAIL" ? "EMAIL_INVITE" : "UNIQUE_LINK", emailInviteId: r.emailInviteId, linkId: r.linkId, invitedEmail: r.email }, opts);
 }

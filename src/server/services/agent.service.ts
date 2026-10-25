@@ -21,6 +21,7 @@ import { audit } from "@/server/audit/audit";
 import { recomputeVerification } from "./verification.service";
 import { scanMessage } from "@/lib/message-filter";
 import { flagRepository } from "@/server/repositories/flag.repository";
+import { attachReferrer } from "./referral.service";
 
 /** Section 8.8: contact details typed into free-text profile fields raise a flag (the edit is still saved). */
 async function flagContactInfoInProfile(db: PrismaClient, actor: Actor, agentProfileId: string, fields: Array<string | null | undefined>) {
@@ -105,7 +106,7 @@ export const experienceSchema = z.object({
 /** v2 phase 2: a registration that came from an agency invitation also creates the membership and takes one seat. */
 export type JoinViaInvite = { agencyId: string; source: "UNIQUE_LINK" | "EMAIL_INVITE"; emailInviteId: string | null; linkId: string | null; invitedEmail: string | null };
 
-export async function registerAgent(db: PrismaClient, input: AgentRegistrationInput, meta: RequestMeta, join?: JoinViaInvite) {
+export async function registerAgent(db: PrismaClient, input: AgentRegistrationInput, meta: RequestMeta, join?: JoinViaInvite, opts: { referralCode?: string | null } = {}) {
   rateLimit(`register:${meta.ipAddress ?? "unknown"}`, 10, 60 * 60_000);
   requireTermsAccepted(input.termsAccepted);
   // Identity phase 1: duplicate detection runs before anything is created; a match raises a flag and stops here.
@@ -131,6 +132,7 @@ export async function registerAgent(db: PrismaClient, input: AgentRegistrationIn
     const identityId = await ensureIdentity(tx, actor, { userId: user.id, email: input.email, phone: input.phone || null });
     await agentRepository.setIdentity(tx, profile.id, identityId);
     await acceptTermsTx(tx, { userId: user.id, role: "AGENT", context: "SIGNUP", meta, actor });
+    await attachReferrer(tx, { userId: user.id, email: input.email, phone: input.phone || null, code: opts.referralCode, meta });
     if (join) await joinAgencyTx(tx, actor, { agencyId: join.agencyId, agentProfileId: profile.id, platformIdentityId: identityId, status: "PENDING_VERIFICATION", source: join.source, invitedEmail: join.invitedEmail, emailInviteId: join.emailInviteId, linkId: join.linkId, approvedById: null });
     await audit(tx, { actor, action: "AGENT_REGISTERED", entityType: "AgentProfile", entityId: profile.id, newValue: { displayName: input.displayName, primaryRole: input.primaryRole }, ipAddress: meta.ipAddress ?? undefined });
     await publishEvent(tx, "USER_CREATED", { userId: user.id, role: "AGENT", email: input.email });

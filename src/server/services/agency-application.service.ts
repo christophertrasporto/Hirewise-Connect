@@ -20,6 +20,7 @@ import { hashPassword, passwordSchema } from "@/server/auth/password";
 import { emailSchema, requestEmailVerification } from "./auth.service";
 import { createSession } from "@/server/auth/session";
 import { logger } from "@/server/logger";
+import { attachReferrer } from "./referral.service";
 
 /**
  * Apply for Agency (Agency A1). Any non-staff account applies; Hirewise reviewers decide. Approval is the only
@@ -325,7 +326,7 @@ export const applicantRegistrationSchema = z.object({
 export type ApplicantRegistrationInput = z.infer<typeof applicantRegistrationSchema>;
 
 /** Creates an APPLICANT account (no permissions), a session, and the email-verification gate, exactly like talent registration. */
-export async function registerApplicant(db: PrismaClient, input: ApplicantRegistrationInput, meta: RequestMeta) {
+export async function registerApplicant(db: PrismaClient, input: ApplicantRegistrationInput, meta: RequestMeta, opts: { referralCode?: string | null } = {}) {
   rateLimit(`register:${meta.ipAddress ?? "unknown"}`, 10, 60 * 60_000);
   requireTermsAccepted(input.termsAccepted);
   await guardSignup(db, { kind: "AGENCY_APPLICATION", email: input.email, fullName: input.fullName, data: { fullName: input.fullName }, continuationToken: input.continuationToken || null, meta });
@@ -337,6 +338,7 @@ export async function registerApplicant(db: PrismaClient, input: ApplicantRegist
     await audit(tx, { actor, action: "USER_CREATED", entityType: "User", entityId: user.id, newValue: { role: "APPLICANT", fullName: input.fullName }, ipAddress: meta.ipAddress ?? undefined });
     await ensureIdentity(tx, actor, { userId: user.id, email: input.email });
     await acceptTermsTx(tx, { userId: user.id, role: "APPLICANT", context: "SIGNUP", meta, actor });
+    await attachReferrer(tx, { userId: user.id, email: input.email, code: opts.referralCode, meta });
     await publishEvent(tx, "USER_CREATED", { userId: user.id, role: "APPLICANT", email: input.email });
     return user.id;
   });

@@ -76,6 +76,14 @@ export type DomainEventMap = {
   SUBMISSION_CREATED: { submissionId: string; opportunityId: string; title: string; agencyName: string | null; displayName: string; accountManagerUserId: string | null };
   SUBMISSION_REVIEWED: { submissionId: string; opportunityId: string; title: string; outcome: "APPROVED_FOR_CLIENT" | "DECLINED"; submitterUserId: string; agentUserId: string; displayName: string; clientUserId: string | null; note: string | null };
   SUBMISSION_WITHDRAWN: { submissionId: string; opportunityId: string; title: string; displayName: string; agencyName: string | null; reason: string; accountManagerUserId: string | null; byExit: boolean };
+  // Referral program
+  REFERRAL_SIGNUP: { referrerUserId: string; referredUserId: string };
+  REFERRAL_FLAGGED: { referrerUserId: string; referredUserId: string; kinds: string[] };
+  COMMISSION_CREATED: { commissionId: string; referrerUserId: string; courseTitle: string; commissionAmount: number; currency: string; availableAt: string };
+  COMMISSION_REVERSED: { commissionId: string; referrerUserId: string; courseTitle: string; commissionAmount: number; currency: string; afterPayout: boolean };
+  COMMISSION_ADJUSTED: { adjustmentId: string; referrerUserId: string; amount: number; currency: string; note: string };
+  PAYOUT_REQUESTED: { payoutId: string; referrerUserId: string; amount: number; currency: string };
+  PAYOUT_DECIDED: { payoutId: string; referrerUserId: string; outcome: "APPROVED" | "PAID" | "REJECTED"; amount: number; currency: string; reference: string | null; reason: string | null };
   // Skills system
   SKILL_TAG_REQUESTED: { requestId: string; text: string; requesterUserId: string };
   SKILL_TAG_REQUEST_DECIDED: { requestId: string; text: string; requesterUserId: string; decision: "APPROVE" | "MERGE" | "REJECT"; note: string | null };

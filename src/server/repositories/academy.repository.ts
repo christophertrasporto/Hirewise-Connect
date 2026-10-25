@@ -117,12 +117,23 @@ export const academyRepository = {
     return db.courseEnrollment.findMany({ where: { paymentStatus: "PENDING" }, include: { course: { select: { id: true, title: true } }, agentProfile: { select: { id: true, displayName: true } } }, orderBy: { enrolledAt: "asc" }, take });
   },
 
+  listRecentPaid(db: Db, take = 50) {
+    return db.courseEnrollment.findMany({ where: { paymentStatus: "PAID" }, include: { course: { select: { id: true, title: true } }, agentProfile: { select: { id: true, displayName: true } } }, orderBy: { paidAt: "desc" }, take });
+  },
+
   setEnrollmentStatus(db: Db, id: string, status: EnrollmentStatus) {
     return db.courseEnrollment.update({ where: { id }, data: { status } });
   },
 
   recordPayment(db: Db, id: string, d: { paidCents: number | null; paymentReference: string | null; waived: boolean; recordedById: string }) {
     return db.courseEnrollment.update({ where: { id }, data: { paymentStatus: d.waived ? "WAIVED" : "PAID", paidCents: d.paidCents ?? undefined, paymentReference: d.paymentReference ?? undefined, paidAt: new Date(), paymentRecordedById: d.recordedById } });
+  },
+
+  /** Refund or chargeback on a paid enrolment: guarded so it applies once. Returns how many rows changed. */
+  async refundEnrollment(db: Db, id: string, d: { kind: "REFUND" | "CHARGEBACK"; reason: string; completed: boolean }) {
+    const now = new Date();
+    const r = await db.courseEnrollment.updateMany({ where: { id, paymentStatus: "PAID" }, data: { paymentStatus: "REFUNDED", refundedAt: now, refundKind: d.kind, refundReason: d.reason, accessRevokedAt: now, revokeReason: `${d.kind === "REFUND" ? "Refunded" : "Chargeback"}: ${d.reason}`, ...(d.completed ? {} : { status: "REVOKED" as const }) } });
+    return r.count;
   },
 
   createCompletion(db: Db, d: { enrollmentId: string; examScore: number | null; source?: "INTERNAL" | "ACADEMY_SYNC"; externalRef?: string | null }) {

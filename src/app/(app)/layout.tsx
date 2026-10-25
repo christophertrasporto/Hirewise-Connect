@@ -1,4 +1,4 @@
-import { LayoutDashboard, UserCircle, Building2, FileSignature, Users, Bell, Film, Search, Bookmark, ClipboardCheck, ListChecks, CalendarClock, ClipboardList, Handshake, Lock, ShieldAlert, GraduationCap, Receipt, BarChart3, LineChart, UserCog, Settings, Rocket, Fingerprint, ShieldCheck, MessageSquare, Flag, Briefcase } from "lucide-react";
+import { LayoutDashboard, UserCircle, Building2, FileSignature, Users, Bell, Film, Search, Bookmark, ClipboardCheck, ListChecks, CalendarClock, ClipboardList, Handshake, Lock, ShieldAlert, GraduationCap, Receipt, BarChart3, LineChart, UserCog, Settings, Rocket, Fingerprint, ShieldCheck, MessageSquare, Flag, Briefcase, Gift } from "lucide-react";
 import { prisma } from "@/server/db/client";
 import { requireAuth } from "@/server/auth/require-actor";
 import { can } from "@/server/policies/authorize";
@@ -19,6 +19,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     nav.push({ href: "/interviews", label: "Interviews", icon: <CalendarClock /> });
     nav.push({ href: "/placements", label: "Placements", icon: <Handshake /> });
     nav.push({ href: "/courses", label: "Courses", icon: <GraduationCap /> });
+    nav.push({ href: "/refer", label: "Refer & Earn", icon: <Gift /> });
   }
   if (actor.role === "CLIENT") {
     nav.push({ href: "/talent", label: "Find talent", icon: <Search /> });
@@ -53,6 +54,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     nav.push({ href: "/messages", label: "Messages", icon: <MessageSquare /> });
     nav.push({ href: "/report-bypass", label: "Report a bypass attempt", icon: <Flag /> });
   }
+  if (actor.role === "AGENCY_OWNER") nav.push({ href: "/refer", label: "Refer & Earn", icon: <Gift /> });
+  if (can(actor, "referral.manage") || can(actor, "payout.manage")) nav.push({ href: can(actor, "referral.manage") ? "/staff/referrals" : "/staff/referrals/payouts", label: "Referrals", icon: <Gift /> });
   if (actor.agency) nav.splice(1, 0, { href: "/agency", label: "My agency", icon: <Building2 /> });
   else if (actor.role === "AGENT" || actor.role === "CLIENT" || actor.role === "APPLICANT") nav.push({ href: "/apply/agency", label: "Apply for Agency", icon: <Building2 /> });
   if (actor.role === "AGENT" || actor.role === "CLIENT") nav.push({ href: "/account/agreements", label: "Agreements", icon: <FileSignature /> });
