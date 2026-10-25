@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { prisma } from "@/server/db/client";
 import { requireActor } from "@/server/auth/require-actor";
 import { toActionError, formList, formString, type ActionResult } from "@/server/http/action-result";
-import { courseSchema, courseSettingsSchema, createCourse, updateCourse, updateCourseSettings, setCourseCertificationTemplate, submitCourseForApproval, publishCourse, archiveCourse, enrol, recordCoursePayment, addCoachToCourse, moduleSchema, lessonSchema, lessonUploadRequestSchema, saveModule, deleteModule, moveModule, duplicateModule, saveLesson, deleteLesson, moveLesson, duplicateLesson, createLessonUploadUrl } from "@/server/services/academy.service";
+import { coverUploadRequestSchema, createCourseCoverUploadUrl, setCourseCover, courseSchema, courseSettingsSchema, createCourse, updateCourse, updateCourseSettings, setCourseCertificationTemplate, submitCourseForApproval, publishCourse, archiveCourse, enrol, recordCoursePayment, addCoachToCourse, moduleSchema, lessonSchema, lessonUploadRequestSchema, saveModule, deleteModule, moveModule, duplicateModule, saveLesson, deleteLesson, moveLesson, duplicateLesson, createLessonUploadUrl } from "@/server/services/academy.service";
 import { categorySchema, saveCategory } from "@/server/services/category.service";
 import { assessmentSchema, evaluationSchema, labelSchema, recordAssessment, recordEvaluation, saveLabel } from "@/server/services/assessment.service";
 import { templateSchema, saveTemplate, issueCertification, reviewCertification, revokeCertification } from "@/server/services/certification.service";
@@ -240,6 +240,30 @@ export async function requestLessonUploadAction(input: { courseId: string; kind:
   try {
     const actor = await requireActor();
     const r = await createLessonUploadUrl(prisma, actor, input.courseId, lessonUploadRequestSchema.parse(input));
+    return { ok: true, data: r };
+  } catch (e) {
+    return toActionError(e);
+  }
+}
+
+/** Presigned PUT for a course cover image. The browser uploads, then setCourseCoverAction records the key. */
+export async function requestCourseCoverUploadAction(input: { courseId: string; contentType: string; sizeBytes: number }): Promise<ActionResult<{ key: string; url: string; method: "PUT"; headers: Record<string, string> }>> {
+  try {
+    const actor = await requireActor();
+    const r = await createCourseCoverUploadUrl(prisma, actor, input.courseId, coverUploadRequestSchema.parse({ contentType: input.contentType, sizeBytes: input.sizeBytes }));
+    return { ok: true, data: r };
+  } catch (e) {
+    return toActionError(e);
+  }
+}
+
+export async function setCourseCoverAction(input: { courseId: string; key: string | null }): Promise<ActionResult<{ coverUrl: string | null }>> {
+  try {
+    const actor = await requireActor();
+    const r = await setCourseCover(prisma, actor, input.courseId, input.key);
+    revalidatePath("/courses");
+    revalidatePath(`/courses/${input.courseId}`);
+    revalidatePath(`/courses/manage/${input.courseId}`, "layout");
     return { ok: true, data: r };
   } catch (e) {
     return toActionError(e);

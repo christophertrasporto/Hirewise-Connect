@@ -20,6 +20,8 @@ import { recordLessonVersion, changedFields } from "./lesson-version.service";
 import { categoryRepository } from "@/server/repositories/category.repository";
 import { assignmentRepository } from "@/server/repositories/assignment.repository";
 import { toSubmissionLearnerView as toSubmissionView, type SubmissionLearnerView } from "@/server/views/academy.views";
+import { coverUrlsFor, coverUrlFor } from "./course-cover";
+import { COVER_MAX_BYTES, COVER_MIMES, coverKeyPrefix } from "@/lib/course-cover";
 
 const optionalText = (max: number) => z.string().trim().max(max).optional().or(z.literal(""));
 
@@ -244,15 +246,20 @@ export async function addCoachToCourse(db: PrismaClient, actor: Actor, courseId:
 }
 
 export async function listCoursesForCoach(db: PrismaClient, actor: Actor) {
-  if (actor.permissions.has("course.manage")) return (await academyRepository.listCourses(db, {})).map(toCourseCoachView);
-  authorize(actor, "course.read_assigned");
-  return (await academyRepository.listCourses(db, { coachUserId: actor.userId })).map(toCourseCoachView);
+  let rows: Awaited<ReturnType<typeof academyRepository.listCourses>>;
+  if (actor.permissions.has("course.manage")) rows = await academyRepository.listCourses(db, {});
+  else {
+    authorize(actor, "course.read_assigned");
+    rows = await academyRepository.listCourses(db, { coachUserId: actor.userId });
+  }
+  const covers = await coverUrlsFor(rows);
+  return rows.map((c) => ({ ...toCourseCoachView(c), coverUrl: covers.get(c.id) ?? null }));
 }
 
 export async function getCourseForCoach(db: PrismaClient, actor: Actor, courseId: string) {
   const c = await loadEditableCourse(db, actor, courseId);
   const enrollments = await academyRepository.listEnrollmentsForCourse(db, c.id);
-  return { course: toCourseCoachView(c), enrollments: enrollments.map((e) => ({ id: e.id, agent: e.agentProfile, status: e.status, paymentStatus: e.paymentStatus, enrolledAt: e.enrolledAt, completedAt: e.completion?.completedAt ?? null, examScore: e.completion?.examScore ?? e.attempts[0]?.scorePercent ?? null })) };
+  return { course: { ...toCourseCoachView(c), coverUrl: await coverUrlFor(c) }, enrollments: enrollments.map((e) => ({ id: e.id, agent: e.agentProfile, status: e.status, paymentStatus: e.paymentStatus, enrolledAt: e.enrolledAt, completedAt: e.completion?.completedAt ?? null, examScore: e.completion?.examScore ?? e.attempts[0]?.scorePercent ?? null })) };
 }
 
 // ---------------------------------------------------------------------------
@@ -353,6 +360,40 @@ export async function createLessonUploadUrl(db: PrismaClient, actor: Actor, cour
   const key = newStorageKey(`${lessonKeyPrefix(c.id)}${input.kind.toLowerCase()}`, ext);
   const upload = await getStorage().createUploadUrl(key, input.contentType);
   return { key, ...upload };
+}
+
+export const coverUploadRequestSchema = z.object({
+  contentType: z.string().min(1),
+  sizeBytes: z.coerce.number().int().positive(),
+});
+
+/** Step 1 of a cover upload: a presigned PUT scoped to the course. Nothing is recorded until setCourseCover. */
+export async function createCourseCoverUploadUrl(db: PrismaClient, actor: Actor, courseId: string, raw: z.input<typeof coverUploadRequestSchema>) {
+  const c = await loadEditableCourse(db, actor, courseId);
+  const input = coverUploadRequestSchema.parse(raw);
+  rateLimit(`course-cover:${actor.userId}`, 30, 60 * 60_000);
+  const ext = (COVER_MIMES as Record<string, string>)[input.contentType];
+  if (!ext) throw new Error("Use a PNG, JPG, or WebP image.");
+  if (input.sizeBytes > COVER_MAX_BYTES) throw new Error(`The image is too large. Maximum is ${Math.round(COVER_MAX_BYTES / 1024 / 1024)} MB.`);
+  const key = newStorageKey(coverKeyPrefix(c.id).replace(/\/$/, ""), ext);
+  const upload = await getStorage().createUploadUrl(key, input.contentType);
+  return { key, ...upload };
+}
+
+/** Step 2: record the uploaded key as the course cover, or clear it with null. The previous object is removed. */
+export async function setCourseCover(db: PrismaClient, actor: Actor, courseId: string, key: string | null) {
+  const c = await loadEditableCourse(db, actor, courseId);
+  if (key !== null) {
+    if (!key.startsWith(coverKeyPrefix(c.id))) throw new Error("That file does not belong to this course.");
+    if (!(await getStorage().exists(key))) throw new Error("Upload the image before saving it.");
+  }
+  const previous = c.thumbnailKey;
+  await db.$transaction(async (tx) => {
+    await academyRepository.updateCourse(tx, c.id, { thumbnailKey: key });
+    await audit(tx, { actor, action: "COURSE_COVER_SET", entityType: "AcademyCourse", entityId: c.id, newValue: { hasCover: key !== null } });
+  });
+  if (previous && previous !== key) await getStorage().delete(previous).catch(() => undefined);
+  return { coverUrl: key ? await coverUrlFor({ id: c.id, thumbnailKey: key }) : null };
 }
 
 async function moduleOf(db: Db, courseId: string, moduleId: string) {
@@ -531,9 +572,10 @@ export async function catalogForAgent(db: PrismaClient, actor: Actor) {
   const profileId = ownProfileId(actor);
   const [courses, enrollments, lock] = await Promise.all([academyRepository.listCourses(db, { status: ["PUBLISHED"] }), academyRepository.listEnrollmentsForAgent(db, profileId), coursesLockedFor(db, actor)]);
   const byCourse = new Map(enrollments.map((e) => [e.courseId, e]));
+  const covers = await coverUrlsFor(courses);
   return courses.map((c) => {
     const enrollment = byCourse.has(c.id) ? toEnrollmentAgentView(byCourse.get(c.id)!) : null;
-    return { ...toCourseAgentView(c), enrollment, locked: lock.locked && !enrollment, lockReason: lock.locked && !enrollment ? lock.reason : null };
+    return { ...toCourseAgentView(c), coverUrl: covers.get(c.id) ?? null, enrollment, locked: lock.locked && !enrollment, lockReason: lock.locked && !enrollment ? lock.reason : null };
   });
 }
 
@@ -566,7 +608,7 @@ export async function getEnrollmentForAgent(db: PrismaClient, actor: Actor, cour
     const c = await academyRepository.findCourse(db, courseId);
     if (!c || c.status !== "PUBLISHED") throw new NotFoundError();
     const lock = await coursesLockedFor(db, actor);
-    return { course: toCourseAgentView(c), enrollment: null, lessonProgress: {} as LessonProgressMap, submissions: {} as Record<string, SubmissionLearnerView>, lockedLessons: {} as Record<string, string>, courseProgress: null, locked: lock.locked ? { kind: "ONBOARDING" as const, reason: lock.reason ?? "Finish your onboarding checklist first.", href: "/onboarding/welcome-video" } : null };
+    return { course: { ...toCourseAgentView(c), coverUrl: await coverUrlFor(c) }, enrollment: null, lessonProgress: {} as LessonProgressMap, submissions: {} as Record<string, SubmissionLearnerView>, lockedLessons: {} as Record<string, string>, courseProgress: null, locked: lock.locked ? { kind: "ONBOARDING" as const, reason: lock.reason ?? "Finish your onboarding checklist first.", href: "/onboarding/welcome-video" } : null };
   }
   // v2 phase 4: agency-sponsored access ends with the membership.
   const revoked = accessRevoked(e);
@@ -581,7 +623,7 @@ export async function getEnrollmentForAgent(db: PrismaClient, actor: Actor, cour
     submissions,
     lockedLessons,
     locked: revoked ? { kind: "REVOKED" as const, reason: e.revokeReason ?? "Access to this course ended with your agency membership.", href: "/courses" } : (null as null | { kind: "ONBOARDING" | "REVOKED"; reason: string; href: string }),
-    course: toCourseAgentView(e.course, unlocked),
+    course: { ...toCourseAgentView(e.course, unlocked), coverUrl: await coverUrlFor(e.course) },
     enrollment: toEnrollmentAgentView(e),
     lessonProgress: Object.fromEntries(progressRows.map((p) => [p.lessonId, { status: p.status, completedAt: p.completedAt, mediaPercent: p.mediaPercent, lastPositionSec: p.lastPositionSec, mediaCompletedAt: p.mediaCompletedAt }])) as LessonProgressMap,
     courseProgress: courseProgress ? { percent: courseProgress.percent, requiredDone: courseProgress.requiredDone, requiredTotal: courseProgress.requiredTotal } : null,

@@ -2,6 +2,7 @@ import type { PrismaClient } from "@/server/db/types";
 import type { Actor } from "@/server/auth/actor";
 import { ForbiddenError } from "@/server/policies/authorize";
 import { priceLabel } from "@/server/views/academy.views";
+import { coverUrlsFor } from "./course-cover";
 
 /**
  * Learner dashboard (Course Builder phase 7): one card per enrolment with progress, the next lesson and where the
@@ -13,6 +14,9 @@ export type CourseCard = {
   courseId: string;
   title: string;
   category: string;
+  description: string;
+  difficulty: string;
+  coverUrl: string | null;
   status: CourseCardStatus;
   percent: number;
   requiredDone: number;
@@ -41,9 +45,10 @@ export async function myCourses(db: PrismaClient, actor: Actor): Promise<{ cards
   const enrollments = await db.courseEnrollment.findMany({
     where: { agentProfileId: profileId },
     orderBy: { enrolledAt: "desc" },
-    include: { completion: { select: { completedAt: true } }, course: { select: { id: true, title: true, category: true, priceCents: true, categoryRef: { select: { name: true } }, certificationTemplate: { select: { name: true } }, modules: { where: { status: "PUBLISHED" }, orderBy: { order: "asc" }, select: { lessons: { where: { status: "PUBLISHED" }, orderBy: { order: "asc" }, select: { id: true, title: true, contentType: true, isRequired: true, requiredPercent: true } } } } } } },
+    include: { completion: { select: { completedAt: true } }, course: { select: { id: true, title: true, category: true, description: true, difficulty: true, thumbnailKey: true, priceCents: true, categoryRef: { select: { name: true } }, certificationTemplate: { select: { name: true } }, modules: { where: { status: "PUBLISHED" }, orderBy: { order: "asc" }, select: { lessons: { where: { status: "PUBLISHED" }, orderBy: { order: "asc" }, select: { id: true, title: true, contentType: true, isRequired: true, requiredPercent: true } } } } } } },
   });
   if (!enrollments.length) return { cards: [], inProgress: 0, completed: 0, certifications: 0 };
+  const covers = await coverUrlsFor(enrollments.map((e) => ({ id: e.course.id, thumbnailKey: e.course.thumbnailKey })));
   const courseIds = enrollments.map((e) => e.courseId);
   const lessonIds = enrollments.flatMap((e) => e.course.modules.flatMap((m) => m.lessons.map((l) => l.id)));
   const [progress, courseProgress, submissions, certs] = await Promise.all([
@@ -94,6 +99,9 @@ export async function myCourses(db: PrismaClient, actor: Actor): Promise<{ cards
       courseId: e.courseId,
       title: e.course.title,
       category: e.course.categoryRef?.name ?? e.course.category,
+      description: e.course.description,
+      difficulty: e.course.difficulty as string,
+      coverUrl: covers.get(e.course.id) ?? null,
       status,
       percent: cp?.percent ?? (e.completion ? 100 : 0),
       requiredDone: cp?.requiredDone ?? (e.completion ? required.length : 0),
