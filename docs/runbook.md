@@ -7,6 +7,7 @@
 | Web | `npm run start` (after `npm run build`) | Vercel runs this for you. |
 | Worker | `npm run worker` | Drains the outbox every `WORKER_POLL_MS`, runs due jobs (email, SMS, interview reminders), and every 10 minutes expires reservations and certifications and warns before expiry. Safe to run more than one instance (SKIP LOCKED). |
 | Migrations | `npm run db:deploy` (`prisma migrate deploy`) | Before the web deploy, with `DIRECT_URL` set to the Supabase direct connection. Never `migrate dev` in production, and never through the 6543 pooler. |
+| Migrations from a workstation | `powershell -NoProfile -ExecutionPolicy Bypass -File .scriptsmigrate-production.ps1` | Runs `prisma migrate deploy` and then `migrate status` against production. Reads `PROD_DIRECT_URL` from the local `.env` for this process only and never prints it. Take a backup first when a migration drops or rewrites columns. |
 | Reference data | `powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\seed-production-foundation.ps1` | Re-runs the foundation seed (roles, permissions, settings, taxonomies, agreements; every write an upsert) against production. Reads `PROD_DIRECT_URL` from the local `.env` for that process only. Plain `npm run db:seed:foundation` seeds the local database. Run after any release that adds roles or permission keys. |
 | Health | `GET /api/health` | `status: ok` plus `worker: ok|lagging`. Alert on non-200 or `lagging`. |
 
