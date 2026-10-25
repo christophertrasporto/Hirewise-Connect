@@ -113,6 +113,8 @@ export const PERMISSIONS = {
   // System
   "audit.read": { group: "system", description: "Read the audit log" },
   "settings.manage": { group: "system", description: "Change platform settings" },
+  "referral.manage": { group: "system", description: "Manage the referral program: settings, affiliates, fraud flags, and commission adjustments" },
+  "payout.manage": { group: "system", description: "Review, approve, and pay referral payouts" },
   "rbac.manage": { group: "system", description: "Manage roles, permissions, and overrides" },
   "user.manage": { group: "system", description: "Create, suspend, and deactivate users" },
 } as const;

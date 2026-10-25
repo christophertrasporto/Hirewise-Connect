@@ -5,6 +5,7 @@ import { prisma } from "@/server/db/client";
 import { requireActor } from "@/server/auth/require-actor";
 import { listSeatRequests, listSeatPurchases } from "@/server/services/seat.service";
 import { listCoursePurchases } from "@/server/services/training.service";
+import { RefundForm } from "@/components/referral/StaffForms";
 import { listIndependentAccess } from "@/server/services/independent.service";
 import { ForbiddenError } from "@/server/policies/authorize";
 import { PageHeader, Card, Banner, EmptyState, StatusBadge, StatTile, fmtDate } from "@/components/app/ui";
@@ -42,11 +43,11 @@ export default async function SeatQueuesPage({ searchParams }: { searchParams: P
       );
     }
     if (tab === "courses") {
-      const courses = await listCoursePurchases(prisma, actor, pick(["PENDING", "PAID", "WAIVED", "CANCELLED"] as const, "PENDING"));
+      const courses = await listCoursePurchases(prisma, actor, pick(["PENDING", "PAID", "WAIVED", "CANCELLED", "REFUNDED"] as const, "PENDING"));
       return (
         <Shell tab={tab}>
-          <div className="mb-5 grid gap-4 sm:grid-cols-4">{(["PENDING", "PAID", "WAIVED", "CANCELLED"] as const).map((s) => <StatTile key={s} label={s.toLowerCase()} value={courses.counts[s] ?? 0} href={`/staff/agencies/seats?tab=courses&status=${s}`} />)}</div>
-          {courses.rows.length === 0 ? <Card><EmptyState title="No Course Seat purchases" /></Card> : <div className="space-y-4">{courses.rows.map((p) => <Card key={p.id} title={<span><Link href={`/staff/agencies/${p.agencyId}`} className="hover:text-brand-700">{p.agencyName}</Link> · {p.courseTitle}</span>} description={`${p.seatCount} Course Seat(s) · ${p.amountLabel} · ${fmtDate(p.createdAt)}${p.note ? ` · ${p.note}` : ""}${p.assigned ? ` · ${p.assigned} assigned` : ""}`} actions={<StatusBadge status={p.status} />}>{p.status === "PENDING" && canDecide ? <RecordOutcomeForm kind="COURSE_PURCHASE" id={p.id} /> : <p className="text-[13px] text-ink-500">{p.status.toLowerCase()}{p.paymentReference ? ` · ref ${p.paymentReference}` : ""}{p.paidAt ? ` · ${fmtDate(p.paidAt)}` : ""}</p>}</Card>)}</div>}
+          <div className="mb-5 grid gap-4 sm:grid-cols-4">{(["PENDING", "PAID", "WAIVED", "CANCELLED", "REFUNDED"] as const).map((s) => <StatTile key={s} label={s.toLowerCase()} value={courses.counts[s] ?? 0} href={`/staff/agencies/seats?tab=courses&status=${s}`} />)}</div>
+          {courses.rows.length === 0 ? <Card><EmptyState title="No Course Seat purchases" /></Card> : <div className="space-y-4">{courses.rows.map((p) => <Card key={p.id} title={<span><Link href={`/staff/agencies/${p.agencyId}`} className="hover:text-brand-700">{p.agencyName}</Link> · {p.courseTitle}</span>} description={`${p.seatCount} Course Seat(s) · ${p.amountLabel} · ${fmtDate(p.createdAt)}${p.note ? ` · ${p.note}` : ""}${p.assigned ? ` · ${p.assigned} assigned` : ""}`} actions={<StatusBadge status={p.status} />}>{p.status === "PENDING" && canDecide ? <RecordOutcomeForm kind="COURSE_PURCHASE" id={p.id} /> : <div className="space-y-2"><p className="text-[13px] text-ink-500">{p.status.toLowerCase()}{p.paymentReference ? ` · ref ${p.paymentReference}` : ""}{p.paidAt ? ` · ${fmtDate(p.paidAt)}` : ""}</p>{p.status === "PAID" && canDecide && <RefundForm target="COURSE_PURCHASE" id={p.id} />}</div>}</Card>)}</div>}
         </Shell>
       );
     }

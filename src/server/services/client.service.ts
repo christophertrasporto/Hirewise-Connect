@@ -17,6 +17,7 @@ import { rateLimit } from "@/server/auth/rate-limit";
 import { getSetting } from "./setting.service";
 import { toClientSelfView, toClientStaffView } from "@/server/views/client.views";
 import { NotFoundError } from "@/server/policies/authorize";
+import { attachReferrer } from "./referral.service";
 
 const FREE_MAIL = new Set(["gmail.com", "yahoo.com", "outlook.com", "hotmail.com", "live.com", "icloud.com", "aol.com", "proton.me", "protonmail.com", "mail.com", "yandex.com", "gmx.com"]);
 
@@ -54,7 +55,7 @@ export class RegistrationError extends Error {
  * onboarding record; emits CLIENT_REGISTERED; starts a session and sends the
  * verification email. Agreements are gated on the next request (INV-I2).
  */
-export async function registerClient(db: PrismaClient, input: ClientRegistrationInput, meta: RequestMeta) {
+export async function registerClient(db: PrismaClient, input: ClientRegistrationInput, meta: RequestMeta, opts: { referralCode?: string | null } = {}) {
   rateLimit(`register:${meta.ipAddress ?? "unknown"}`, 10, 60 * 60_000);
   const domain = input.email.split("@")[1]?.toLowerCase();
   const allowFree = await getSetting(db, "allowFreeMailClients");
@@ -88,6 +89,7 @@ export async function registerClient(db: PrismaClient, input: ClientRegistration
     const actor: Actor = { userId: user.id, role: "CLIENT", permissions: new Set(), clientId: client.id };
     await audit(tx, { actor, action: "CLIENT_REGISTERED", entityType: "Client", entityId: client.id, newValue: { companyName: input.companyName, industry: input.industry, country: input.country }, ipAddress: meta.ipAddress ?? undefined });
     await acceptTermsTx(tx, { userId: user.id, role: "CLIENT", context: "SIGNUP", meta, actor });
+    await attachReferrer(tx, { userId: user.id, email: input.email, phone: input.phone || null, code: opts.referralCode, meta });
     await publishEvent(tx, "USER_CREATED", { userId: user.id, role: "CLIENT", email: input.email });
     await publishEvent(tx, "CLIENT_REGISTERED", { clientId: client.id, userId: user.id, companyName: input.companyName, email: input.email });
     return { userId: user.id, clientId: client.id };

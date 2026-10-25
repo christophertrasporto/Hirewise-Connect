@@ -6,6 +6,7 @@ import type { DomainEventMap, DomainEventType } from "./events";
 import { notifyUser } from "@/server/services/notification.service";
 import { userRepository } from "@/server/repositories/user.repository";
 import { taskRepository } from "@/server/repositories/task.repository";
+import { formatMoney } from "@/server/views/seat.views";
 
 export type EventHandler<T extends DomainEventType> = (db: Db, payload: DomainEventMap[T]) => Promise<void>;
 
@@ -190,6 +191,31 @@ export const EVENT_HANDLERS: { [T in DomainEventType]: EventHandler<T> } = {
   SKILL_TAG_REQUEST_DECIDED: async (db, p) => {
     const copy = p.decision === "APPROVE" ? "Your requested tag was added to the list and to your profile." : p.decision === "MERGE" ? "Your request matched an existing tag, which was added to your profile." : `Your tag request was not added.${p.note ? ` Note: ${p.note}` : ""}`;
     await notifyUser(db, { userId: p.requesterUserId, type: "SKILL_TAG_REQUEST_DECIDED", title: `Tag request: ${p.text}`, body: copy, dedupeKey: `TAGDEC:${p.requestId}` });
+  },
+
+  // Referral program
+  REFERRAL_SIGNUP: async (db, p) => {
+    await notifyUser(db, { userId: p.referrerUserId, type: "REFERRAL_SIGNUP", title: "Someone joined with your link", body: "You will earn a commission on every course they buy. See Refer and Earn for the details.", dedupeKey: `REFSIGN:${p.referredUserId}` });
+  },
+  REFERRAL_FLAGGED: async (db, p) => {
+    await notifyStaff(db, ["ADMIN", "SUPER_ADMIN"], { type: "REFERRAL_FLAGGED", title: "Referral sign-up flagged", body: `A referred sign-up looks related to its referrer (${p.kinds.join(", ").toLowerCase().replace(/_/g, " ")}). Review it under Referrals.`, dedupeKey: `REFFLAG:${p.referredUserId}` });
+  },
+  COMMISSION_CREATED: async (db, p) => {
+    await notifyUser(db, { userId: p.referrerUserId, type: "COMMISSION_CREATED", title: `You earned ${formatMoney(p.commissionAmount, p.currency)}`, body: `A referred member bought ${p.courseTitle}. The commission is on hold until the refund window ends.`, dedupeKey: `COMM:${p.commissionId}` });
+  },
+  COMMISSION_REVERSED: async (db, p) => {
+    await notifyUser(db, { userId: p.referrerUserId, type: "COMMISSION_REVERSED", title: "A commission was reversed", body: p.afterPayout ? `The ${formatMoney(p.commissionAmount, p.currency)} commission for ${p.courseTitle} was already paid, so it is deducted from your balance.` : `The ${formatMoney(p.commissionAmount, p.currency)} commission for ${p.courseTitle} was reversed after a refund.`, dedupeKey: `COMMREV:${p.commissionId}` });
+  },
+  COMMISSION_ADJUSTED: async (db, p) => {
+    await notifyUser(db, { userId: p.referrerUserId, type: "COMMISSION_ADJUSTED", title: "Your referral balance was adjusted", body: `${p.amount < 0 ? "-" : "+"}${formatMoney(Math.abs(p.amount), p.currency)}. Note from Hirewise: ${p.note}`, dedupeKey: `COMMADJ:${p.adjustmentId}` });
+  },
+  PAYOUT_REQUESTED: async (db, p) => {
+    await notifyStaff(db, ["ADMIN", "SUPER_ADMIN"], { type: "PAYOUT_REQUESTED", title: `Payout requested: ${formatMoney(p.amount, p.currency)}`, body: "Review it under Referrals → Payouts.", dedupeKey: `PAYREQ:${p.payoutId}` });
+  },
+  PAYOUT_DECIDED: async (db, p) => {
+    const money = formatMoney(p.amount, p.currency);
+    const copy = p.outcome === "PAID" ? `Your ${money} payout was sent.${p.reference ? ` Reference: ${p.reference}.` : ""}` : p.outcome === "APPROVED" ? `Your ${money} payout was approved and will be sent soon.` : `Your ${money} payout request was declined.${p.reason ? ` Reason: ${p.reason}` : ""}`;
+    await notifyUser(db, { userId: p.referrerUserId, type: `PAYOUT_${p.outcome}`, title: `Payout ${p.outcome.toLowerCase()}`, body: copy, dedupeKey: `PAYDEC:${p.payoutId}:${p.outcome}` });
   },
 
   // v2 phase 6b: opportunities and submissions
