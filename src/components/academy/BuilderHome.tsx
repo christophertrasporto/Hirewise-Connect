@@ -3,7 +3,8 @@ import { Plus, Tags, Users, Wallet, Award, PlayCircle, LayoutList, BarChart3 } f
 import type { Actor } from "@/server/auth/actor";
 import { can } from "@/server/policies/authorize";
 import type { listCoursesForCoach } from "@/server/services/academy.service";
-import { PageHeader, Card, StatusBadge, EmptyState, StatTile } from "@/components/app/ui";
+import { PageHeader, Card, EmptyState, StatTile } from "@/components/app/ui";
+import { BuilderCourseGrid } from "./BuilderCourseGrid";
 
 export type BuilderCourseRow = Awaited<ReturnType<typeof listCoursesForCoach>>[number];
 
@@ -49,28 +50,13 @@ export function BuilderHome({ actor, courses }: { actor: Actor; courses: Builder
         </div>
       )}
 
-      {builds && (
+      {builds && (courses.length > 0 ? (
+        <BuilderCourseGrid courses={courses.map((c) => ({ id: c.id, title: c.title, category: c.category, description: c.description, difficulty: c.difficulty, coverUrl: c.coverUrl, status: c.status, priceLabel: c.priceLabel, moduleCount: c.modules.length, lessonCount: c.lessonCount, enrolledCount: c.enrolledCount, owner: manages ? c.ownerCoach.email : null }))} />
+      ) : (
         <Card>
-          {courses.length === 0 ? (
-            <EmptyState title="No courses yet" description="Create a course, add modules and lessons, build the quiz, and submit it for publishing." action={<Link href="/courses/manage/new" className="inline-flex h-10 items-center gap-1.5 rounded-full bg-ink-900 px-4 text-[13.5px] font-semibold text-white"><Plus className="h-4 w-4" /> New course</Link>} />
-          ) : (
-            <ul className="divide-y divide-ink-100">
-              {courses.map((c) => (
-                <li key={c.id} className="flex flex-col gap-2 py-3 sm:flex-row sm:items-center sm:justify-between">
-                  <div className="min-w-0">
-                    <Link href={`/courses/manage/${c.id}`} className="block truncate text-[15px] font-semibold text-ink-900 hover:text-brand-700">{c.title}</Link>
-                    <p className="text-[12.5px] text-ink-400">{c.category} · {c.priceLabel} · {c.modules.length} module{c.modules.length === 1 ? "" : "s"} · {c.lessonCount} lesson{c.lessonCount === 1 ? "" : "s"} · {c.enrolledCount} enrolled{manages ? ` · ${c.ownerCoach.email}` : ""}</p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <StatusBadge status={c.status} />
-                    <Link href={`/courses/manage/${c.id}/modules`} className="text-[12.5px] font-semibold text-brand-600 hover:text-brand-700">Open builder</Link>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
+          <EmptyState title="No courses yet" description="Create a course, add modules and lessons, build the quiz, and submit it for publishing." action={<Link href="/courses/manage/new" className="inline-flex h-10 items-center gap-1.5 rounded-full bg-ink-900 px-4 text-[13.5px] font-semibold text-white"><Plus className="h-4 w-4" /> New course</Link>} />
         </Card>
-      )}
+      ))}
     </>
   );
 }

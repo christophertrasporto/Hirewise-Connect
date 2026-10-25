@@ -8,6 +8,7 @@ import { getEnrollmentForAgent } from "@/server/services/academy.service";
 import { NotFoundError } from "@/server/policies/authorize";
 import { PageHeader, Card, StatusBadge, Banner, EmptyState, fmtDate } from "@/components/app/ui";
 import { EnrolButton } from "@/components/academy/AgentCourseActions";
+import { CourseCover } from "@/components/academy/CourseTile";
 import { LessonContent, LessonOutline, embedUrl } from "@/components/academy/LessonContent";
 
 export const metadata: Metadata = { title: "Course" };
@@ -38,6 +39,10 @@ export default async function CoursePage({ params }: { params: Promise<{ courseI
       {locked && <div className="mb-6"><Banner tone="warn" title={`Payment of ${enrollment!.priceLabel} pending`}>Send the course fee to Hirewise (bank transfer or GCash) and share the reference with your coach or account manager. The lessons unlock as soon as the payment is recorded.</Banner></div>}
       {completed && <div className="mb-6"><Banner tone="success" title={`Completed ${fmtDate(enrollment!.completedAt)}`}>{enrollment!.examScore !== null ? `Best quiz score ${enrollment!.examScore}%.` : ""}{course.certification ? ` Certification: ${course.certification.name}.` : ""}</Banner></div>}
       {enrollment && !locked && !completed && course.welcomeMessage && <div className="mb-6"><Banner tone="info" title="From your coach">{course.welcomeMessage}</Banner></div>}
+
+      <div className="mb-6 max-w-2xl overflow-hidden rounded-card border border-ink-100 shadow-card">
+        <CourseCover title={course.title} category={course.category} difficulty={course.difficulty} coverUrl={course.coverUrl} eager />
+      </div>
 
       <div className="grid gap-5 lg:grid-cols-[1.3fr_0.7fr]">
         <div className="space-y-5">

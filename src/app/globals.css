@@ -34,10 +34,18 @@
   --color-gold-500: #e8b44c;
   --color-gold-600: #c9942f;
   --color-gold-700: #9c6f1d;
+  --color-gold-800: #7a5516;
 
   --shadow-soft: 0 1px 2px rgb(10 22 40 / 0.04), 0 8px 24px -8px rgb(10 22 40 / 0.12);
   --shadow-lift: 0 2px 4px rgb(10 22 40 / 0.05), 0 24px 48px -16px rgb(10 22 40 / 0.22);
   --shadow-glow: 0 0 0 1px rgb(14 164 122 / 0.25), 0 12px 40px -8px rgb(14 164 122 / 0.35);
+
+  /* Academy surfaces (course catalog and builder). Semantic tokens so other areas can adopt them later. */
+  --color-surface: #f6f8fb;
+  --color-surface-raised: #ffffff;
+  --radius-card: 1.25rem;
+  --shadow-card: 0 1px 2px rgb(10 22 40 / 0.05), 0 6px 20px -10px rgb(10 22 40 / 0.2);
+  --shadow-card-hover: 0 2px 4px rgb(10 22 40 / 0.06), 0 18px 40px -14px rgb(10 22 40 / 0.3);
 
   --animate-fade-up: fade-up 0.7s cubic-bezier(0.22, 1, 0.36, 1) both;
   --animate-float: float 6s ease-in-out infinite;
@@ -155,6 +163,19 @@
     linear-gradient(to right, rgb(255 255 255 / 0.05) 1px, transparent 1px),
     linear-gradient(to bottom, rgb(255 255 255 / 0.05) 1px, transparent 1px);
   background-size: 48px 48px;
+}
+
+/* Generated course cover: Hirewise navy with a brand glow and a faint grid. */
+@utility cover-navy {
+  background-image:
+    radial-gradient(120% 90% at 100% 0%, rgb(14 164 122 / 0.3), transparent 55%),
+    linear-gradient(135deg, var(--color-ink-800), var(--color-ink-950));
+}
+@utility cover-grid {
+  background-image:
+    linear-gradient(to right, rgb(255 255 255 / 0.05) 1px, transparent 1px),
+    linear-gradient(to bottom, rgb(255 255 255 / 0.05) 1px, transparent 1px);
+  background-size: 28px 28px;
 }
 
 @utility glass {
