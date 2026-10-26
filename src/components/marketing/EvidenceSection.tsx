@@ -57,7 +57,7 @@ const evidence = [
 
 export function EvidenceSection() {
   return (
-    <section className="bg-ink-50/70 py-24 lg:py-32">
+    <section className="border-t border-ink-100 bg-band py-24 lg:py-32">
       <div className="container-x">
         <div className="grid gap-12 lg:grid-cols-[0.9fr_1.1fr] lg:gap-20">
           <div className="lg:sticky lg:top-28 lg:self-start">

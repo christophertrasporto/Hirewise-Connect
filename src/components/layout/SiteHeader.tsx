@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Menu, X, ArrowRight } from "lucide-react";
 import { Logo } from "@/components/ui/Logo";
+import { ThemeToggle } from "@/components/ui/ThemeToggle";
 import { Button } from "@/components/ui/Button";
 import { nav } from "@/lib/site";
 import { cn } from "@/lib/cn";
@@ -36,7 +37,7 @@ export function SiteHeader() {
     <header
       className={cn(
         "sticky top-0 z-50 transition-all duration-300",
-        scrolled ? "glass border-b border-ink-100 shadow-[0_1px_0_rgb(10_22_40/0.02)]" : "bg-transparent",
+        scrolled ? "glass border-b border-ink-100 shadow-[0_1px_0_var(--hairline)]" : "bg-transparent",
       )}
     >
       <div className="container-x flex h-[72px] items-center justify-between">
@@ -62,6 +63,7 @@ export function SiteHeader() {
         </nav>
 
         <div className="hidden items-center gap-2 lg:flex">
+          <ThemeToggle />
           <Button href="/login" variant="ghost" size="sm">
             Log in
           </Button>
@@ -70,9 +72,11 @@ export function SiteHeader() {
           </Button>
         </div>
 
+        <div className="flex items-center gap-1 lg:hidden">
+        <ThemeToggle />
         <button
           type="button"
-          className="inline-flex h-10 w-10 items-center justify-center rounded-full text-ink-800 hover:bg-ink-100 lg:hidden"
+          className="inline-flex h-10 w-10 items-center justify-center rounded-full text-ink-800 hover:bg-ink-100"
           onClick={() => setOpen((v) => !v)}
           aria-expanded={open}
           aria-controls="mobile-nav"
@@ -80,6 +84,7 @@ export function SiteHeader() {
         >
           {open ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
         </button>
+        </div>
       </div>
 
       <div

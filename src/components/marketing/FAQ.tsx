@@ -30,7 +30,7 @@ const faqs = [
 
 export function FAQ() {
   return (
-    <section className="py-24 lg:py-32">
+    <section className="border-t border-ink-100 bg-band py-24 lg:py-32">
       <div className="container-x grid gap-12 lg:grid-cols-[0.8fr_1.2fr]">
         <SectionHeading
           eyebrow="Questions"

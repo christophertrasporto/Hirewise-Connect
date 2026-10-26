@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ArrowLeft, BadgeCheck, CalendarCheck, ShieldCheck } from "lucide-react";
 import { Logo } from "@/components/ui/Logo";
+import { ThemeToggle } from "@/components/ui/ThemeToggle";
 import type { ReactNode } from "react";
 
 const points = [
@@ -12,10 +13,10 @@ const points = [
 export function AuthShell({ children, aside }: { children: ReactNode; aside?: ReactNode }) {
   return (
     <div className="grid min-h-dvh lg:grid-cols-[1.05fr_1fr]">
-      <aside className="relative hidden overflow-hidden bg-ink-900 p-12 text-white lg:flex lg:flex-col lg:justify-between">
+      <aside className="relative hidden overflow-hidden bg-navy p-12 text-white lg:flex lg:flex-col lg:justify-between">
         <div className="pointer-events-none absolute inset-0 grid-bg-dark [mask-image:radial-gradient(ellipse_at_top_left,black_10%,transparent_70%)]" />
-        <div className="pointer-events-none absolute -bottom-48 -left-24 h-[560px] w-[560px] rounded-full bg-[radial-gradient(closest-side,rgb(14_164_122/0.28),transparent)]" />
-        <div className="pointer-events-none absolute -top-40 right-[-140px] h-[460px] w-[460px] rounded-full bg-[radial-gradient(closest-side,rgb(232_180_76/0.16),transparent)]" />
+        <div className="pointer-events-none absolute -bottom-48 -left-24 h-[560px] w-[560px] animate-drift rounded-full bg-[radial-gradient(closest-side,rgb(14_164_122/0.28),transparent)]" />
+        <div className="pointer-events-none absolute -top-40 right-[-140px] h-[460px] w-[460px] animate-drift rounded-full [animation-direction:alternate-reverse] bg-[radial-gradient(closest-side,rgb(232_180_76/0.16),transparent)]" />
 
         <div className="relative">
           <Logo inverted />
@@ -52,17 +53,19 @@ export function AuthShell({ children, aside }: { children: ReactNode; aside?: Re
         </p>
       </aside>
 
-      <div className="relative flex flex-col">
+      <div className="relative flex flex-col bg-app">
         <div className="container-x flex h-[72px] items-center justify-between lg:hidden">
           <Logo />
+          <ThemeToggle />
         </div>
-        <div className="absolute top-6 right-6 hidden lg:block">
+        <div className="absolute top-5 right-6 hidden items-center gap-3 lg:flex">
           <Link
             href="/"
             className="inline-flex items-center gap-1.5 text-[13.5px] font-medium text-ink-500 transition-colors hover:text-ink-900"
           >
             <ArrowLeft className="h-4 w-4" /> Back to site
           </Link>
+          <ThemeToggle />
         </div>
         <div className="flex flex-1 items-center justify-center px-5 py-10 sm:px-8">{children}</div>
       </div>

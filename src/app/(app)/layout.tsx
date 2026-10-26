@@ -4,7 +4,7 @@ import { requireAuth } from "@/server/auth/require-actor";
 import { can } from "@/server/policies/authorize";
 import { ROLE_NAMES } from "@/server/policies/permissions";
 import { notificationRepository } from "@/server/repositories/notification.repository";
-import { AppShell, type NavItem } from "@/components/app/AppShell";
+import { AppShell, type NavItem, type ShellTone } from "@/components/app/AppShell";
 import { logoutAction } from "@/app/(auth)/actions";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
@@ -62,10 +62,11 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   nav.push({ href: "/notifications", label: "Notifications", icon: <Bell /> });
   if (can(actor, "course.create_own") || can(actor, "course.manage") || can(actor, "course.payment.record") || can(actor, "certification.review")) nav.splice(1, 0, { href: "/courses", label: "Courses", icon: <GraduationCap /> });
 
+  const tone: ShellTone = actor.role === "AGENT" || actor.role === "CLIENT" || actor.role === "APPLICANT" || actor.role === "AGENCY_OWNER" || actor.role === "AGENCY_MANAGER" ? "app" : "staff";
   const unread = (await notificationRepository.listForUser(prisma, actor.userId, 50)).filter((n) => !n.readAt).length;
 
   return (
-    <AppShell nav={nav} email={auth.email} roleLabel={ROLE_NAMES[actor.role].name} unread={unread} onLogout={logoutAction}>
+    <AppShell nav={nav} email={auth.email} roleLabel={ROLE_NAMES[actor.role].name} unread={unread} tone={tone} onLogout={logoutAction}>
       {children}
     </AppShell>
   );

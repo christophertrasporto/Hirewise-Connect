@@ -4,10 +4,10 @@ import { ProfileCard } from "./ProfileCard";
 
 export function Hero() {
   return (
-    <section className="relative overflow-hidden">
+    <section className="relative overflow-hidden bg-hero">
       <div className="pointer-events-none absolute inset-0 grid-bg [mask-image:radial-gradient(ellipse_at_top,black_30%,transparent_75%)]" />
-      <div className="pointer-events-none absolute -top-40 left-1/2 h-[620px] w-[1100px] -translate-x-1/2 rounded-full bg-[radial-gradient(closest-side,rgb(14_164_122/0.14),transparent)]" />
-      <div className="pointer-events-none absolute top-24 right-[-120px] h-[420px] w-[420px] rounded-full bg-[radial-gradient(closest-side,rgb(232_180_76/0.18),transparent)]" />
+      <div className="pointer-events-none absolute -top-40 left-1/2 h-[620px] w-[1100px] -translate-x-1/2 animate-drift rounded-full bg-[radial-gradient(closest-side,var(--glow-brand-strong),transparent)] opacity-70" />
+      <div className="pointer-events-none absolute top-24 right-[-120px] h-[420px] w-[420px] animate-drift rounded-full bg-[radial-gradient(closest-side,var(--glow-gold),transparent)] [animation-delay:-9s] [animation-direction:alternate-reverse]" />
 
       <div className="container-x relative grid items-center gap-14 pt-14 pb-20 lg:grid-cols-[1.05fr_0.95fr] lg:gap-10 lg:pt-20 lg:pb-28">
         <div className="max-w-2xl animate-fade-up">
