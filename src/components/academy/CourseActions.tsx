@@ -5,7 +5,7 @@ import { courseWorkflowAction, recordAssessmentAction, recordCoursePaymentAction
 import { idle } from "@/server/http/action-result";
 import { Field, Input, Select, Textarea, Checkbox, SubmitButton, FormAlert } from "@/components/ui/Form";
 
-export function CourseWorkflowButton({ courseId, op, label, variant = "dark", confirm, templates }: { courseId: string; op: "SUBMIT" | "PUBLISH" | "ARCHIVE"; label: string; variant?: "dark" | "primary" | "outline" | "danger"; confirm?: string; templates?: Array<{ id: string; name: string }>; }) {
+export function CourseWorkflowButton({ courseId, op, label, variant = "dark", confirm, templates }: { courseId: string; op: "SUBMIT" | "PUBLISH" | "ARCHIVE" | "RESTORE"; label: string; variant?: "dark" | "primary" | "outline" | "danger"; confirm?: string; templates?: Array<{ id: string; name: string }>; }) {
   const [state, action] = useActionState(courseWorkflowAction, idle);
   return (
     <form action={action} className="space-y-2" onSubmit={(e) => { if (confirm && !window.confirm(confirm)) e.preventDefault(); }}>
@@ -71,7 +71,7 @@ export function PaymentForm({ enrollmentId, priceLabel }: { enrollmentId: string
   return (
     <form action={action} className="flex flex-wrap items-end gap-2" noValidate>
       <input type="hidden" name="enrollmentId" value={enrollmentId} />
-      <Input name="paidUsd" inputMode="decimal" placeholder={`Amount (${priceLabel})`} className="h-9 w-[150px] text-[13px]" />
+      <Input name="paid" inputMode="decimal" placeholder={`Amount (${priceLabel})`} className="h-9 w-[150px] text-[13px]" />
       <Input name="reference" placeholder="Reference (GCash, bank)" className="h-9 w-[190px] text-[13px]" />
       <Input name="reason" placeholder="Reason (if waiving)" className="h-9 w-[170px] text-[13px]" />
       <Checkbox name="waived" label={<span className="text-[13px]">Waive</span>} />

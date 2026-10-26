@@ -22,9 +22,9 @@ export default async function StaffAcademyPaymentsPage() {
             <li key={e.id} className="flex flex-col gap-3 py-4 lg:flex-row lg:items-center lg:justify-between">
               <div>
                 <p className="text-[15px] font-semibold text-ink-900"><Link href={`/staff/talent/${e.agentProfile.id}`} className="hover:text-brand-700">{e.agentProfile.displayName}</Link> <span className="font-normal text-ink-400">· {e.course.title}</span></p>
-                <p className="text-[12.5px] text-ink-400">Enrolled {fmtDate(e.enrolledAt)} · due {priceLabel(e.priceCents)}</p>
+                <p className="text-[12.5px] text-ink-400">Enrolled {fmtDate(e.enrolledAt)} · due {priceLabel(e.priceCents, e.currency)}</p>
               </div>
-              <PaymentForm enrollmentId={e.id} priceLabel={priceLabel(e.priceCents)} />
+              <PaymentForm enrollmentId={e.id} priceLabel={priceLabel(e.priceCents, e.currency)} />
             </li>
           ))}
         </ul>
@@ -37,7 +37,7 @@ export default async function StaffAcademyPaymentsPage() {
             <li key={e.id} className="flex flex-col gap-2 py-3 lg:flex-row lg:items-start lg:justify-between">
               <div>
                 <p className="text-[14.5px] font-semibold text-ink-900">{e.agentProfile.displayName} <span className="font-normal text-ink-500">· {e.course.title}</span></p>
-                <p className="text-[12.5px] text-ink-400">Paid {priceLabel(e.paidCents ?? e.priceCents)}{e.paymentReference ? ` · ref ${e.paymentReference}` : ""}{e.paidAt ? ` · ${fmtDate(e.paidAt)}` : ""}</p>
+                <p className="text-[12.5px] text-ink-400">Paid {priceLabel(e.paidCents ?? e.priceCents, e.currency)}{e.paymentReference ? ` · ref ${e.paymentReference}` : ""}{e.paidAt ? ` · ${fmtDate(e.paidAt)}` : ""}</p>
               </div>
               <RefundForm target="ENROLLMENT" id={e.id} />
             </li>

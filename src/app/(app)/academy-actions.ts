@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { prisma } from "@/server/db/client";
 import { requireActor } from "@/server/auth/require-actor";
 import { toActionError, formList, formString, type ActionResult } from "@/server/http/action-result";
-import { coverUploadRequestSchema, createCourseCoverUploadUrl, setCourseCover, courseSchema, courseSettingsSchema, createCourse, updateCourse, updateCourseSettings, setCourseCertificationTemplate, submitCourseForApproval, publishCourse, archiveCourse, enrol, recordCoursePayment, addCoachToCourse, moduleSchema, lessonSchema, lessonUploadRequestSchema, saveModule, deleteModule, moveModule, duplicateModule, saveLesson, deleteLesson, moveLesson, duplicateLesson, createLessonUploadUrl } from "@/server/services/academy.service";
+import { coverUploadRequestSchema, createCourseCoverUploadUrl, setCourseCover, courseSchema, courseSettingsSchema, createCourse, updateCourse, updateCourseSettings, setCourseCertificationTemplate, submitCourseForApproval, publishCourse, archiveCourse, restoreCourse, enrol, recordCoursePayment, addCoachToCourse, moduleSchema, lessonSchema, lessonUploadRequestSchema, saveModule, deleteModule, moveModule, duplicateModule, saveLesson, deleteLesson, moveLesson, duplicateLesson, createLessonUploadUrl } from "@/server/services/academy.service";
 import { categorySchema, saveCategory } from "@/server/services/category.service";
 import { assessmentSchema, evaluationSchema, labelSchema, recordAssessment, recordEvaluation, saveLabel } from "@/server/services/assessment.service";
 import { templateSchema, saveTemplate, issueCertification, reviewCertification, revokeCertification } from "@/server/services/certification.service";
@@ -22,7 +22,8 @@ function courseInput(fd: FormData) {
     welcomeMessage: formString(fd, "welcomeMessage"),
     syllabus: formString(fd, "syllabus"),
     contentUrl: formString(fd, "contentUrl"),
-    priceUsd: formString(fd, "priceUsd"),
+    price: formString(fd, "price"),
+    currency: (formString(fd, "currency") || undefined) as "PHP" | "USD" | undefined,
     passingScore: formString(fd, "passingScore") || "70",
     requiresCoachReview: fd.get("requiresCoachReview") === "on",
   });
@@ -278,6 +279,7 @@ export async function courseWorkflowAction(_prev: ActionResult, fd: FormData): P
     if (op === "SUBMIT") await submitCourseForApproval(prisma, actor, courseId);
     else if (op === "PUBLISH") await publishCourse(prisma, actor, courseId, { certificationTemplateId: formString(fd, "certificationTemplateId") || null });
     else if (op === "ARCHIVE") await archiveCourse(prisma, actor, courseId);
+    else if (op === "RESTORE") await restoreCourse(prisma, actor, courseId);
     else if (op === "ADD_COACH") await addCoachToCourse(prisma, actor, courseId, formString(fd, "coachUserId"));
     else return { ok: false, error: "Unknown operation." };
     revalidateCourse(courseId);
@@ -359,7 +361,7 @@ export async function enrolAction(_prev: ActionResult, fd: FormData): Promise<Ac
 export async function recordCoursePaymentAction(_prev: ActionResult, fd: FormData): Promise<ActionResult> {
   try {
     const actor = await requireActor();
-    await recordCoursePayment(prisma, actor, formString(fd, "enrollmentId"), { paidUsd: formString(fd, "paidUsd"), reference: formString(fd, "reference"), waived: fd.get("waived") === "on", reason: formString(fd, "reason") });
+    await recordCoursePayment(prisma, actor, formString(fd, "enrollmentId"), { paid: formString(fd, "paid"), reference: formString(fd, "reference"), waived: fd.get("waived") === "on", reason: formString(fd, "reason") });
     revalidatePath("/staff/academy", "layout");
     return { ok: true };
   } catch (e) {

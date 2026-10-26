@@ -51,7 +51,7 @@ export default async function StaffAcademyCoursesPage() {
                   <td className="py-3 font-semibold text-ink-800">{c.priceLabel}</td>
                   <td className="py-3 text-ink-600">{c.enrolledCount}</td>
                   <td className="py-3 text-ink-600">{c.certificationTemplate?.name ?? "—"}</td>
-                  <td className="py-3"><StatusBadge status={c.status} /></td>
+                  <td className="py-3"><div className="flex flex-wrap items-center gap-2"><StatusBadge status={c.status} />{c.status === "ARCHIVED" && <div className="w-[120px]"><CourseWorkflowButton courseId={c.id} op="RESTORE" label="Restore" variant="outline" confirm="Publish this archived course again? Learners will see it in the catalog." /></div>}</div></td>
                 </tr>
               ))}
             </tbody>

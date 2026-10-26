@@ -39,6 +39,17 @@ const schema = z.object({
   PAYMENT_PROVIDER: z.enum(["manual", "fake", "stripe"]).default("manual"),
   STRIPE_SECRET_KEY: z.string().optional(),
   STRIPE_WEBHOOK_SECRET: z.string().optional(),
+  /** Course payments through Maya Checkout. off hides the button; fake is a local stand-in and is refused in production. */
+  MAYA_MODE: z.enum(["off", "fake", "sandbox", "production"]).default("off"),
+  /** Public API key (pk-...): creates checkouts. */
+  MAYA_PUBLIC_KEY: z.string().optional(),
+  /** Secret API key (sk-...): looks payments up. Never sent to the browser. */
+  MAYA_SECRET_KEY: z.string().optional(),
+  /** true rejects a webhook whose signature does not verify; false (default) still confirms every payment by looking it up. */
+  MAYA_WEBHOOK_STRICT: z.enum(["true", "false"]).default("false"),
+  /** Optional override of the two published Maya webhook public keys (PEM; write newlines as \n). */
+  MAYA_WEBHOOK_PUBLIC_KEY_1: z.string().optional(),
+  MAYA_WEBHOOK_PUBLIC_KEY_2: z.string().optional(),
   MEETING_PROVIDER: z.enum(["none", "fake", "zoom"]).default("none"),
   ZOOM_ACCOUNT_ID: z.string().optional(),
   ZOOM_CLIENT_ID: z.string().optional(),
@@ -82,6 +93,12 @@ export function getEnv(): Env {
   }
   if (parsed.data.PAYMENT_PROVIDER === "stripe" && (!parsed.data.STRIPE_SECRET_KEY || !parsed.data.STRIPE_WEBHOOK_SECRET)) {
     throw new Error("PAYMENT_PROVIDER=stripe requires STRIPE_SECRET_KEY and STRIPE_WEBHOOK_SECRET");
+  }
+  if ((parsed.data.MAYA_MODE === "sandbox" || parsed.data.MAYA_MODE === "production") && (!parsed.data.MAYA_PUBLIC_KEY || !parsed.data.MAYA_SECRET_KEY)) {
+    throw new Error("MAYA_MODE=sandbox or production requires MAYA_PUBLIC_KEY and MAYA_SECRET_KEY");
+  }
+  if (parsed.data.NODE_ENV === "production" && parsed.data.MAYA_MODE === "fake") {
+    throw new Error("MAYA_MODE=fake is not allowed in production");
   }
   if (parsed.data.MEETING_PROVIDER === "zoom" && (!parsed.data.ZOOM_ACCOUNT_ID || !parsed.data.ZOOM_CLIENT_ID || !parsed.data.ZOOM_CLIENT_SECRET)) {
     throw new Error("MEETING_PROVIDER=zoom requires ZOOM_ACCOUNT_ID, ZOOM_CLIENT_ID, ZOOM_CLIENT_SECRET");

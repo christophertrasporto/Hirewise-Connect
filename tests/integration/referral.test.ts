@@ -13,6 +13,7 @@ import { recordCommissionForPayment, releaseCommissionHolds, reverseCommissionMa
 import { savePayoutDetails, myPayoutDetails, requestPayout, listPayoutQueue, approvePayout, markPayoutPaid, rejectPayout, myPayouts } from "@/server/services/payout.service";
 import { getReferralSettings, updateReferralSettings, listAffiliates, affiliateDetail, reviewReferralFlag } from "@/server/services/referral-admin.service";
 import { runWorkerOnce, runMaintenance } from "@/server/jobs/worker";
+import { setSetting } from "@/server/services/setting.service";
 import { makeActor } from "@/server/auth/actor";
 import { ForbiddenError, NotFoundError } from "@/server/policies/authorize";
 import { ROLE_NAMES, type RoleKey } from "@/server/policies/permissions";
@@ -79,6 +80,11 @@ beforeAll(async () => {
   const ben = await registerAgent(db, talent({ displayName: "Ben R.", fullName: "Ben Reyes", email: "ben@talent.example" }), meta("198.51.100.201"));
   ids.ben = ben.userId;
   ids.benCode = await ensureReferralCode(db, ids.ben);
+  // These tests use USD courses and a 10.00 minimum payout. The shipped defaults are PHP and 500.00 (see maya-payments.test.ts).
+  await setSetting(db, makeActor("SUPER_ADMIN", { userId: "su_rf_settings" }), "referrals", { commissionRateBps: 1500, holdDays: 30, cookieDays: 30, minimumPayoutMinor: 1000, payoutCurrency: "USD" }).catch(async () => {
+    await db.user.create({ data: { id: "su_rf_settings", email: "su-settings@hirewise.example", roleId: await role("SUPER_ADMIN") } });
+    await setSetting(db, makeActor("SUPER_ADMIN", { userId: "su_rf_settings" }), "referrals", { commissionRateBps: 1500, holdDays: 30, cookieDays: 30, minimumPayoutMinor: 1000, payoutCurrency: "USD" });
+  });
 });
 
 afterAll(async () => {
