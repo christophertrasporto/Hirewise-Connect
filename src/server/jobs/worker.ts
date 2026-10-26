@@ -85,6 +85,9 @@ export async function runMaintenance(prisma: PrismaClient, now = new Date()): Pr
   // v2 phase 6a: every approved agent and active agency holds an email alias.
   const { allocateMissingAliases } = await import("@/server/services/alias.service");
   await allocateMissingAliases(prisma);
+  // Online course payments: a lost or late Maya webhook is made up for by looking open payments up.
+  const { reconcilePendingOnlinePayments } = await import("@/server/services/maya-payment.service");
+  await reconcilePendingOnlinePayments(prisma, now);
   // Referral program: commissions whose hold has ended become payable (idempotent).
   const { releaseCommissionHolds } = await import("@/server/services/commission.service");
   await releaseCommissionHolds(prisma, now);

@@ -7,6 +7,7 @@ import { Field, Input, Textarea, Checkbox, Select, SubmitButton, FormAlert } fro
 
 export type CourseFormValues = {
   id?: string;
+  currency?: string;
   title: string;
   categoryId: string | null;
   description: string;
@@ -54,10 +55,13 @@ export function CourseForm({ course, categories }: { course?: CourseFormValues; 
         <Field label="Estimated duration (minutes)" htmlFor="estimatedMinutes" error={fe.estimatedMinutes}>
           <Input id="estimatedMinutes" name="estimatedMinutes" type="number" min={1} defaultValue={course?.estimatedMinutes ?? ""} placeholder="e.g. 240" invalid={!!fe.estimatedMinutes} />
         </Field>
-        <Field label="Price (USD)" htmlFor="priceUsd" error={fe.priceUsd} hint="Leave 0 for a free course.">
-          <div className="relative">
-            <span className="pointer-events-none absolute top-1/2 left-3.5 -translate-y-1/2 text-[14px] font-semibold text-ink-400">$</span>
-            <Input id="priceUsd" name="priceUsd" inputMode="decimal" defaultValue={course ? (course.priceCents / 100).toFixed(2) : "0.00"} className="pl-8" invalid={!!fe.priceUsd} />
+        <Field label="Price" htmlFor="price" error={fe.price} hint="Leave 0 for a free course. Online payment with Maya takes PHP.">
+          <div className="grid grid-cols-[1fr_96px] gap-2">
+            <Input id="price" name="price" inputMode="decimal" defaultValue={course ? (course.priceCents / 100).toFixed(2) : "0.00"} invalid={!!fe.price} />
+            <Select id="currency" name="currency" defaultValue={course?.currency ?? "PHP"} aria-label="Currency">
+              <option value="PHP">PHP</option>
+              <option value="USD">USD</option>
+            </Select>
           </div>
         </Field>
       </div>

@@ -1803,6 +1803,10 @@ model CourseEnrollment {
   refundKind   RefundKind?
   refundReason String?
 
+  /// Currency of priceCents and paidCents (a snapshot of the course currency at enrolment).
+  currency       String          @default("USD") @db.Char(3)
+  onlinePayments OnlinePayment[]
+
   @@unique([courseId, agentProfileId])
   @@index([agentProfileId, status])
 }
@@ -3560,4 +3564,46 @@ model ReferralFlag {
 
   @@unique([referredUserId, kind])
   @@index([referrerId])
+}
+
+// ---------------------------------------------------------------------------
+// Online course payments (Maya Checkout)
+// ---------------------------------------------------------------------------
+
+enum OnlinePaymentStatus {
+  /// Row created, checkout not yet confirmed by Maya.
+  CREATED
+  /// Maya created the checkout; waiting for the learner to pay.
+  PENDING
+  PAID
+  FAILED
+  EXPIRED
+  CANCELLED
+  /// Maya reports a payment whose amount or currency does not match the enrolment. Needs staff attention.
+  MISMATCH
+}
+
+/// One checkout attempt. The row id is the requestReferenceNumber sent to the provider.
+model OnlinePayment {
+  id                String              @id @default(cuid())
+  provider          String
+  enrollmentId      String
+  enrollment        CourseEnrollment    @relation(fields: [enrollmentId], references: [id])
+  checkoutId        String?
+  providerPaymentId String?
+  amountMinor       Int
+  currency          String              @db.Char(3)
+  status            OnlinePaymentStatus @default(CREATED)
+  redirectUrl       String?
+  failureReason     String?
+  /// Advisory result of the webhook signature check on the last notification (null when none arrived).
+  signatureValid    Boolean?
+  lastPayload       Json?
+  paidAt            DateTime?
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+
+  @@unique([provider, checkoutId])
+  @@index([enrollmentId, status])
+  @@index([status, createdAt])
 }

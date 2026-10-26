@@ -2,7 +2,7 @@ import type { Prisma } from "@/server/db/types";
 import type { courseInclude } from "@/server/repositories/academy.repository";
 
 type CourseRecord = Prisma.AcademyCourseGetPayload<{ include: ReturnType<typeof courseInclude> }>;
-type EnrollmentRecord = { id: string; status: string; paymentStatus: string; priceCents: number; paidCents: number | null; paymentReference: string | null; paidAt: Date | null; credentialSource: string; sponsoringAgencyId: string | null; accessRevokedAt: Date | null; revokeReason: string | null; enrolledAt: Date; completion: { completedAt: Date; examScore: number | null } | null; attempts: Array<{ id: string; status: string; scorePercent: number | null; passed: boolean | null; submittedAt: Date | null }> };
+type EnrollmentRecord = { id: string; status: string; paymentStatus: string; priceCents: number; currency: string; paidCents: number | null; paymentReference: string | null; paidAt: Date | null; credentialSource: string; sponsoringAgencyId: string | null; accessRevokedAt: Date | null; revokeReason: string | null; enrolledAt: Date; completion: { completedAt: Date; examScore: number | null } | null; attempts: Array<{ id: string; status: string; scorePercent: number | null; passed: boolean | null; submittedAt: Date | null }> };
 
 type LessonRecord = CourseRecord["modules"][number]["lessons"][number];
 
@@ -21,8 +21,8 @@ export function curriculumOutline(c: CourseRecord) {
   return visibleModules(c).map((m) => ({ id: m.id, order: m.order, title: m.title, description: m.description, lessons: m.lessons.map((l) => ({ id: l.id, order: l.order, title: l.title, contentType: l.contentType, durationSec: l.durationSec })) }));
 }
 
-export function priceLabel(cents: number) {
-  return cents === 0 ? "Free" : `USD ${(cents / 100).toFixed(2)}`;
+export function priceLabel(cents: number, currency = "USD") {
+  return cents === 0 ? "Free" : `${currency} ${(cents / 100).toFixed(2)}`;
 }
 
 /** Catalog card for agents. Syllabus and content are included only when unlocked. */
@@ -40,7 +40,8 @@ export function toCourseAgentView(c: CourseRecord, unlocked = false) {
     displayOrder: c.displayOrder,
     description: c.description,
     priceCents: c.priceCents,
-    priceLabel: priceLabel(c.priceCents),
+    priceLabel: priceLabel(c.priceCents, c.currency),
+    currency: c.currency,
     passingScore: c.passingScore,
     certification: c.certificationTemplate ? { id: c.certificationTemplate.id, name: c.certificationTemplate.name } : null,
     coach: c.ownerCoach.email.split("@")[0],
@@ -63,7 +64,8 @@ export function toEnrollmentAgentView(e: EnrollmentRecord) {
     status: e.status,
     paymentStatus: e.paymentStatus,
     priceCents: e.priceCents,
-    priceLabel: priceLabel(e.priceCents),
+    priceLabel: priceLabel(e.priceCents, e.currency),
+    currency: e.currency,
     paidAt: e.paidAt,
     credentialSource: e.credentialSource,
     sponsoringAgencyId: e.sponsoringAgencyId,
@@ -93,7 +95,8 @@ export function toCourseCoachView(c: CourseRecord) {
     syllabus: c.syllabus,
     contentUrl: c.contentUrl,
     priceCents: c.priceCents,
-    priceLabel: priceLabel(c.priceCents),
+    priceLabel: priceLabel(c.priceCents, c.currency),
+    currency: c.currency,
     passingScore: c.passingScore,
     requiresCoachReview: c.requiresCoachReview,
     completionRequiresQuizPass: c.completionRequiresQuizPass,

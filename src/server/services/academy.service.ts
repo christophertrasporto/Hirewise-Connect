@@ -38,7 +38,11 @@ export const courseSchema = z.object({
   welcomeMessage: z.string().trim().max(4000).optional().or(z.literal("")),
   syllabus: optionalText(20000),
   contentUrl: z.string().trim().url("Enter a full URL").optional().or(z.literal("")),
-  /** USD, e.g. "49.00". Empty or 0 = free. */
+  /** In the course currency, e.g. "499.00". Empty or 0 = free. */
+  price: z.string().trim().regex(/^\d{0,7}(\.\d{1,2})?$/, "Enter a price like 499 or 499.50").optional().or(z.literal("")),
+  /** The currency the price is in. Maya Checkout takes PHP. */
+  currency: z.enum(["PHP", "USD"]).optional(),
+  /** Legacy USD field: used only when price is not given. */
   priceUsd: z.string().trim().regex(/^\d{0,5}(\.\d{1,2})?$/, "Enter a price like 49 or 49.50").optional().or(z.literal("")),
   passingScore: z.coerce.number().int().min(1).max(100).default(70),
   requiresCoachReview: z.coerce.boolean().default(false),
@@ -59,6 +63,13 @@ export const courseSettingsSchema = z.object({
   minVerificationLevel: z.enum(["", "BASIC", "VERIFIED", "CERTIFIED", "ELITE"]).default(""),
 });
 export type CourseSettingsInput = z.input<typeof courseSettingsSchema>;
+
+/** Price and currency from the form: "price" is in the chosen currency (PHP unless said otherwise); legacy "priceUsd" is USD. */
+function priceFrom(input: { price?: string; priceUsd?: string; currency?: "PHP" | "USD" }): { priceCents: number; currency: "PHP" | "USD" | undefined } {
+  const raw = input.price !== undefined ? input.price : input.priceUsd;
+  const currency = input.currency ?? (input.price !== undefined ? "PHP" : input.priceUsd !== undefined ? "USD" : undefined);
+  return { priceCents: usdToCents(raw || undefined), currency };
+}
 
 export function usdToCents(v: string | undefined): number {
   if (!v) return 0;
@@ -109,12 +120,13 @@ export async function createCourse(db: PrismaClient, actor: Actor, raw: CourseIn
   if (!actor.permissions.has("course.manage")) authorize(actor, "course.create_own");
   const input = courseSchema.parse(raw);
   const cat = await categoryOrThrow(db, input.categoryId);
-  const priceCents = usdToCents(input.priceUsd || undefined);
+  const { priceCents, currency: chosenCurrency } = priceFrom(input);
+  const currency = chosenCurrency ?? "PHP";
   let code = slug(input.title) || `course-${Date.now()}`;
   if (await academyRepository.findCourseByCode(db, code)) code = `${code}-${Date.now().toString(36).slice(-4)}`;
   const course = await db.$transaction(async (tx) => {
-    const c = await academyRepository.createCourse(tx, { code, title: input.title, ...builderFields(input, cat.name), description: input.description, syllabus: input.syllabus || null, contentUrl: input.contentUrl || null, ownerCoachUserId: actor.userId, priceCents, passingScore: input.passingScore, requiresCoachReview: input.requiresCoachReview });
-    await audit(tx, { actor, action: "COURSE_CREATED", entityType: "AcademyCourse", entityId: c.id, newValue: { title: c.title, priceCents, currency: "USD" } });
+    const c = await academyRepository.createCourse(tx, { currency, code, title: input.title, ...builderFields(input, cat.name), description: input.description, syllabus: input.syllabus || null, contentUrl: input.contentUrl || null, ownerCoachUserId: actor.userId, priceCents, passingScore: input.passingScore, requiresCoachReview: input.requiresCoachReview });
+    await audit(tx, { actor, action: "COURSE_CREATED", entityType: "AcademyCourse", entityId: c.id, newValue: { title: c.title, priceCents, currency } });
     return c;
   });
   return course.id;
@@ -124,11 +136,12 @@ export async function updateCourse(db: PrismaClient, actor: Actor, courseId: str
   const c = await loadEditableCourse(db, actor, courseId);
   const input = courseSchema.parse(raw);
   const cat = await categoryOrThrow(db, input.categoryId);
-  const priceCents = usdToCents(input.priceUsd || undefined);
+  const { priceCents, currency: chosenCurrency } = priceFrom(input);
+  const currency = chosenCurrency ?? (c.currency as "PHP" | "USD");
   await db.$transaction(async (tx) => {
-    await academyRepository.updateCourse(tx, c.id, { title: input.title, ...builderFields(input, cat.name), description: input.description, syllabus: input.syllabus || null, contentUrl: input.contentUrl || null, priceCents, passingScore: input.passingScore, requiresCoachReview: input.requiresCoachReview });
+    await academyRepository.updateCourse(tx, c.id, { currency, title: input.title, ...builderFields(input, cat.name), description: input.description, syllabus: input.syllabus || null, contentUrl: input.contentUrl || null, priceCents, passingScore: input.passingScore, requiresCoachReview: input.requiresCoachReview });
     await audit(tx, { actor, action: "COURSE_UPDATED", entityType: "AcademyCourse", entityId: c.id, newValue: { title: input.title, passingScore: input.passingScore } });
-    if (priceCents !== c.priceCents) await audit(tx, { actor, action: "COURSE_PRICE_CHANGED", entityType: "AcademyCourse", entityId: c.id, previousValue: { priceCents: c.priceCents }, newValue: { priceCents, currency: "USD" } });
+    if (priceCents !== c.priceCents || currency !== c.currency) await audit(tx, { actor, action: "COURSE_PRICE_CHANGED", entityType: "AcademyCourse", entityId: c.id, previousValue: { priceCents: c.priceCents, currency: c.currency }, newValue: { priceCents, currency } });
   });
 }
 
@@ -237,6 +250,19 @@ export async function archiveCourse(db: PrismaClient, actor: Actor, courseId: st
   await db.$transaction(async (tx) => {
     await academyRepository.setCourseStatus(tx, courseId, "ARCHIVED");
     await audit(tx, { actor, action: "COURSE_ARCHIVED", entityType: "AcademyCourse", entityId: courseId });
+  });
+}
+
+/** Admin brings an archived course back to published (for example the free Freelancers Foundation program). */
+export async function restoreCourse(db: PrismaClient, actor: Actor, courseId: string) {
+  authorize(actor, "course.manage");
+  const c = await academyRepository.findCourse(db, courseId);
+  if (!c) throw new NotFoundError();
+  if (c.status !== "ARCHIVED") throw new Error("Only an archived course can be restored.");
+  if (publishedLessonCount(c) === 0) throw new Error("The course needs at least one published lesson before it can go live again.");
+  await db.$transaction(async (tx) => {
+    await academyRepository.setCourseStatus(tx, c.id, "PUBLISHED", { publishedById: actor.userId, publishedAt: c.publishedAt ?? new Date() });
+    await audit(tx, { actor, action: "COURSE_RESTORED", entityType: "AcademyCourse", entityId: c.id, previousValue: { status: "ARCHIVED" }, newValue: { status: "PUBLISHED" } });
   });
 }
 
@@ -592,7 +618,7 @@ export async function enrol(db: PrismaClient, actor: Actor, courseId: string) {
   const lock = await coursesLockedFor(db, actor);
   if (lock.locked) throw new ForbiddenError(lock.reason ?? "Finish your onboarding checklist before enrolling.");
   await db.$transaction(async (tx) => {
-    const e = await academyRepository.enroll(tx, { courseId, agentProfileId: profileId, priceCents: c.priceCents, credentialSource: sourceForSelfEnrolment(c.priceCents) });
+    const e = await academyRepository.enroll(tx, { currency: c.currency, courseId, agentProfileId: profileId, priceCents: c.priceCents, credentialSource: sourceForSelfEnrolment(c.priceCents) });
     await audit(tx, { actor, action: "COURSE_ENROLLED", entityType: "CourseEnrollment", entityId: e.id, newValue: { courseId, priceCents: c.priceCents, paymentStatus: e.paymentStatus, credentialSource: e.credentialSource } });
     await publishEvent(tx, "COURSE_ENROLLED", { courseId, title: c.title, agentProfileId: profileId, agentUserId: actor.userId, coachUserIds: [c.ownerCoachUserId, ...c.coaches.map((x) => x.coachUserId)], paymentRequired: c.priceCents > 0, priceCents: c.priceCents });
   });
@@ -631,22 +657,34 @@ export async function getEnrollmentForAgent(db: PrismaClient, actor: Actor, cour
 }
 
 /** Staff records an offline payment (bank transfer, GCash) or waives it. */
-export async function recordCoursePayment(db: PrismaClient, actor: Actor, enrollmentId: string, p: { paidUsd?: string; reference?: string; waived: boolean; reason?: string }) {
+type EnrollmentForPayment = NonNullable<Awaited<ReturnType<typeof academyRepository.findEnrollmentById>>>;
+
+/**
+ * The one place an enrolment becomes paid or waived, whoever confirmed it: staff recording an offline payment, or a
+ * verified online payment (Maya). Marks it once, then handles the credential source, the referral commission, the
+ * audit entry, and the learner's notification, all inside the caller's transaction.
+ */
+export async function settleEnrollmentPaymentTx(tx: Db, actor: Actor, e: EnrollmentForPayment, p: { paidCents: number | null; reference: string | null; waived: boolean; reason?: string; recordedById: string | null; channel: "STAFF" | "MAYA" }) {
+  const changed = await academyRepository.recordPaymentIfPending(tx, e.id, { paidCents: p.paidCents, paymentReference: p.reference, waived: p.waived, recordedById: p.recordedById });
+  if (changed !== 1) throw new Error("This enrolment does not have a pending payment.");
+  // v2 phase 4: a waived payment is a Hirewise assignment, not an independent purchase.
+  if (p.waived) await trainingRepository.setEnrollmentSource(tx, e.id, "ADMIN_ASSIGNMENT");
+  // Referral program: the confirmed payment is the only moment a commission can be created (idempotent per enrolment).
+  else await recordCommissionForPayment(tx, { sourceType: "ENROLLMENT", sourceId: e.id, buyerUserId: e.agentProfile.userId, courseId: e.courseId, courseTitle: e.course.title, paidMinor: p.paidCents ?? 0, listMinor: e.priceCents, currency: e.currency, paidAt: new Date() });
+  await audit(tx, { actor, action: "COURSE_PAYMENT_RECORDED", entityType: "CourseEnrollment", entityId: e.id, newValue: { paidCents: p.paidCents, waived: p.waived, reference: p.reference, currency: e.currency, channel: p.channel }, reason: p.reason });
+  await publishEvent(tx, "COURSE_PAYMENT_RECORDED", { enrollmentId: e.id, courseTitle: e.course.title, agentUserId: e.agentProfile.userId, agentEmail: e.agentProfile.user.email, waived: p.waived });
+}
+
+export async function recordCoursePayment(db: PrismaClient, actor: Actor, enrollmentId: string, p: { paid?: string; /** Legacy name for paid. */ paidUsd?: string; reference?: string; waived: boolean; reason?: string }) {
   authorize(actor, "course.payment.record");
   const e = await academyRepository.findEnrollmentById(db, enrollmentId);
   if (!e) throw new NotFoundError();
   if (e.paymentStatus !== "PENDING") throw new Error("This enrolment does not have a pending payment.");
   if (p.waived && !p.reason?.trim()) throw new Error("A reason is required to waive a payment.");
-  const paidCents = p.waived ? null : usdToCents(p.paidUsd);
-  if (!p.waived && (paidCents ?? 0) < e.priceCents) throw new Error(`Payment must cover the course price (${(e.priceCents / 100).toFixed(2)} USD).`);
+  const paidCents = p.waived ? null : usdToCents(p.paid ?? p.paidUsd);
+  if (!p.waived && (paidCents ?? 0) < e.priceCents) throw new Error(`Payment must cover the course price (${(e.priceCents / 100).toFixed(2)} ${e.currency}).`);
   await db.$transaction(async (tx) => {
-    await academyRepository.recordPayment(tx, e.id, { paidCents, paymentReference: p.reference?.trim() || null, waived: p.waived, recordedById: actor.userId });
-    // v2 phase 4: a waived payment is a Hirewise assignment, not an independent purchase.
-    if (p.waived) await trainingRepository.setEnrollmentSource(tx, e.id, "ADMIN_ASSIGNMENT");
-    // Referral program: the confirmed payment is the only moment a commission can be created (idempotent per enrolment).
-    else await recordCommissionForPayment(tx, { sourceType: "ENROLLMENT", sourceId: e.id, buyerUserId: e.agentProfile.userId, courseId: e.courseId, courseTitle: e.course.title, paidMinor: paidCents ?? 0, listMinor: e.priceCents, currency: e.course.currency, paidAt: new Date() });
-    await audit(tx, { actor, action: "COURSE_PAYMENT_RECORDED", entityType: "CourseEnrollment", entityId: e.id, newValue: { paidCents, waived: p.waived, reference: p.reference ?? null, currency: "USD" }, reason: p.reason });
-    await publishEvent(tx, "COURSE_PAYMENT_RECORDED", { enrollmentId: e.id, courseTitle: e.course.title, agentUserId: e.agentProfile.userId, agentEmail: e.agentProfile.user.email, waived: p.waived });
+    await settleEnrollmentPaymentTx(tx, actor, e, { paidCents, reference: p.reference?.trim() || null, waived: p.waived, reason: p.reason, recordedById: actor.userId, channel: "STAFF" });
   });
 }
 

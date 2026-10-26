@@ -130,10 +130,10 @@ export const SETTING_SCHEMAS = {
       commissionRateBps: z.number().int().min(0).max(10000).default(1500),
       holdDays: z.number().int().min(0).max(365).default(30),
       cookieDays: z.number().int().min(1).max(365).default(30),
-      minimumPayoutMinor: z.number().int().min(0).default(1000),
-      payoutCurrency: z.string().length(3).default("USD"),
+      minimumPayoutMinor: z.number().int().min(0).default(50_000),
+      payoutCurrency: z.string().length(3).default("PHP"),
     })
-    .default(() => ({ commissionRateBps: 1500, holdDays: 30, cookieDays: 30, minimumPayoutMinor: 1000, payoutCurrency: "USD" })),
+    .default(() => ({ commissionRateBps: 1500, holdDays: 30, cookieDays: 30, minimumPayoutMinor: 50_000, payoutCurrency: "PHP" })),
 } as const;
 
 export type SettingKey = keyof typeof SETTING_SCHEMAS;

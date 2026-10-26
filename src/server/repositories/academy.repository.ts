@@ -56,7 +56,7 @@ export type CourseBuilderFields = {
   thumbnailKey: string | null;
 };
 
-export type CourseCreate = { code: string; title: string; category: string; description: string; syllabus: string | null; contentUrl: string | null; ownerCoachUserId: string; priceCents: number; passingScore: number; requiresCoachReview: boolean } & Partial<CourseBuilderFields>;
+export type CourseCreate = { currency?: string; code: string; title: string; category: string; description: string; syllabus: string | null; contentUrl: string | null; ownerCoachUserId: string; priceCents: number; passingScore: number; requiresCoachReview: boolean } & Partial<CourseBuilderFields>;
 
 export const academyRepository = {
   createCourse(db: Db, d: CourseCreate) {
@@ -93,8 +93,8 @@ export const academyRepository = {
   },
 
   // Enrollments
-  enroll(db: Db, d: { courseId: string; agentProfileId: string; priceCents: number; source?: "INTERNAL" | "ACADEMY_SYNC"; credentialSource?: "INDEPENDENT_PURCHASE" | "HIREWISE_DIRECT" | "ADMIN_ASSIGNMENT" }) {
-    return db.courseEnrollment.create({ data: { courseId: d.courseId, agentProfileId: d.agentProfileId, priceCents: d.priceCents, paymentStatus: d.priceCents > 0 ? "PENDING" : "NOT_REQUIRED", source: d.source ?? "INTERNAL", credentialSource: d.credentialSource ?? (d.priceCents > 0 ? "INDEPENDENT_PURCHASE" : "HIREWISE_DIRECT") } });
+  enroll(db: Db, d: { currency?: string; courseId: string; agentProfileId: string; priceCents: number; source?: "INTERNAL" | "ACADEMY_SYNC"; credentialSource?: "INDEPENDENT_PURCHASE" | "HIREWISE_DIRECT" | "ADMIN_ASSIGNMENT" }) {
+    return db.courseEnrollment.create({ data: { courseId: d.courseId, agentProfileId: d.agentProfileId, priceCents: d.priceCents, currency: d.currency ?? "USD", paymentStatus: d.priceCents > 0 ? "PENDING" : "NOT_REQUIRED", source: d.source ?? "INTERNAL", credentialSource: d.credentialSource ?? (d.priceCents > 0 ? "INDEPENDENT_PURCHASE" : "HIREWISE_DIRECT") } });
   },
 
   findEnrollment(db: Db, courseId: string, agentProfileId: string) {
@@ -123,6 +123,12 @@ export const academyRepository = {
 
   setEnrollmentStatus(db: Db, id: string, status: EnrollmentStatus) {
     return db.courseEnrollment.update({ where: { id }, data: { status } });
+  },
+
+  /** Marks a pending enrolment paid or waived, once. Returns how many rows changed (0 when it was no longer pending). */
+  async recordPaymentIfPending(db: Db, id: string, d: { paidCents: number | null; paymentReference: string | null; waived: boolean; recordedById: string | null }) {
+    const r = await db.courseEnrollment.updateMany({ where: { id, paymentStatus: "PENDING" }, data: { paymentStatus: d.waived ? "WAIVED" : "PAID", paidCents: d.paidCents ?? undefined, paymentReference: d.paymentReference ?? undefined, paidAt: new Date(), paymentRecordedById: d.recordedById ?? undefined } });
+    return r.count;
   },
 
   recordPayment(db: Db, id: string, d: { paidCents: number | null; paymentReference: string | null; waived: boolean; recordedById: string }) {

@@ -26,7 +26,7 @@ export default async function OverviewPage({ params }: { params: Promise<{ id: s
 
       <div className="grid gap-5 lg:grid-cols-[1fr_320px]">
         <Card title="Course details">
-          <CourseForm categories={categories.map((c) => ({ id: c.id, name: c.name }))} course={{ id: course.id, title: course.title, categoryId: course.categoryId, description: course.description, difficulty: course.difficulty, estimatedMinutes: course.estimatedMinutes, introVideoUrl: course.introVideoUrl, welcomeMessage: course.welcomeMessage, syllabus: course.syllabus, contentUrl: course.contentUrl, priceCents: course.priceCents, passingScore: course.passingScore, requiresCoachReview: course.requiresCoachReview }} />
+          <CourseForm categories={categories.map((c) => ({ id: c.id, name: c.name }))} course={{ id: course.id, currency: course.currency, title: course.title, categoryId: course.categoryId, description: course.description, difficulty: course.difficulty, estimatedMinutes: course.estimatedMinutes, introVideoUrl: course.introVideoUrl, welcomeMessage: course.welcomeMessage, syllabus: course.syllabus, contentUrl: course.contentUrl, priceCents: course.priceCents, passingScore: course.passingScore, requiresCoachReview: course.requiresCoachReview }} />
         </Card>
         <div className="space-y-5">
           <Card title="Publishing">

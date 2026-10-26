@@ -88,7 +88,7 @@ export async function myCourses(db: PrismaClient, actor: Actor): Promise<{ cards
     const started = lessons.some((l) => lp.has(l.id) || latestSub.has(l.id));
     const status: CourseCardStatus = paymentPending || revoked ? "LOCKED" : e.completion ? "COMPLETED" : started ? "IN_PROGRESS" : "NOT_STARTED";
     const actions: CourseCard["actions"] = [];
-    if (paymentPending) actions.push({ label: `Pay ${priceLabel(e.priceCents)} to Hirewise to unlock`, lessonId: null });
+    if (paymentPending) actions.push({ label: `Pay ${priceLabel(e.priceCents, e.currency)} to unlock`, lessonId: null });
     for (const l of lessons) {
       const p = lp.get(l.id);
       if (p && (p.status === "RETAKE_REQUIRED" || p.status === "FAILED") && QUESTION_TYPES.has(l.contentType)) actions.push({ label: `Retake the ${l.contentType === "AUDIO" ? "audiobook quiz" : TYPE_LABEL[l.contentType].toLowerCase()}: ${l.title}`, lessonId: l.id });
@@ -108,7 +108,7 @@ export async function myCourses(db: PrismaClient, actor: Actor): Promise<{ cards
       requiredTotal: cp?.requiredTotal ?? required.length,
       enrolledAt: e.enrolledAt,
       completedAt: e.completion?.completedAt ?? null,
-      priceLabel: priceLabel(e.priceCents),
+      priceLabel: priceLabel(e.priceCents, e.currency),
       nextLesson: e.completion || paymentPending || !current ? null : { id: current.id, title: current.title, contentType: TYPE_LABEL[current.contentType] ?? current.contentType, detail: detailFor(current) },
       actions,
       certification: cert ? { name: cert.template.name, status: cert.status, certificateNumber: cert.certificateNumber } : e.course.certificationTemplate ? { name: e.course.certificationTemplate.name, status: "NOT_YET", certificateNumber: null } : null,

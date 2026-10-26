@@ -103,7 +103,7 @@ describe("coach-authored courses with pricing and exams", () => {
   it("changing the price is audited separately", async () => {
     await updateCourse(db, await coach(), ids.paidCourse, courseInput("CSR Excellence", "49"));
     const a = await db.auditLog.findFirst({ where: { action: "COURSE_PRICE_CHANGED", entityId: ids.paidCourse } });
-    expect(a?.previousValue).toEqual({ priceCents: 4950 });
+    expect(a?.previousValue).toEqual({ priceCents: 4950, currency: "USD" });
     expect(a?.newValue).toEqual({ priceCents: 4900, currency: "USD" });
   });
 
