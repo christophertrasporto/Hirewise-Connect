@@ -22,7 +22,8 @@
     "email:test": "tsx scripts/email-test.ts",
     "postinstall": "prisma generate",
     "test:e2e": "playwright test",
-    "hooks:install": "git config core.hooksPath scripts/git-hooks"
+    "hooks:install": "git config core.hooksPath scripts/git-hooks",
+    "theme:gen": "tsx scripts/gen-dark-theme.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1136.0",

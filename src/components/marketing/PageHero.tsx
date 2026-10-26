@@ -13,9 +13,9 @@ export function PageHero({
   actions?: ReactNode;
 }) {
   return (
-    <section className="relative overflow-hidden border-b border-ink-100">
+    <section className="relative overflow-hidden border-b border-ink-100 bg-hero">
       <div className="pointer-events-none absolute inset-0 grid-bg [mask-image:radial-gradient(ellipse_at_top,black_20%,transparent_70%)]" />
-      <div className="pointer-events-none absolute -top-40 left-1/2 h-[520px] w-[900px] -translate-x-1/2 rounded-full bg-[radial-gradient(closest-side,rgb(14_164_122/0.12),transparent)]" />
+      <div className="pointer-events-none absolute -top-40 left-1/2 h-[520px] w-[900px] -translate-x-1/2 animate-drift rounded-full bg-[radial-gradient(closest-side,var(--glow-brand-strong),transparent)] opacity-60" />
       <div className="container-x relative py-20 lg:py-28">
         <div className="max-w-3xl animate-fade-up">
           <Eyebrow>{eyebrow}</Eyebrow>

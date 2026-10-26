@@ -22,7 +22,7 @@ const talentPoints = [
 
 export function AudienceSection() {
   return (
-    <section className="bg-ink-50/70 py-24 lg:py-32">
+    <section className="border-t border-ink-100 bg-band py-24 lg:py-32">
       <div className="container-x grid gap-6 lg:grid-cols-2">
         <Reveal>
           <article className="relative h-full overflow-hidden rounded-3xl border border-ink-100 bg-white p-8 shadow-soft sm:p-10">

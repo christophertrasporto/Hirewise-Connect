@@ -35,10 +35,10 @@ const pillars = [
 
 export function ControlSection() {
   return (
-    <section className="relative overflow-hidden bg-ink-900 py-24 text-white lg:py-32">
+    <section className="relative overflow-hidden bg-navy py-24 text-white lg:py-32">
       <div className="pointer-events-none absolute inset-0 grid-bg-dark [mask-image:radial-gradient(ellipse_at_center,black_20%,transparent_75%)]" />
-      <div className="pointer-events-none absolute -top-40 -right-40 h-[520px] w-[520px] rounded-full bg-[radial-gradient(closest-side,rgb(14_164_122/0.25),transparent)]" />
-      <div className="pointer-events-none absolute -bottom-40 -left-40 h-[520px] w-[520px] rounded-full bg-[radial-gradient(closest-side,rgb(232_180_76/0.14),transparent)]" />
+      <div className="pointer-events-none absolute -top-40 -right-40 h-[520px] w-[520px] animate-drift rounded-full bg-[radial-gradient(closest-side,rgb(14_164_122/0.22),transparent)]" />
+      <div className="pointer-events-none absolute -bottom-40 -left-40 h-[520px] w-[520px] animate-drift rounded-full bg-[radial-gradient(closest-side,rgb(232_180_76/0.12),transparent)] [animation-direction:alternate-reverse]" />
 
       <div className="container-x relative">
         <SectionHeading

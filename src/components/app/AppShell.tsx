@@ -5,11 +5,15 @@ import { usePathname } from "next/navigation";
 import { useState, type ReactNode } from "react";
 import { Menu, X, LogOut, Bell } from "lucide-react";
 import { Logo } from "@/components/ui/Logo";
+import { ThemeToggle } from "@/components/ui/ThemeToggle";
 import { cn } from "@/lib/cn";
 
 export type NavItem = { href: string; label: string; icon: ReactNode };
 
-export function AppShell({ nav, email, roleLabel, unread, onLogout, children }: { nav: NavItem[]; email: string; roleLabel: string; unread: number; onLogout: () => Promise<void>; children: ReactNode }) {
+/** "app" is the calm background for talent, clients and agencies; "staff" is the denser, glow-free one for the console. */
+export type ShellTone = "app" | "staff";
+
+export function AppShell({ nav, email, roleLabel, unread, tone = "app", onLogout, children }: { nav: NavItem[]; email: string; roleLabel: string; unread: number; tone?: ShellTone; onLogout: () => Promise<void>; children: ReactNode }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
 
@@ -28,7 +32,7 @@ export function AppShell({ nav, email, roleLabel, unread, onLogout, children }: 
   );
 
   return (
-    <div className="flex min-h-dvh bg-ink-50/60">
+    <div className={cn("flex min-h-dvh", tone === "staff" ? "bg-staff" : "bg-app")}>
       <aside className="hidden w-[260px] shrink-0 flex-col border-r border-ink-100 bg-white p-5 lg:flex">
         <Logo />
         <div className="mt-8 flex-1">{links}</div>
@@ -51,10 +55,13 @@ export function AppShell({ nav, email, roleLabel, unread, onLogout, children }: 
             </button>
             <Logo />
           </div>
+          <div className="flex items-center gap-1">
+          <ThemeToggle />
           <Link href="/notifications" className="relative inline-flex h-10 w-10 items-center justify-center rounded-full text-ink-600 hover:bg-ink-100" aria-label={`Notifications, ${unread} unread`}>
             <Bell className="h-5 w-5" />
             {unread > 0 && <span className="absolute top-1.5 right-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-brand-500 px-1 text-[10px] font-bold text-white">{unread > 9 ? "9+" : unread}</span>}
           </Link>
+          </div>
         </header>
         {open && (
           <div className="border-b border-ink-100 bg-white p-4 lg:hidden">
@@ -66,7 +73,7 @@ export function AppShell({ nav, email, roleLabel, unread, onLogout, children }: 
             </form>
           </div>
         )}
-        <main className="flex-1 px-4 py-8 sm:px-6 lg:px-10 lg:py-10">
+        <main className={cn("flex-1 px-4 sm:px-6 lg:px-10", tone === "staff" ? "py-6 lg:py-8" : "py-8 lg:py-10")}>
           <div className="mx-auto max-w-6xl">{children}</div>
         </main>
       </div>
