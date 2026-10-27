@@ -48,6 +48,7 @@ export default async function CoursePage({ params, searchParams }: { params: Pro
       {completed && <div className="mb-6"><Banner tone="success" title={`Completed ${fmtDate(enrollment!.completedAt)}`}>{enrollment!.examScore !== null ? `Best quiz score ${enrollment!.examScore}%.` : ""}{course.certification ? ` Certification: ${course.certification.name}.` : ""}</Banner></div>}
       {enrollment && !locked && !completed && course.welcomeMessage && <div className="mb-6"><Banner tone="info" title="From your coach">{course.welcomeMessage}</Banner></div>}
 
+      {enrollment && !locked && course.modules?.[0]?.lessons[0] && <div className="mb-6"><Link href={`/courses/${course.id}/lessons/${course.modules[0].lessons[0].id}`} className="inline-flex h-10 items-center gap-2 rounded-full border border-ink-200 bg-white px-4 text-[13.5px] font-semibold text-ink-800 hover:bg-ink-50">Open the lesson player</Link></div>}
       <div className="mb-6 max-w-2xl overflow-hidden rounded-card border border-ink-100 shadow-card">
         <CourseCover title={course.title} category={course.category} difficulty={course.difficulty} coverUrl={course.coverUrl} eager />
       </div>

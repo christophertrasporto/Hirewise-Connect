@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
-import { PageHeader, StatusBadge } from "@/components/app/ui";
+import { Banner, PageHeader, StatusBadge } from "@/components/app/ui";
+import { courseWarnings } from "@/server/services/academy.service";
 import { BuilderTabs } from "@/components/academy/BuilderTabs";
 import { loadBuilderCourse } from "./load";
 
@@ -18,6 +19,7 @@ export default async function BuilderLayout({ children, params }: { children: Re
         actions={<div className="flex items-center gap-2"><StatusBadge status={course.status} />{course.certificationTemplate && <span className="rounded-full bg-gold-50 px-2.5 py-1 text-[11.5px] font-semibold text-gold-700 ring-1 ring-inset ring-gold-200">{course.certificationTemplate.name}</span>}</div>}
       />
       <BuilderTabs courseId={course.id} />
+      {courseWarnings(course).map((w) => <div key={w} className="mb-4"><Banner tone="warn" title="No free preview">{w}</Banner></div>)}
       {children}
     </>
   );

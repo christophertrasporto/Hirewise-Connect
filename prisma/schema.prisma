@@ -1559,6 +1559,8 @@ model CourseLesson {
   description        String?
   isRequired         Boolean           @default(true)
   status             PublishState      @default(PUBLISHED)
+  /// Anyone can watch this lesson, signed in or not, while it is published. Access is decided by this flag, never by position.
+  isFreePreview      Boolean           @default(false)
   /// Bumped on significant edits; attempts and LessonVersion rows reference it.
   version            Int               @default(1)
   /// Audio / video: share of the media that must actually be played (not sought) before the lesson counts.

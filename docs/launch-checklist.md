@@ -65,6 +65,7 @@ Then seed the foundation data only with `npm run db:seed:foundation` (roles, per
 | `STORAGE_DRIVER` | `s3` |
 | `S3_ENDPOINT`, `S3_BUCKET`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, `S3_REGION` | R2 or S3 credentials |
 | `SIGNED_URL_TTL_SECONDS` | `600` |
+| `LESSON_VIDEO_URL_TTL_SECONDS` | `7200` (optional) |
 | `EMAIL_DRIVER` | `smtp` |
 | `EMAIL_FROM`, `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_SECURE` | transactional email relay |
 | `PAYMENT_PROVIDER` | `stripe` (or `manual` to launch with offline payments only; `fake` is refused in production) |

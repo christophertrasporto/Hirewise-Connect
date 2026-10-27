@@ -22,6 +22,8 @@ const schema = z.object({
   S3_SECRET_ACCESS_KEY: z.string().optional(),
   S3_FORCE_PATH_STYLE: z.coerce.boolean().default(true),
   SIGNED_URL_TTL_SECONDS: z.coerce.number().int().positive().default(600),
+  /** Lifetime of the signed link a lesson video player receives (a long video must not expire mid-play). */
+  LESSON_VIDEO_URL_TTL_SECONDS: z.coerce.number().int().min(60).max(86_400).default(7200),
 
   EMAIL_DRIVER: z.enum(["console", "smtp"]).default("console"),
   EMAIL_FROM: z.string().default("Hirewise Connect <no-reply@hirewise.example>"),

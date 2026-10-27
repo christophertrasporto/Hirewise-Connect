@@ -6,6 +6,7 @@ import { quizRepository, type ChoiceWrite, type QuestionWrite } from "@/server/r
 import { academyRepository } from "@/server/repositories/academy.repository";
 import { audit } from "@/server/audit/audit";
 import { publishEvent } from "@/server/events/outbox";
+import { assertLearnerOwnsLesson } from "@/server/policies/lesson-access";
 import { loadEditableCourse } from "./academy.service";
 import { recalculateCourseProgress, assertLessonUnlocked } from "./progress.service";
 import { recordLessonVersion } from "./lesson-version.service";
@@ -208,12 +209,11 @@ type LessonForQuiz = NonNullable<Awaited<ReturnType<typeof quizRepository.findQu
 
 async function learnerLesson(db: PrismaClient, actor: Actor, lessonId: string) {
   const profileId = ownProfileId(actor);
+  await assertLearnerOwnsLesson(db, actor, lessonId);
   const lesson = await quizRepository.findQuizLesson(db, lessonId);
-  if (!lesson || lesson.status !== "PUBLISHED" || lesson.module.status !== "PUBLISHED") throw new NotFoundError();
+  if (!lesson) throw new NotFoundError();
   if (!(QUESTION_LESSON_TYPES as readonly string[]).includes(lesson.contentType)) throw new NotFoundError();
-  const enrollment = await academyRepository.findEnrollment(db, lesson.module.courseId, profileId);
-  if (!enrollment) throw new NotFoundError();
-  if (enrollment.paymentStatus === "PENDING") throw new ForbiddenError("This course unlocks once Hirewise records your payment.");
+  const enrollment = (await academyRepository.findEnrollment(db, lesson.module.courseId, profileId))!;
   await assertLessonUnlocked(db, lesson, profileId);
   return { profileId, lesson, enrollment };
 }

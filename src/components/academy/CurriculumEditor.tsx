@@ -2,8 +2,8 @@
 
 import Link from "next/link";
 import { useActionState, useEffect, useRef, useState, type ReactNode } from "react";
-import { ArrowDown, ArrowUp, Copy, Loader2, Pencil, Plus, Settings2, Trash2, UploadCloud, X } from "lucide-react";
-import { deleteLessonAction, deleteModuleAction, duplicateLessonAction, duplicateModuleAction, moveLessonAction, moveModuleAction, requestLessonUploadAction, saveLessonAction, saveModuleAction } from "@/app/(app)/academy-actions";
+import { ArrowDown, ArrowUp, Copy, GripVertical, Loader2, Pencil, Plus, Settings2, Trash2, UploadCloud, X } from "lucide-react";
+import { deleteLessonAction, deleteModuleAction, duplicateLessonAction, duplicateModuleAction, moveLessonAction, moveModuleAction, reorderLessonsAction, requestLessonUploadAction, saveLessonAction, saveModuleAction } from "@/app/(app)/academy-actions";
 import { idle, type ActionResult } from "@/server/http/action-result";
 import { Checkbox, Field, FormAlert, Input, Select, SubmitButton, Textarea } from "@/components/ui/Form";
 import { cn } from "@/lib/cn";
@@ -23,6 +23,7 @@ export type LessonValue = {
   hasFile: boolean;
   isRequired: boolean;
   status: "DRAFT" | "PUBLISHED";
+  isFreePreview: boolean;
   requiredPercent: number | null;
   passingScore: number | null;
   maxAttempts: number | null;
@@ -196,6 +197,7 @@ export function LessonForm({ courseId, modules, moduleId, lesson, onDone, sectio
       {!showContent && <input type="hidden" name="body" value={lesson?.body ?? ""} />}
       {!showSettings && <input type="hidden" name="status" value={lesson?.status ?? "PUBLISHED"} />}
       {!showSettings && lesson?.isRequired && <input type="hidden" name="isRequired" value="on" />}
+      {!showSettings && lesson?.isFreePreview && <input type="hidden" name="isFreePreview" value="on" />}
       {/* Content-only form: carry every setting through unchanged so saving the content never resets the settings */}
       {!showSettings && lesson && (
         <>
@@ -294,6 +296,7 @@ export function LessonForm({ courseId, modules, moduleId, lesson, onDone, sectio
               </Select>
             </Field>
             <div className="pt-7"><Checkbox name="isRequired" defaultChecked={lesson?.isRequired ?? true} label={<span><span className="font-semibold">Required</span> <span className="text-ink-500">counts toward course completion</span></span>} /></div>
+            <div className="sm:col-span-2"><Checkbox name="isFreePreview" defaultChecked={lesson?.isFreePreview ?? false} label={<span><span className="font-semibold">Free preview</span> <span className="text-ink-500">anyone can watch it without buying or signing in, once it is published. Every other lesson is for owners of the course only.</span></span>} /></div>
           </div>
           {isMedia && (
             <Field label={`Required ${type === "AUDIO" ? "listening" : "watching"} (%)`} htmlFor={`l-pct-${uid}`} error={fe.requiredPercent} hint="Only time actually played counts; seeking to the end does not complete the lesson.">
@@ -364,7 +367,9 @@ export function LessonForm({ courseId, modules, moduleId, lesson, onDone, sectio
 // Rows
 // ---------------------------------------------------------------------------
 
-function LessonRow({ courseId, modules, module, lesson, index, count }: { courseId: string; modules: ModuleValue[]; module: ModuleValue; lesson: LessonValue; index: number; count: number }) {
+type Dnd = { dragging: boolean; onDragStart: () => void; onDragEnd: () => void; onDrop: () => void };
+
+function LessonRow({ courseId, modules, module, lesson, index, count, dnd }: { courseId: string; modules: ModuleValue[]; module: ModuleValue; lesson: LessonValue; index: number; count: number; dnd: Dnd }) {
   const [editing, setEditing] = useState(false);
   const meta = LESSON_TYPE_META[lesson.contentType];
   const Icon = meta.icon;
@@ -378,11 +383,20 @@ function LessonRow({ courseId, modules, module, lesson, index, count }: { course
     lesson.passingScore && needsQuestions ? `pass ${lesson.passingScore}%` : null,
   ].filter(Boolean).join(" · ");
   return (
-    <li className="flex items-center gap-3 py-2.5">
+    <li
+      draggable
+      onDragStart={(e) => { e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", lesson.id); dnd.onDragStart(); }}
+      onDragEnd={dnd.onDragEnd}
+      onDragOver={(e) => e.preventDefault()}
+      onDrop={(e) => { e.preventDefault(); e.stopPropagation(); dnd.onDrop(); }}
+      className={cn("flex items-center gap-3 py-2.5", dnd.dragging && "opacity-40")}
+    >
+      <span className="cursor-grab text-ink-300 active:cursor-grabbing" aria-hidden="true" title="Drag to reorder"><GripVertical className="h-4 w-4" /></span>
       <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white text-ink-500 ring-1 ring-inset ring-ink-100"><Icon className="h-4 w-4" /></span>
       <div className="min-w-0 flex-1">
         <p className="truncate text-[14px] font-semibold text-ink-800">
           <Link href={`/courses/manage/${courseId}/lessons/${lesson.id}`} className="hover:text-brand-700">{index + 1}. {lesson.title}</Link>
+          {lesson.isFreePreview && <span className="ml-2 rounded-full bg-brand-50 px-2 py-0.5 text-[10.5px] font-semibold text-brand-700 ring-1 ring-inset ring-brand-200">Free preview</span>}
           {needsQuestions && lesson.questionCount === 0 && <span className="ml-2 rounded-full bg-gold-50 px-2 py-0.5 text-[10.5px] font-semibold text-gold-700 ring-1 ring-inset ring-gold-200">No questions yet</span>}
         </p>
         <p className="truncate text-[12.5px] text-ink-400">{meta.label}{detail ? ` · ${detail}` : ""}</p>
@@ -402,6 +416,28 @@ function LessonRow({ courseId, modules, module, lesson, index, count }: { course
 function ModuleCard({ courseId, modules, module, index }: { courseId: string; modules: ModuleValue[]; module: ModuleValue; index: number }) {
   const [editing, setEditing] = useState(false);
   const [adding, setAdding] = useState(false);
+  // Drag and drop reorder. The up and down buttons stay as the keyboard route; both save immediately.
+  const serverOrder = module.lessons.map((l) => l.id).join(",");
+  const [order, setOrder] = useState<string[]>(module.lessons.map((l) => l.id));
+  const [dragId, setDragId] = useState<string | null>(null);
+  const [reorderError, setReorderError] = useState<string | null>(null);
+  useEffect(() => setOrder(serverOrder ? serverOrder.split(",") : []), [serverOrder]);
+  const ordered = order.map((id) => module.lessons.find((l) => l.id === id)).filter((l): l is LessonValue => !!l);
+  async function dropBefore(targetId: string | null) {
+    const from = dragId;
+    setDragId(null);
+    if (!from || from === targetId) return;
+    const next = order.filter((id) => id !== from);
+    next.splice(targetId ? next.indexOf(targetId) : next.length, 0, from);
+    const previous = order;
+    setOrder(next);
+    setReorderError(null);
+    const r = await reorderLessonsAction({ courseId, moduleId: module.id, orderedIds: next });
+    if (!r.ok) {
+      setOrder(previous);
+      setReorderError(r.error ?? "Could not save the new order.");
+    }
+  }
   return (
     <li className="rounded-2xl border border-ink-100 bg-ink-50/50 p-4">
       {editing ? (
@@ -423,9 +459,10 @@ function ModuleCard({ courseId, modules, module, index }: { courseId: string; mo
           </div>
         </div>
       )}
-      <ul className="mt-3 divide-y divide-ink-100 border-t border-ink-100">
+      <ul className="mt-3 divide-y divide-ink-100 border-t border-ink-100" onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); void dropBefore(null); }}>
         {module.lessons.length === 0 && !adding && <li className="py-3 text-[13px] text-ink-400">No lessons yet.</li>}
-        {module.lessons.map((l, i) => <LessonRow key={l.id} courseId={courseId} modules={modules} module={module} lesson={l} index={i} count={module.lessons.length} />)}
+        {ordered.map((l, i) => <LessonRow key={l.id} courseId={courseId} modules={modules} module={module} lesson={l} index={i} count={ordered.length} dnd={{ dragging: dragId === l.id, onDragStart: () => setDragId(l.id), onDragEnd: () => setDragId(null), onDrop: () => void dropBefore(l.id) }} />)}
+        {reorderError && <li className="py-2 text-[12.5px] text-red-600">{reorderError}</li>}
         {adding && <li className="py-3"><LessonForm courseId={courseId} modules={modules} moduleId={module.id} onDone={() => setAdding(false)} /></li>}
       </ul>
       {!adding && <button type="button" onClick={() => setAdding(true)} className="mt-3 inline-flex h-9 items-center gap-1.5 rounded-full border border-ink-200 bg-white px-3.5 text-[13px] font-semibold text-ink-700 hover:border-brand-300 hover:text-brand-700"><Plus className="h-4 w-4" /> Add lesson</button>}

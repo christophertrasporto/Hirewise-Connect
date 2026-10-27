@@ -10,6 +10,7 @@ import { publishEvent } from "@/server/events/outbox";
 import { getStorage, newStorageKey } from "@/server/adapters/storage";
 import { rateLimit } from "@/server/auth/rate-limit";
 import { loadEditableCourse, LESSON_UPLOAD_RULES } from "./academy.service";
+import { assertLearnerOwnsLesson } from "@/server/policies/lesson-access";
 import { recalculateCourseProgress, assertLessonUnlocked } from "./progress.service";
 import { toSubmissionLearnerView } from "@/server/views/academy.views";
 
@@ -41,11 +42,10 @@ function ownProfileId(actor: Actor) {
 
 async function learnerAssignment(db: PrismaClient, actor: Actor, lessonId: string) {
   const profileId = ownProfileId(actor);
+  await assertLearnerOwnsLesson(db, actor, lessonId);
   const lesson = await quizRepository.findQuizLesson(db, lessonId);
-  if (!lesson || lesson.contentType !== "ASSIGNMENT" || lesson.status !== "PUBLISHED" || lesson.module.status !== "PUBLISHED") throw new NotFoundError();
-  const enrollment = await academyRepository.findEnrollment(db, lesson.module.courseId, profileId);
-  if (!enrollment) throw new NotFoundError();
-  if (enrollment.paymentStatus === "PENDING") throw new ForbiddenError("This course unlocks once Hirewise records your payment.");
+  if (!lesson || lesson.contentType !== "ASSIGNMENT") throw new NotFoundError();
+  const enrollment = (await academyRepository.findEnrollment(db, lesson.module.courseId, profileId))!;
   await assertLessonUnlocked(db, lesson, profileId);
   return { profileId, lesson, enrollment };
 }

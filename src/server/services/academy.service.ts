@@ -16,6 +16,8 @@ import { rateLimit } from "@/server/auth/rate-limit";
 import type { LessonWrite } from "@/server/repositories/academy.repository";
 import { coursesLockedFor } from "./onboarding.service";
 import { recalculateAllForCourse, lockedLessonsFor, assertLessonUnlocked } from "./progress.service";
+import { assertCanWatchLesson, entitledToCourse } from "@/server/policies/lesson-access";
+import { getEnv } from "@/server/env";
 import { recordLessonVersion, changedFields } from "./lesson-version.service";
 import { categoryRepository } from "@/server/repositories/category.repository";
 import { assignmentRepository } from "@/server/repositories/assignment.repository";
@@ -338,6 +340,8 @@ export const lessonSchema = z
     description: optionalText(2000),
     isRequired: z.boolean().default(true),
     status: z.enum(["DRAFT", "PUBLISHED"]).default("PUBLISHED"),
+    /** Anyone can watch it without an account while it is published. New lessons are gated unless this is set. */
+    isFreePreview: z.boolean().default(false),
     /** Audio / video: share of the media that must actually be played. */
     requiredPercent: z.coerce.number().int().min(1).max(100).optional().or(z.literal("")),
     // Quiz, assessment, and audiobook-quiz settings
@@ -491,6 +495,7 @@ function normaliseLesson(input: LessonParsed): LessonWrite {
     durationSec: MEDIA_TYPES.includes(t) ? num(input.durationSec) : null,
     isRequired: input.isRequired,
     status: input.status,
+    isFreePreview: input.isFreePreview,
     requiredPercent: MEDIA_TYPES.includes(t) ? (num(input.requiredPercent) ?? 90) : null,
     passingScore: quiz ? num(input.passingScore) : null,
     maxAttempts: quiz ? num(input.maxAttempts) : null,
@@ -521,6 +526,13 @@ export async function saveLesson(db: PrismaClient, actor: Actor, courseId: strin
     input = { ...input, storageKey: prev.storageKey ?? "", fileName: prev.fileName ?? "", contentMime: prev.contentMime ?? "", sizeBytes: prev.sizeBytes ?? "", durationSec: input.durationSec || (prev.durationSec ?? "") };
   }
   const data = normaliseLesson(input);
+  if (data.isFreePreview && ["QUIZ", "ASSIGNMENT", "ASSESSMENT"].includes(data.contentType)) {
+    throw Object.assign(new Error("Quizzes, assignments, and assessments need an account and cannot be free previews."), { name: "AuthError", field: "isFreePreview" });
+  }
+  // A gated video is only protected when it is an upload we sign; a YouTube, Vimeo, or Loom link is public by nature.
+  if (data.contentType === "VIDEO" && data.url && !data.isFreePreview) {
+    throw Object.assign(new Error("A video that is not a free preview must be uploaded as a file. Links to YouTube, Vimeo, or Loom cannot be protected."), { name: "AuthError", field: "url" });
+  }
   if (data.storageKey) {
     if (!data.storageKey.startsWith(lessonKeyPrefix(c.id))) throw new ForbiddenError("Storage key does not belong to this course");
     const existing = input.id ? await academyRepository.findLesson(db, input.id) : null;
@@ -555,6 +567,36 @@ export async function deleteLesson(db: PrismaClient, actor: Actor, courseId: str
   });
 }
 
+/**
+ * Puts a module's lessons in the given order (drag and drop). The ids must be exactly the module's lessons. Order only:
+ * which lessons are free previews never changes with position, so reordering unlocks nothing.
+ */
+export async function reorderLessons(db: PrismaClient, actor: Actor, courseId: string, moduleId: string, orderedIds: string[]) {
+  const c = await loadEditableCourse(db, actor, courseId);
+  const m = await moduleOf(db, c.id, moduleId);
+  const current = m.lessons.map((l) => l.id);
+  if (orderedIds.length !== current.length || new Set(orderedIds).size !== orderedIds.length || !orderedIds.every((id) => current.includes(id))) throw new Error("The lesson list changed. Reload and try again.");
+  if (orderedIds.every((id, i) => id === current[i])) return;
+  await db.$transaction(async (tx) => {
+    await academyRepository.setLessonOrder(tx, orderedIds);
+    await audit(tx, { actor, action: "COURSE_UPDATED", entityType: "CourseModule", entityId: m.id, newValue: { courseId: c.id, op: "reorder-lessons", order: orderedIds } });
+  });
+}
+
+/** Non-blocking notes shown to the admin on the builder: a course people can buy should have something free to try. */
+export function courseWarnings(c: { status: string; modules: Array<{ status: string; lessons: Array<{ status: string; isFreePreview: boolean }> }> }): string[] {
+  const warnings: string[] = [];
+  const hasPreview = c.modules.some((m) => m.status === "PUBLISHED" && m.lessons.some((l) => l.status === "PUBLISHED" && l.isFreePreview));
+  if (c.status !== "ARCHIVED" && !hasPreview) {
+    warnings.push(
+      c.status === "PUBLISHED"
+        ? "This published course has no free-preview lesson, so visitors have nothing to try before buying. Mark a published lesson as a free preview."
+        : "No free-preview lesson yet. Mark a published lesson as a free preview before this course goes live, so visitors can try it before buying.",
+    );
+  }
+  return warnings;
+}
+
 export async function moveLesson(db: PrismaClient, actor: Actor, courseId: string, lessonId: string, direction: -1 | 1) {
   const c = await loadEditableCourse(db, actor, courseId);
   const l = await academyRepository.findLesson(db, lessonId);
@@ -567,21 +609,20 @@ export async function moveLesson(db: PrismaClient, actor: Actor, courseId: strin
 }
 
 /**
- * Signed URL for an uploaded lesson file. Coaches and admins who can edit the course, or an enrolled agent
- * whose enrollment is unlocked (free, paid, or waived). Anyone else gets NotFound: no existence leak.
+ * Signed URL for an uploaded lesson file, issued only after the shared access rule (`canWatchLesson`) passes: a published
+ * free preview (anyone, signed in or not), an owner of the course, or staff who manage it. A gated lesson never has a
+ * public or permanent URL; video links last `LESSON_VIDEO_URL_TTL_SECONDS` (two hours by default), other files the
+ * shorter `SIGNED_URL_TTL_SECONDS`. Unpublished lessons are NotFound for everyone but staff; a published gated lesson
+ * throws `LessonAccessError` (401 signed out, 403 signed in without the course).
  */
-export async function lessonDownloadUrl(db: PrismaClient, actor: Actor, lessonId: string): Promise<string> {
+export async function lessonDownloadUrl(db: PrismaClient, actor: Actor | null, lessonId: string): Promise<string> {
+  const access = await assertCanWatchLesson(db, actor, lessonId);
   const l = await academyRepository.findLesson(db, lessonId);
   if (!l?.storageKey) throw new NotFoundError();
-  if (actor.role === "AGENT") {
-    const profileId = ownProfileId(actor);
-    const e = await academyRepository.findEnrollment(db, l.module.courseId, profileId);
-    if (!e || e.paymentStatus === "PENDING") throw new NotFoundError();
-    await assertLessonUnlocked(db, l, profileId);
-  } else {
-    await loadEditableCourse(db, actor, l.module.courseId);
-  }
-  return getStorage().createDownloadUrl(l.storageKey);
+  // An owner whose course is sequentially locked gets nothing yet; previews and staff skip the sequence.
+  if (actor?.role === "AGENT" && actor.agentProfileId && !access.isFreePreview) await assertLessonUnlocked(db, l, actor.agentProfileId);
+  const ttl = l.contentType === "VIDEO" ? getEnv().LESSON_VIDEO_URL_TTL_SECONDS : undefined;
+  return getStorage().createDownloadUrl(l.storageKey, ttl);
 }
 
 // ---------------------------------------------------------------------------
@@ -638,7 +679,7 @@ export async function getEnrollmentForAgent(db: PrismaClient, actor: Actor, cour
   }
   // v2 phase 4: agency-sponsored access ends with the membership.
   const revoked = accessRevoked(e);
-  const unlocked = !revoked && (e.paymentStatus === "NOT_REQUIRED" || e.paymentStatus === "PAID" || e.paymentStatus === "WAIVED");
+  const unlocked = entitledToCourse(e);
   const lessonIds = e.course.modules.flatMap((m) => m.lessons.map((l) => l.id));
   const progressRows = unlocked && lessonIds.length ? await db.lessonProgress.findMany({ where: { agentProfileId: profileId, lessonId: { in: lessonIds } } }) : [];
   const courseProgress = await db.courseProgress.findUnique({ where: { courseId_agentProfileId: { courseId: e.courseId, agentProfileId: profileId } } });
