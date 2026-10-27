@@ -76,3 +76,30 @@ Common reasons and fixes:
 To check SMTP settings from a developer machine without the app, put the same `EMAIL_DRIVER=smtp` and `SMTP_*` values in the local `.env` and run `npm run email:test -- --to you@yourdomain.com`; it connects, authenticates, sends one message, and prints the provider response or the classified reason, never the values.
 
 Resend is limited to one request per 60 seconds, five per hour per user, and twenty per hour per IP address. Other transactional email (notifications, reminders, invitations) still goes through the worker; on Vercel there is no long-running worker, so `vercel.json` schedules `GET /api/jobs/tick` every five minutes with `CRON_SECRET` as a Bearer token. Until `CRON_SECRET` is set, that route returns 401 and only the synchronously sent emails go out.
+
+## Uploads need CORS on the bucket
+
+Course videos, audio, documents, and cover images are uploaded by the browser straight to the storage bucket (Cloudflare R2 or any S3-compatible store) with a short-lived signed link; the file never passes through Vercel. For that, the bucket must allow cross-origin `PUT` requests from the website. Without it the browser blocks the upload, and the course editor shows: "The upload could not reach file storage ... (its CORS setting)". Nothing in the app can fix this; it is a bucket setting.
+
+Set it once per bucket. In Cloudflare R2: the bucket, Settings, CORS Policy, and use (replace the origins with your real site address, and keep the preview address only if you test uploads there):
+
+```json
+[
+  {
+    "AllowedOrigins": ["https://YOUR-SITE-DOMAIN"],
+    "AllowedMethods": ["PUT", "GET", "HEAD"],
+    "AllowedHeaders": ["Content-Type"],
+    "ExposeHeaders": ["ETag"],
+    "MaxAgeSeconds": 3600
+  }
+]
+```
+
+Other causes, in order of likelihood when an upload still fails:
+
+- **403 from storage:** the signed link expired before the upload started (links last `SIGNED_URL_TTL_SECONDS`, 600 s) or the `S3_ACCESS_KEY_ID` and `S3_SECRET_ACCESS_KEY` token lacks write access to the bucket. The R2 token needs Object Read and Write on this bucket.
+- **"File is too large":** videos are limited to 500 MB, audio to 100 MB, documents to 50 MB. Compress the video first.
+- **"File type is not supported":** MP4, MOV, and WebM only for video. Other formats (AVI, MKV) must be converted.
+- **"The file was not uploaded":** the upload finished but the app could not find the object; check the bucket name and the token's read access (the app confirms the object exists before saving the lesson).
+
+Videos played from a bucket also need the `GET` and `HEAD` methods above, plus range requests, which R2 supports by default.
