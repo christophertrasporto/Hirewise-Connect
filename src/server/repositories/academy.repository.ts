@@ -26,6 +26,7 @@ export type LessonWrite = {
   durationSec: number | null;
   isRequired: boolean;
   status: PublishState;
+  isFreePreview: boolean;
   requiredPercent: number | null;
   passingScore: number | null;
   maxAttempts: number | null;
@@ -247,6 +248,11 @@ export const academyRepository = {
   async renumberLessons(db: Db, moduleId: string) {
     const rows = await db.courseLesson.findMany({ where: { moduleId }, orderBy: { order: "asc" }, select: { id: true } });
     for (const [i, r] of rows.entries()) await db.courseLesson.update({ where: { id: r.id }, data: { order: i + 1 } });
+  },
+
+  /** Sets a module's lesson order to exactly the given ids (already checked to be the module's own lessons). */
+  async setLessonOrder(db: Db, orderedIds: string[]) {
+    for (const [i, id] of orderedIds.entries()) await db.courseLesson.update({ where: { id }, data: { order: i + 1 } });
   },
 
   async swapLessonOrder(db: Db, a: { id: string; order: number }, b: { id: string; order: number }) {

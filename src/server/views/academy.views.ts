@@ -7,18 +7,18 @@ type EnrollmentRecord = { id: string; status: string; paymentStatus: string; pri
 type LessonRecord = CourseRecord["modules"][number]["lessons"][number];
 
 /** Learners only ever see published modules and published lessons. */
-function visibleModules(c: CourseRecord) {
+export function visibleModules(c: CourseRecord) {
   return c.modules.filter((m) => m.status === "PUBLISHED").map((m) => ({ ...m, lessons: m.lessons.filter((l) => l.status === "PUBLISHED") }));
 }
 
 /** Lesson as an enrolled agent sees it: never the storage key (files are streamed through a signed URL after an enrollment check). */
-function lessonAgentView(l: LessonRecord) {
-  return { id: l.id, order: l.order, title: l.title, contentType: l.contentType, description: l.description, body: l.body, url: l.url, hasFile: !!l.storageKey, fileName: l.fileName, contentMime: l.contentMime, sizeBytes: l.sizeBytes, durationSec: l.durationSec, isRequired: l.isRequired, requiredPercent: l.requiredPercent, questionCount: l._count.questions, dueAt: l.dueAt, points: l.points, submissionType: l.submissionType };
+export function lessonAgentView(l: LessonRecord) {
+  return { id: l.id, order: l.order, isFreePreview: l.isFreePreview, title: l.title, contentType: l.contentType, description: l.description, body: l.body, url: l.url, hasFile: !!l.storageKey, fileName: l.fileName, contentMime: l.contentMime, sizeBytes: l.sizeBytes, durationSec: l.durationSec, isRequired: l.isRequired, requiredPercent: l.requiredPercent, questionCount: l._count.questions, dueAt: l.dueAt, points: l.points, submissionType: l.submissionType };
 }
 
 /** Curriculum outline (titles and types only) for the catalog and locked enrolments. */
 export function curriculumOutline(c: CourseRecord) {
-  return visibleModules(c).map((m) => ({ id: m.id, order: m.order, title: m.title, description: m.description, lessons: m.lessons.map((l) => ({ id: l.id, order: l.order, title: l.title, contentType: l.contentType, durationSec: l.durationSec })) }));
+  return visibleModules(c).map((m) => ({ id: m.id, order: m.order, title: m.title, description: m.description, lessons: m.lessons.map((l) => ({ id: l.id, order: l.order, title: l.title, contentType: l.contentType, durationSec: l.durationSec, isFreePreview: l.isFreePreview })) }));
 }
 
 export function priceLabel(cents: number, currency = "USD") {
@@ -113,7 +113,7 @@ export function toCourseCoachView(c: CourseRecord) {
     coaches: c.coaches.map((x) => x.coach),
     certificationTemplate: c.certificationTemplate,
     enrolledCount: c._count.enrollments,
-    modules: c.modules.map((m) => ({ id: m.id, order: m.order, title: m.title, description: m.description, isRequired: m.isRequired, status: m.status, lessons: m.lessons.map((l) => ({ id: l.id, order: l.order, title: l.title, contentType: l.contentType, description: l.description, body: l.body, url: l.url, storageKey: l.storageKey, fileName: l.fileName, contentMime: l.contentMime, sizeBytes: l.sizeBytes, durationSec: l.durationSec, isRequired: l.isRequired, status: l.status, version: l.version, requiredPercent: l.requiredPercent, passingScore: l.passingScore, maxAttempts: l.maxAttempts, timeLimitMin: l.timeLimitMin, randomizeCount: l.randomizeCount, shuffleAnswers: l.shuffleAnswers, showCorrectAnswers: l.showCorrectAnswers, showExplanations: l.showExplanations, retakeWaitMinutes: l.retakeWaitMinutes, scorePolicy: l.scorePolicy, reviewMode: l.reviewMode, dueAt: l.dueAt, points: l.points, submissionType: l.submissionType, questionCount: l._count.questions })) })),
+    modules: c.modules.map((m) => ({ id: m.id, order: m.order, title: m.title, description: m.description, isRequired: m.isRequired, status: m.status, lessons: m.lessons.map((l) => ({ id: l.id, order: l.order, title: l.title, contentType: l.contentType, description: l.description, body: l.body, url: l.url, storageKey: l.storageKey, fileName: l.fileName, contentMime: l.contentMime, sizeBytes: l.sizeBytes, durationSec: l.durationSec, isRequired: l.isRequired, status: l.status, isFreePreview: l.isFreePreview, version: l.version, requiredPercent: l.requiredPercent, passingScore: l.passingScore, maxAttempts: l.maxAttempts, timeLimitMin: l.timeLimitMin, randomizeCount: l.randomizeCount, shuffleAnswers: l.shuffleAnswers, showCorrectAnswers: l.showCorrectAnswers, showExplanations: l.showExplanations, retakeWaitMinutes: l.retakeWaitMinutes, scorePolicy: l.scorePolicy, reviewMode: l.reviewMode, dueAt: l.dueAt, points: l.points, submissionType: l.submissionType, questionCount: l._count.questions })) })),
     lessonCount: c.modules.reduce((n, m) => n + m.lessons.length, 0),
     createdAt: c.createdAt,
   };

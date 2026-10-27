@@ -141,6 +141,8 @@ export async function restoreLessonVersion(db: PrismaClient, actor: Actor, cours
     durationSec: (f.durationSec as number | null) ?? null,
     isRequired: Boolean(f.isRequired),
     status: (f.status as LessonWrite["status"]) ?? l.status,
+    // Who may watch it for free is a publishing decision, not part of the lesson content a restore rewinds.
+    isFreePreview: l.isFreePreview,
     requiredPercent: (f.requiredPercent as number | null) ?? null,
     passingScore: (f.passingScore as number | null) ?? null,
     maxAttempts: (f.maxAttempts as number | null) ?? null,

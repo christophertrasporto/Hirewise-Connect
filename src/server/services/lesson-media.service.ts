@@ -5,6 +5,7 @@ import { ForbiddenError, NotFoundError } from "@/server/policies/authorize";
 import { quizRepository } from "@/server/repositories/quiz.repository";
 import { academyRepository } from "@/server/repositories/academy.repository";
 import { audit } from "@/server/audit/audit";
+import { assertLearnerOwnsLesson } from "@/server/policies/lesson-access";
 import { recalculateCourseProgress, assertLessonUnlocked } from "./progress.service";
 import { youTubeId } from "@/lib/video-url";
 import { creditPlayback } from "./media-credit";
@@ -43,12 +44,11 @@ type MediaLesson = NonNullable<Awaited<ReturnType<typeof quizRepository.findQuiz
 
 async function learnerMediaLesson(db: PrismaClient, actor: Actor, lessonId: string) {
   const profileId = ownProfileId(actor);
+  await assertLearnerOwnsLesson(db, actor, lessonId);
   const lesson = await quizRepository.findQuizLesson(db, lessonId);
-  if (!lesson || lesson.status !== "PUBLISHED" || lesson.module.status !== "PUBLISHED") throw new NotFoundError();
+  if (!lesson) throw new NotFoundError();
   if (!(MEDIA_LESSON_TYPES as readonly string[]).includes(lesson.contentType)) throw new NotFoundError();
-  const enrollment = await academyRepository.findEnrollment(db, lesson.module.courseId, profileId);
-  if (!enrollment) throw new NotFoundError();
-  if (enrollment.paymentStatus === "PENDING") throw new ForbiddenError("This course unlocks once Hirewise records your payment.");
+  const enrollment = (await academyRepository.findEnrollment(db, lesson.module.courseId, profileId))!;
   await assertLessonUnlocked(db, lesson, profileId);
   return { profileId, lesson, enrollment };
 }
@@ -141,11 +141,10 @@ export function isSelfMarked(lesson: { contentType: string; storageKey: string |
 
 async function learnerLesson(db: PrismaClient, actor: Actor, lessonId: string) {
   const profileId = ownProfileId(actor);
+  await assertLearnerOwnsLesson(db, actor, lessonId);
   const lesson = await quizRepository.findQuizLesson(db, lessonId);
-  if (!lesson || lesson.status !== "PUBLISHED" || lesson.module.status !== "PUBLISHED") throw new NotFoundError();
-  const enrollment = await academyRepository.findEnrollment(db, lesson.module.courseId, profileId);
-  if (!enrollment) throw new NotFoundError();
-  if (enrollment.paymentStatus === "PENDING") throw new ForbiddenError("This course unlocks once Hirewise records your payment.");
+  if (!lesson) throw new NotFoundError();
+  const enrollment = (await academyRepository.findEnrollment(db, lesson.module.courseId, profileId))!;
   await assertLessonUnlocked(db, lesson, profileId);
   return { profileId, lesson, enrollment };
 }

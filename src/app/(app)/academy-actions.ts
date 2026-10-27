@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { prisma } from "@/server/db/client";
 import { requireActor } from "@/server/auth/require-actor";
 import { toActionError, formList, formString, type ActionResult } from "@/server/http/action-result";
-import { coverUploadRequestSchema, createCourseCoverUploadUrl, setCourseCover, courseSchema, courseSettingsSchema, createCourse, updateCourse, updateCourseSettings, setCourseCertificationTemplate, submitCourseForApproval, publishCourse, archiveCourse, restoreCourse, enrol, recordCoursePayment, addCoachToCourse, moduleSchema, lessonSchema, lessonUploadRequestSchema, saveModule, deleteModule, moveModule, duplicateModule, saveLesson, deleteLesson, moveLesson, duplicateLesson, createLessonUploadUrl } from "@/server/services/academy.service";
+import { coverUploadRequestSchema, createCourseCoverUploadUrl, setCourseCover, courseSchema, courseSettingsSchema, createCourse, updateCourse, updateCourseSettings, setCourseCertificationTemplate, submitCourseForApproval, publishCourse, archiveCourse, restoreCourse, enrol, recordCoursePayment, addCoachToCourse, moduleSchema, lessonSchema, lessonUploadRequestSchema, saveModule, deleteModule, moveModule, duplicateModule, saveLesson, deleteLesson, moveLesson, reorderLessons, duplicateLesson, createLessonUploadUrl } from "@/server/services/academy.service";
 import { categorySchema, saveCategory } from "@/server/services/category.service";
 import { assessmentSchema, evaluationSchema, labelSchema, recordAssessment, recordEvaluation, saveLabel } from "@/server/services/assessment.service";
 import { templateSchema, saveTemplate, issueCertification, reviewCertification, revokeCertification } from "@/server/services/certification.service";
@@ -189,6 +189,7 @@ export async function saveLessonAction(_prev: ActionResult, fd: FormData): Promi
       description: formString(fd, "description"),
       isRequired: fd.getAll("isRequired").includes("on"),
       status: formString(fd, "status") || "PUBLISHED",
+      isFreePreview: fd.get("isFreePreview") === "on",
       requiredPercent: formString(fd, "requiredPercent"),
       passingScore: formString(fd, "passingScore"),
       maxAttempts: formString(fd, "maxAttempts"),
@@ -230,6 +231,18 @@ export async function moveLessonAction(_prev: ActionResult, fd: FormData): Promi
     const courseId = formString(fd, "courseId");
     await moveLesson(prisma, actor, courseId, formString(fd, "lessonId"), formString(fd, "direction") === "up" ? -1 : 1);
     revalidateCourse(courseId);
+    return { ok: true };
+  } catch (e) {
+    return toActionError(e);
+  }
+}
+
+/** Drag and drop: the module's lessons in their new order. */
+export async function reorderLessonsAction(input: { courseId: string; moduleId: string; orderedIds: string[] }): Promise<ActionResult> {
+  try {
+    const actor = await requireActor();
+    await reorderLessons(prisma, actor, input.courseId, input.moduleId, input.orderedIds);
+    revalidatePath(`/courses/manage/${input.courseId}`, "layout");
     return { ok: true };
   } catch (e) {
     return toActionError(e);
