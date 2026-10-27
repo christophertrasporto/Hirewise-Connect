@@ -296,7 +296,7 @@ export function LessonForm({ courseId, modules, moduleId, lesson, onDone, sectio
               </Select>
             </Field>
             <div className="pt-7"><Checkbox name="isRequired" defaultChecked={lesson?.isRequired ?? true} label={<span><span className="font-semibold">Required</span> <span className="text-ink-500">counts toward course completion</span></span>} /></div>
-            <div className="sm:col-span-2"><Checkbox name="isFreePreview" defaultChecked={lesson?.isFreePreview ?? false} label={<span><span className="font-semibold">Free preview</span> <span className="text-ink-500">anyone can watch it without buying or signing in, once it is published. Every other lesson is for owners of the course only.</span></span>} /></div>
+            <div className="sm:col-span-2"><Checkbox name="isFreePreview" defaultChecked={lesson?.isFreePreview ?? false} label={<span><span className="font-semibold">Free preview</span> <span className="text-ink-500">anyone can watch it without buying or signing in, once it is published. A free preview video must be an uploaded file (links to YouTube, Vimeo, or Loom are fine for the other lessons). Every other lesson is for owners of the course only.</span></span>} /></div>
           </div>
           {isMedia && (
             <Field label={`Required ${type === "AUDIO" ? "listening" : "watching"} (%)`} htmlFor={`l-pct-${uid}`} error={fe.requiredPercent} hint="Only time actually played counts; seeking to the end does not complete the lesson.">

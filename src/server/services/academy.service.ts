@@ -530,9 +530,10 @@ export async function saveLesson(db: PrismaClient, actor: Actor, courseId: strin
   if (data.isFreePreview && ["QUIZ", "ASSIGNMENT", "ASSESSMENT"].includes(data.contentType)) {
     throw Object.assign(new Error("Quizzes, assignments, and assessments need an account and cannot be free previews."), { name: "AuthError", field: "isFreePreview" });
   }
-  // A gated video is only protected when it is an upload we sign; a YouTube, Vimeo, or Loom link is public by nature.
-  if (data.contentType === "VIDEO" && data.url && !data.isFreePreview) {
-    throw Object.assign(new Error("A video that is not a free preview must be uploaded as a file. Links to YouTube, Vimeo, or Loom cannot be protected."), { name: "AuthError", field: "url" });
+  // The welcome (free preview) video is the course's shop window and must be a file Hirewise hosts. Every other video
+  // lesson may be a YouTube, Vimeo, or Loom link; those links are public by nature, so only uploads are signed.
+  if (data.contentType === "VIDEO" && data.url && data.isFreePreview) {
+    throw Object.assign(new Error("The free preview video must be uploaded as a file. Links to YouTube, Vimeo, or Loom are fine for the other lessons."), { name: "AuthError", field: "url" });
   }
   if (data.storageKey) {
     if (!data.storageKey.startsWith(lessonKeyPrefix(c.id))) throw new ForbiddenError("Storage key does not belong to this course");
@@ -585,8 +586,16 @@ export async function reorderLessons(db: PrismaClient, actor: Actor, courseId: s
 }
 
 /** Non-blocking notes shown to the admin on the builder: a course people can buy should have something free to try. */
-export function courseWarnings(c: { status: string; modules: Array<{ status: string; lessons: Array<{ status: string; isFreePreview: boolean }> }> }): string[] {
+export function courseWarnings(c: { status: string; modules: Array<{ status: string; lessons: Array<{ status: string; isFreePreview: boolean; title?: string; contentType?: string; storageKey?: string | null; url?: string | null }> }> }): string[] {
   const warnings: string[] = [];
+  // A welcome video that is still an external link (older courses, or the migrated intro video) should be uploaded.
+  for (const m of c.modules) {
+    for (const l of m.lessons) {
+      if (l.isFreePreview && l.contentType === "VIDEO" && !l.storageKey && l.url) {
+        warnings.push(`The free preview video "${l.title ?? "Welcome"}" is an external link. Upload the video file so Hirewise hosts it; links are fine for the other lessons.`);
+      }
+    }
+  }
   const hasPreview = c.modules.some((m) => m.status === "PUBLISHED" && m.lessons.some((l) => l.status === "PUBLISHED" && l.isFreePreview));
   if (c.status !== "ARCHIVED" && !hasPreview) {
     warnings.push(
