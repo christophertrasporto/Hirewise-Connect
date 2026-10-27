@@ -22,7 +22,7 @@ export default async function StaffAcademyPaymentsPage() {
             <li key={e.id} className="flex flex-col gap-3 py-4 lg:flex-row lg:items-center lg:justify-between">
               <div>
                 <p className="text-[15px] font-semibold text-ink-900"><Link href={`/staff/talent/${e.agentProfile.id}`} className="hover:text-brand-700">{e.agentProfile.displayName}</Link> <span className="font-normal text-ink-400">· {e.course.title}</span></p>
-                <p className="text-[12.5px] text-ink-400">Enrolled {fmtDate(e.enrolledAt)} · due {priceLabel(e.priceCents, e.currency)}</p>
+                <p className="text-[12.5px] text-ink-400">Enrolled {fmtDate(e.enrolledAt)} · due {priceLabel(e.priceCents, e.currency)}{e.listPriceCents != null && e.listPriceCents > e.priceCents ? ` (list ${priceLabel(e.listPriceCents, e.currency)}, promo code applied)` : ""}</p>
               </div>
               <PaymentForm enrollmentId={e.id} priceLabel={priceLabel(e.priceCents, e.currency)} />
             </li>

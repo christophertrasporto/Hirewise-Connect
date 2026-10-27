@@ -18,6 +18,7 @@ import { coursesLockedFor } from "./onboarding.service";
 import { recalculateAllForCourse, lockedLessonsFor, assertLessonUnlocked } from "./progress.service";
 import { assertCanWatchLesson, entitledToCourse } from "@/server/policies/lesson-access";
 import { getEnv } from "@/server/env";
+import { applyPromoTx, consumePromoTx, promoForEnrollment } from "./promo.service";
 import { recordLessonVersion, changedFields } from "./lesson-version.service";
 import { categoryRepository } from "@/server/repositories/category.repository";
 import { assignmentRepository } from "@/server/repositories/assignment.repository";
@@ -651,17 +652,23 @@ export function academyLockFor(db: PrismaClient, actor: Actor) {
   return coursesLockedFor(db, actor);
 }
 
-export async function enrol(db: PrismaClient, actor: Actor, courseId: string) {
+/** Enrols the learner. A promo code, when given, is applied in the same transaction: an invalid code enrols nobody. */
+export async function enrol(db: PrismaClient, actor: Actor, courseId: string, promoCode?: string) {
   const profileId = ownProfileId(actor);
   const c = await academyRepository.findCourse(db, courseId);
   if (!c || c.status !== "PUBLISHED") throw new NotFoundError();
   if (await academyRepository.findEnrollment(db, courseId, profileId)) return;
   const lock = await coursesLockedFor(db, actor);
   if (lock.locked) throw new ForbiddenError(lock.reason ?? "Finish your onboarding checklist before enrolling.");
+  const code = promoCode?.trim();
+  if (code) rateLimit(`promo:${actor.userId}`, 20, 60 * 60_000);
   await db.$transaction(async (tx) => {
     const e = await academyRepository.enroll(tx, { currency: c.currency, courseId, agentProfileId: profileId, priceCents: c.priceCents, credentialSource: sourceForSelfEnrolment(c.priceCents) });
-    await audit(tx, { actor, action: "COURSE_ENROLLED", entityType: "CourseEnrollment", entityId: e.id, newValue: { courseId, priceCents: c.priceCents, paymentStatus: e.paymentStatus, credentialSource: e.credentialSource } });
-    await publishEvent(tx, "COURSE_ENROLLED", { courseId, title: c.title, agentProfileId: profileId, agentUserId: actor.userId, coachUserIds: [c.ownerCoachUserId, ...c.coaches.map((x) => x.coachUserId)], paymentRequired: c.priceCents > 0, priceCents: c.priceCents });
+    // Promo codes: re-price the new enrolment before anything reads its price (a free result needs no payment).
+    const dueCents = code ? (await applyPromoTx(tx, actor, e, code)).finalMinor : c.priceCents;
+    const status = dueCents > 0 ? e.paymentStatus : "NOT_REQUIRED";
+    await audit(tx, { actor, action: "COURSE_ENROLLED", entityType: "CourseEnrollment", entityId: e.id, newValue: { courseId, priceCents: dueCents, listPriceCents: code ? c.priceCents : undefined, paymentStatus: status, credentialSource: dueCents > 0 ? e.credentialSource : "HIREWISE_DIRECT" } });
+    await publishEvent(tx, "COURSE_ENROLLED", { courseId, title: c.title, agentProfileId: profileId, agentUserId: actor.userId, coachUserIds: [c.ownerCoachUserId, ...c.coaches.map((x) => x.coachUserId)], paymentRequired: dueCents > 0, priceCents: dueCents });
   });
 }
 
@@ -691,7 +698,7 @@ export async function getEnrollmentForAgent(db: PrismaClient, actor: Actor, cour
     lockedLessons,
     locked: revoked ? { kind: "REVOKED" as const, reason: e.revokeReason ?? "Access to this course ended with your agency membership.", href: "/courses" } : (null as null | { kind: "ONBOARDING" | "REVOKED"; reason: string; href: string }),
     course: { ...toCourseAgentView(e.course, unlocked), coverUrl: await coverUrlFor(e.course) },
-    enrollment: toEnrollmentAgentView(e),
+    enrollment: { ...toEnrollmentAgentView(e), promo: await promoForEnrollment(db, e.id) },
     lessonProgress: Object.fromEntries(progressRows.map((p) => [p.lessonId, { status: p.status, completedAt: p.completedAt, mediaPercent: p.mediaPercent, lastPositionSec: p.lastPositionSec, mediaCompletedAt: p.mediaCompletedAt }])) as LessonProgressMap,
     courseProgress: courseProgress ? { percent: courseProgress.percent, requiredDone: courseProgress.requiredDone, requiredTotal: courseProgress.requiredTotal } : null,
   };
@@ -708,6 +715,8 @@ type EnrollmentForPayment = NonNullable<Awaited<ReturnType<typeof academyReposit
 export async function settleEnrollmentPaymentTx(tx: Db, actor: Actor, e: EnrollmentForPayment, p: { paidCents: number | null; reference: string | null; waived: boolean; reason?: string; recordedById: string | null; channel: "STAFF" | "MAYA" }) {
   const changed = await academyRepository.recordPaymentIfPending(tx, e.id, { paidCents: p.paidCents, paymentReference: p.reference, waived: p.waived, recordedById: p.recordedById });
   if (changed !== 1) throw new Error("This enrolment does not have a pending payment.");
+  // Promo codes: a reserved use becomes consumed the moment the enrolment is paid or waived.
+  await consumePromoTx(tx, e.id);
   // v2 phase 4: a waived payment is a Hirewise assignment, not an independent purchase.
   if (p.waived) await trainingRepository.setEnrollmentSource(tx, e.id, "ADMIN_ASSIGNMENT");
   // Referral program: the confirmed payment is the only moment a commission can be created (idempotent per enrolment).

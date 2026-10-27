@@ -57,6 +57,7 @@ export const PERMISSIONS = {
   "course.manage": { group: "academy", description: "Create, edit, publish, and archive any course; assign coaches; link certification templates" },
   "course.create_own": { group: "academy", description: "Create and edit courses and exams the actor coaches; set the course price; submit for publishing" },
   "course.payment.record": { group: "academy", description: "Record or waive an agent's payment for a paid course" },
+  "promo.manage": { group: "academy", description: "Create, pause, and archive course promo codes and see who used them" },
   "verification.manage": { group: "academy", description: "Edit verification-level requirements and certification templates" },
   "course.read_assigned": { group: "academy", description: "Read courses and students assigned to the actor" },
   // Course Builder capabilities, grantable individually (Super Admin override) on top of course.create_own

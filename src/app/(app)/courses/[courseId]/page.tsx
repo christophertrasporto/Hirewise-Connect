@@ -10,6 +10,7 @@ import { PageHeader, Card, StatusBadge, Banner, EmptyState, fmtDate } from "@/co
 import { EnrolButton } from "@/components/academy/AgentCourseActions";
 import { CourseCover } from "@/components/academy/CourseTile";
 import { PayWithMayaButton } from "@/components/academy/PayWithMaya";
+import { EnrolWithPromo, PendingPromoBox } from "@/components/academy/PromoCode";
 import { mayaAvailableFor, reconcileMyCourse } from "@/server/services/maya-payment.service";
 import { LessonContent, LessonOutline, embedUrl } from "@/components/academy/LessonContent";
 
@@ -44,7 +45,7 @@ export default async function CoursePage({ params, searchParams }: { params: Pro
       {onboardingLock && <div className="mb-6"><Banner tone="warn" title={onboardingLock.kind === "REVOKED" ? "Access to this course has ended" : "Locked until you finish onboarding"}>{onboardingLock.reason} <Link href={onboardingLock.href} className="font-semibold underline underline-offset-2">Watch the welcome video</Link>.</Banner></div>}
       {pay === "success" && locked && <div className="mb-6"><Banner tone="info" title="Waiting for Maya to confirm your payment">This usually takes a few seconds. Refresh the page in a moment. If you were charged and the course stays locked, contact your account manager with your Maya receipt.</Banner></div>}
       {(pay === "failed" || pay === "cancelled") && locked && <div className="mb-6"><Banner tone="warn" title={pay === "failed" ? "The payment did not go through" : "You cancelled the payment"}>Nothing was charged. You can try again below or pay by bank transfer or GCash.</Banner></div>}
-      {locked && <div className="mb-6"><Banner tone="warn" title={`Payment of ${enrollment!.priceLabel} pending`}>{mayaOk ? "Pay online with Maya and the lessons unlock automatically, or send the fee to Hirewise by bank transfer or GCash and share the reference with your coach or account manager." : "Send the course fee to Hirewise (bank transfer or GCash) and share the reference with your coach or account manager. The lessons unlock as soon as the payment is recorded."}{mayaOk && <div className="mt-4 max-w-sm"><PayWithMayaButton enrollmentId={enrollment!.id} priceLabel={enrollment!.priceLabel} /></div>}</Banner></div>}
+      {locked && <div className="mb-6"><Banner tone="warn" title={`Payment of ${enrollment!.priceLabel} pending${enrollment!.listPriceLabel ? ` (was ${enrollment!.listPriceLabel})` : ""}`}>{mayaOk ? "Pay online with Maya and the lessons unlock automatically, or send the fee to Hirewise by bank transfer or GCash and share the reference with your coach or account manager." : "Send the course fee to Hirewise (bank transfer or GCash) and share the reference with your coach or account manager. The lessons unlock as soon as the payment is recorded."}<PendingPromoBox enrollmentId={enrollment!.id} promo={enrollment!.promo} />{mayaOk && <div className="mt-4 max-w-sm"><PayWithMayaButton enrollmentId={enrollment!.id} priceLabel={enrollment!.priceLabel} /></div>}</Banner></div>}
       {completed && <div className="mb-6"><Banner tone="success" title={`Completed ${fmtDate(enrollment!.completedAt)}`}>{enrollment!.examScore !== null ? `Best quiz score ${enrollment!.examScore}%.` : ""}{course.certification ? ` Certification: ${course.certification.name}.` : ""}</Banner></div>}
       {enrollment && !locked && !completed && course.welcomeMessage && <div className="mb-6"><Banner tone="info" title="From your coach">{course.welcomeMessage}</Banner></div>}
 
@@ -85,7 +86,7 @@ export default async function CoursePage({ params, searchParams }: { params: Pro
             {!enrollment ? (
               <div className="space-y-3">
                 <p className="text-[13.5px] text-ink-600">{course.priceCents === 0 ? "This course is free." : mayaAvailableFor({ currency: course.currency, priceCents: course.priceCents }) ? `This course costs ${course.priceLabel}. Enrol, then pay online with Maya and the lessons unlock automatically, or pay Hirewise by bank transfer or GCash.` : `This course costs ${course.priceLabel}. Enrol now and pay Hirewise offline; the content unlocks once the payment is recorded.`}</p>
-                {onboardingLock ? <Link href={onboardingLock.href} className="inline-flex h-11 items-center gap-2 rounded-full bg-ink-900 px-5 text-[14.5px] font-semibold text-white hover:bg-ink-800"><Lock className="h-4 w-4" /> Finish onboarding to enrol</Link> : <EnrolButton courseId={course.id} priceLabel={course.priceLabel} />}
+                {onboardingLock ? <Link href={onboardingLock.href} className="inline-flex h-11 items-center gap-2 rounded-full bg-ink-900 px-5 text-[14.5px] font-semibold text-white hover:bg-ink-800"><Lock className="h-4 w-4" /> Finish onboarding to enrol</Link> : course.priceCents > 0 ? <EnrolWithPromo courseId={course.id} priceLabel={course.priceLabel} /> : <EnrolButton courseId={course.id} priceLabel={course.priceLabel} />}
               </div>
             ) : (
               <div className="space-y-3">

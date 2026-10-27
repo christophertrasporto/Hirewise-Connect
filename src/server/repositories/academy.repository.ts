@@ -94,6 +94,11 @@ export const academyRepository = {
   },
 
   // Enrollments
+  /** Promo codes: re-price a pending enrolment. priceCents is the amount payable, listPriceCents the price before the code. */
+  setPrice(db: Db, id: string, d: { priceCents: number; listPriceCents: number | null; paymentStatus?: "PENDING" | "NOT_REQUIRED" }) {
+    return db.courseEnrollment.update({ where: { id }, data: { priceCents: d.priceCents, listPriceCents: d.listPriceCents, ...(d.paymentStatus ? { paymentStatus: d.paymentStatus } : {}) } });
+  },
+
   enroll(db: Db, d: { currency?: string; courseId: string; agentProfileId: string; priceCents: number; source?: "INTERNAL" | "ACADEMY_SYNC"; credentialSource?: "INDEPENDENT_PURCHASE" | "HIREWISE_DIRECT" | "ADMIN_ASSIGNMENT" }) {
     return db.courseEnrollment.create({ data: { courseId: d.courseId, agentProfileId: d.agentProfileId, priceCents: d.priceCents, currency: d.currency ?? "USD", paymentStatus: d.priceCents > 0 ? "PENDING" : "NOT_REQUIRED", source: d.source ?? "INTERNAL", credentialSource: d.credentialSource ?? (d.priceCents > 0 ? "INDEPENDENT_PURCHASE" : "HIREWISE_DIRECT") } });
   },

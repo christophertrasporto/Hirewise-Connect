@@ -197,6 +197,10 @@ export const EVENT_HANDLERS: { [T in DomainEventType]: EventHandler<T> } = {
   ONLINE_PAYMENT_PROBLEM: async (db, p) => {
     await notifyStaff(db, ["ADMIN", "SALES"], { type: "ONLINE_PAYMENT_PROBLEM", title: `Online payment needs attention: ${p.courseTitle}`, body: `${p.learnerEmail}: ${p.reason}`, dedupeKey: `ONLPAY:${p.onlinePaymentId}` });
   },
+  // Promo codes: audited, nothing to notify.
+  PROMO_CHANGED: async () => {},
+  PROMO_REDEEMED: async () => {},
+  PROMO_RELEASED: async () => {},
   // Referral program
   REFERRAL_SIGNUP: async (db, p) => {
     await notifyUser(db, { userId: p.referrerUserId, type: "REFERRAL_SIGNUP", title: "Someone joined with your link", body: "You will earn a commission on every course they buy. See Refer and Earn for the details.", dedupeKey: `REFSIGN:${p.referredUserId}` });

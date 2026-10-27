@@ -10,6 +10,7 @@ export default async function StaffAcademyLayout({ children }: { children: React
     can(actor, "course.manage") ? { href: "/staff/academy", label: "Approvals" } : null,
     can(actor, "course.manage") ? { href: "/courses/manage/categories", label: "Categories" } : null,
     can(actor, "course.payment.record") ? { href: "/staff/academy/payments", label: "Payments" } : null,
+    can(actor, "promo.manage") ? { href: "/staff/academy/promos", label: "Promo codes" } : null,
     can(actor, "course.manage") ? { href: "/staff/academy/onboarding", label: "Onboarding" } : null,
     can(actor, "certification.review") ? { href: "/staff/academy/certifications", label: "Certifications" } : null,
     can(actor, "verification.manage") ? { href: "/staff/academy/settings", label: "Templates & verification" } : null,

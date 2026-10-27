@@ -78,6 +78,10 @@ export type DomainEventMap = {
   SUBMISSION_WITHDRAWN: { submissionId: string; opportunityId: string; title: string; displayName: string; agencyName: string | null; reason: string; accountManagerUserId: string | null; byExit: boolean };
   // Online course payments (Maya)
   ONLINE_PAYMENT_PROBLEM: { onlinePaymentId: string; enrollmentId: string; courseTitle: string; learnerEmail: string; reason: string };
+  // Promo codes
+  PROMO_CHANGED: { promoCodeId: string; code: string; change: "CREATED" | "UPDATED" | "ACTIVE" | "PAUSED" | "ARCHIVED" };
+  PROMO_REDEEMED: { promoCodeId: string; code: string; enrollmentId: string; userId: string; discountMinor: number; finalMinor: number; currency: string };
+  PROMO_RELEASED: { promoCodeId: string; code: string; enrollmentId: string; userId: string; reason: string };
   // Referral program
   REFERRAL_SIGNUP: { referrerUserId: string; referredUserId: string };
   REFERRAL_FLAGGED: { referrerUserId: string; referredUserId: string; kinds: string[] };

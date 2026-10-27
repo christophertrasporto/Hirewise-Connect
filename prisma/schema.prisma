@@ -1381,6 +1381,7 @@ enum CertificationStatus {
 
 model AcademyCourse {
   coursePurchases                   CoursePurchase[]
+  promoCodes                        PromoCodeCourse[]
   id                                String                 @id @default(cuid())
   code                              String                 @unique
   title                             String
@@ -1808,6 +1809,10 @@ model CourseEnrollment {
   /// Currency of priceCents and paidCents (a snapshot of the course currency at enrolment).
   currency       String          @default("USD") @db.Char(3)
   onlinePayments OnlinePayment[]
+
+  /// Promo codes: the course price before a code was applied. priceCents is always the amount payable.
+  listPriceCents   Int?
+  promoRedemptions PromoRedemption[]
 
   @@unique([courseId, agentProfileId])
   @@index([agentProfileId, status])
@@ -3607,5 +3612,92 @@ model OnlinePayment {
 
   @@unique([provider, checkoutId])
   @@index([enrollmentId, status])
+  @@index([status, createdAt])
+}
+
+enum PromoDiscountType {
+  PERCENT
+  AMOUNT
+}
+
+enum PromoAppliesTo {
+  ALL_COURSES
+  SELECTED_COURSES
+}
+
+enum PromoStatus {
+  ACTIVE
+  PAUSED
+  ARCHIVED
+}
+
+enum PromoRedemptionStatus {
+  /// Applied to a pending enrolment; counts against the limits, released if removed or left unpaid.
+  RESERVED
+  /// The enrolment was paid (or needed no payment).
+  CONSUMED
+  RELEASED
+}
+
+/// A discount code for courses. Counts of use are always computed from PromoRedemption, never stored.
+model PromoCode {
+  id              String            @id @default(cuid())
+  code            String            @unique
+  label           String
+  discountType    PromoDiscountType
+  /// PERCENT: basis points off the price (1000 = 10%).
+  percentBps      Int?
+  /// AMOUNT: minor units off, in currency.
+  amountMinor     Int?
+  currency        String?           @db.Char(3)
+  startsAt        DateTime?
+  endsAt          DateTime?
+  maxRedemptions  Int?
+  perLearnerLimit Int               @default(1)
+  /// The code only applies when the list price is at least this (minor units).
+  minPriceMinor   Int               @default(0)
+  appliesTo       PromoAppliesTo    @default(ALL_COURSES)
+  status          PromoStatus       @default(ACTIVE)
+  createdById     String
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  courses     PromoCodeCourse[]
+  redemptions PromoRedemption[]
+
+  @@index([status])
+}
+
+model PromoCodeCourse {
+  promoCodeId String
+  promoCode   PromoCode     @relation(fields: [promoCodeId], references: [id], onDelete: Cascade)
+  courseId    String
+  course      AcademyCourse @relation(fields: [courseId], references: [id], onDelete: Cascade)
+
+  @@id([promoCodeId, courseId])
+  @@index([courseId])
+}
+
+/// One use of a code on one enrolment. At most one live (RESERVED or CONSUMED) row per enrolment, enforced by a partial unique index.
+model PromoRedemption {
+  id             String                @id @default(cuid())
+  promoCodeId    String
+  promoCode      PromoCode             @relation(fields: [promoCodeId], references: [id])
+  enrollmentId   String
+  enrollment     CourseEnrollment      @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  userId         String
+  listPriceMinor Int
+  discountMinor  Int
+  finalMinor     Int
+  currency       String                @db.Char(3)
+  status         PromoRedemptionStatus @default(RESERVED)
+  createdAt      DateTime              @default(now())
+  consumedAt     DateTime?
+  releasedAt     DateTime?
+  releaseReason  String?
+
+  @@index([promoCodeId, status])
+  @@index([userId, promoCodeId, status])
+  @@index([enrollmentId])
   @@index([status, createdAt])
 }

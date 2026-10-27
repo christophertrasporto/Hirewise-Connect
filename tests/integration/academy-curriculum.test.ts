@@ -8,6 +8,7 @@ import { saveQuestion, deleteQuestion, startAttempt, attemptForLearner, submitAt
 import { resolveActor } from "@/server/auth/resolve-actor";
 import { makeActor } from "@/server/auth/actor";
 import { ForbiddenError, NotFoundError } from "@/server/policies/authorize";
+import { LessonAccessError } from "@/server/policies/lesson-access";
 import { ROLE_NAMES, type RoleKey } from "@/server/policies/permissions";
 import { resetEnvCache } from "@/server/env";
 import { getStorage, resetStorageForTests } from "@/server/adapters/storage";
@@ -78,7 +79,7 @@ describe("curriculum: modules and lessons of every content type", () => {
 
     ids.text = await saveLesson(db, await coach(), ids.course, { moduleId: ids.m1, title: "Why openers matter", contentType: "TEXT", body: "## Earn permission\n\nThe first ten seconds decide the call." });
     ids.link = await saveLesson(db, await coach(), ids.course, { moduleId: ids.m1, title: "Reading: objection handling", contentType: "LINK", url: "https://example.com/objections" });
-    ids.video = await saveLesson(db, await coach(), ids.course, { moduleId: ids.m2, title: "Role-play walkthrough", contentType: "VIDEO", url: "https://youtu.be/abc123", durationSec: 540 });
+    ids.video = await saveLesson(db, await coach(), ids.course, { moduleId: ids.m2, title: "Role-play walkthrough", contentType: "VIDEO", isFreePreview: true, url: "https://youtu.be/abc123", durationSec: 540 });
 
     const { course } = await getCourseForCoach(db, await coach(), ids.course);
     expect(course.modules.map((m) => m.title)).toEqual(["Module 1: Openers", "Module 2: Objections"]);
@@ -221,7 +222,7 @@ describe("what agents see", () => {
     // not enrolled: no content, no files
     const notEnrolled = await getEnrollmentForAgent(db, agent2(), ids.course);
     expect(notEnrolled.course.modules).toBeNull();
-    await expect(lessonDownloadUrl(db, agent2(), ids.doc)).rejects.toBeInstanceOf(NotFoundError);
+    await expect(lessonDownloadUrl(db, agent2(), ids.doc)).rejects.toBeInstanceOf(LessonAccessError);
 
     // paid and pending: outline only, no files
     await enrol(db, agent2(), ids.paid);
@@ -247,7 +248,7 @@ describe("what agents see", () => {
     expect(url).toContain("/api/storage/");
     expect(await lessonDownloadUrl(db, await coach(), ids.doc)).toContain("/api/storage/");
     expect(await lessonDownloadUrl(db, admin(), ids.doc)).toContain("/api/storage/");
-    await expect(lessonDownloadUrl(db, await coach2(), ids.doc)).rejects.toBeInstanceOf(NotFoundError);
+    await expect(lessonDownloadUrl(db, await coach2(), ids.doc)).rejects.toBeInstanceOf(LessonAccessError);
     await expect(lessonDownloadUrl(db, agent(), ids.text)).rejects.toBeInstanceOf(NotFoundError); // no file on a text lesson
   });
 });
