@@ -68,8 +68,8 @@ describe("every lesson type has a completion path", () => {
     const up = await createLessonUploadUrl(db, c, ids.course, { kind: "DOCUMENT", contentType: "application/pdf", sizeBytes: 5, fileName: "handout.pdf" });
     await getStorage().put(up.key, Buffer.from("%PDF-"), "application/pdf");
     ids.doc = await saveLesson(db, c, ids.course, { moduleId: ids.module, title: "Handout", contentType: "DOCUMENT", storageKey: up.key, fileName: "handout.pdf", contentMime: "application/pdf", sizeBytes: 5 });
-    ids.ytVideo = await saveLesson(db, c, ids.course, { moduleId: ids.module, title: "Role-play (YouTube)", contentType: "VIDEO", isFreePreview: true, url: "https://youtu.be/abc123def45", durationSec: 300, requiredPercent: 80 });
-    ids.loomVideo = await saveLesson(db, c, ids.course, { moduleId: ids.module, title: "Walkthrough (Loom)", contentType: "VIDEO", isFreePreview: true, url: "https://www.loom.com/share/0123456789abcdef" });
+    ids.ytVideo = await saveLesson(db, c, ids.course, { moduleId: ids.module, title: "Role-play (YouTube)", contentType: "VIDEO", url: "https://youtu.be/abc123def45", durationSec: 300, requiredPercent: 80 });
+    ids.loomVideo = await saveLesson(db, c, ids.course, { moduleId: ids.module, title: "Walkthrough (Loom)", contentType: "VIDEO", url: "https://www.loom.com/share/0123456789abcdef" });
     const vup = await createLessonUploadUrl(db, c, ids.course, { kind: "VIDEO", contentType: "video/mp4", sizeBytes: 4, fileName: "clip.mp4" });
     await getStorage().put(vup.key, Buffer.from("ftyp"), "video/mp4");
     ids.fileVideo = await saveLesson(db, c, ids.course, { moduleId: ids.module, title: "Uploaded clip", contentType: "VIDEO", storageKey: vup.key, fileName: "clip.mp4", contentMime: "video/mp4", sizeBytes: 4, durationSec: 100, requiredPercent: 50 });

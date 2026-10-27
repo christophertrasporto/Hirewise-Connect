@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { NextRequest } from "next/server";
 import { testDb, resetDb } from "../setup/db";
 import { canWatchLesson, assertCanWatchLesson, assertLearnerOwnsLesson, LessonAccessError } from "@/server/policies/lesson-access";
-import { lessonDownloadUrl, recordCourseRefund, reorderLessons, saveLesson, courseWarnings, getEnrollmentForAgent } from "@/server/services/academy.service";
+import { createLessonUploadUrl, lessonDownloadUrl, recordCourseRefund, reorderLessons, saveLesson, courseWarnings, getEnrollmentForAgent } from "@/server/services/academy.service";
 import { getPublicCourse } from "@/server/services/course-public.service";
 import { startLesson } from "@/server/services/lesson-media.service";
 import { ensureReferralCode } from "@/server/services/referral.service";
@@ -12,6 +12,7 @@ import { recalculateAllForCourse } from "@/server/services/progress.service";
 import { POST as captureReferral } from "@/app/api/referral/capture/route";
 import { makeActor } from "@/server/auth/actor";
 import { ForbiddenError, NotFoundError } from "@/server/policies/authorize";
+import { getStorage } from "@/server/adapters/storage";
 import { ROLE_NAMES, type RoleKey } from "@/server/policies/permissions";
 import { resetEnvCache } from "@/server/env";
 import { resetRateLimits } from "@/server/auth/rate-limit";
@@ -276,11 +277,20 @@ describe("saving lessons", () => {
     expect((await db.courseLesson.findUniqueOrThrow({ where: { id } })).isFreePreview).toBe(false);
   });
 
-  it("a gated video must be an upload; a free preview may be a hosted link", async () => {
-    await expect(saveLesson(db, admin(), ids.course, { ...base, moduleId: ids.mod, url: "https://www.youtube.com/watch?v=abc" })).rejects.toThrow(/must be uploaded as a file/);
-    const id = await saveLesson(db, admin(), ids.course, { ...base, moduleId: ids.mod, url: "https://www.youtube.com/watch?v=abc", isFreePreview: true });
-    expect((await db.courseLesson.findUniqueOrThrow({ where: { id } })).isFreePreview).toBe(true);
-    expect(await canWatchLesson(db, visitor, id)).toBe(true);
+  it("a free preview video must be an uploaded file; other videos may be YouTube, Vimeo, or Loom links", async () => {
+    await expect(saveLesson(db, admin(), ids.course, { ...base, moduleId: ids.mod, url: "https://www.youtube.com/watch?v=abc", isFreePreview: true })).rejects.toThrow(/free preview video must be uploaded/);
+    // A gated lesson may link out.
+    const gated = await saveLesson(db, admin(), ids.course, { ...base, moduleId: ids.mod, url: "https://www.youtube.com/watch?v=abc" });
+    expect((await db.courseLesson.findUniqueOrThrow({ where: { id: gated } })).url).toBe("https://www.youtube.com/watch?v=abc");
+    expect(await canWatchLesson(db, visitor, gated)).toBe(false);
+    // An uploaded preview works, and anyone can watch it.
+    const { key } = await createLessonUploadUrl(db, admin(), ids.course, { kind: "VIDEO", contentType: "video/mp4", sizeBytes: 10 });
+    await getStorage().put(key, Buffer.from("x"), "video/mp4");
+    const preview = await saveLesson(db, admin(), ids.course, { ...base, moduleId: ids.mod, title: "Welcome upload", storageKey: key, fileName: "w.mp4", contentMime: "video/mp4", sizeBytes: 1, isFreePreview: true });
+    expect((await db.courseLesson.findUniqueOrThrow({ where: { id: preview } })).isFreePreview).toBe(true);
+    expect(await canWatchLesson(db, visitor, preview)).toBe(true);
+    // Switching an existing hosted-link lesson to a free preview is refused until it is uploaded.
+    await expect(saveLesson(db, admin(), ids.course, { ...base, id: gated, moduleId: ids.mod, url: "https://www.youtube.com/watch?v=abc", isFreePreview: true })).rejects.toThrow(/free preview video must be uploaded/);
   });
 
   it("quizzes, assignments, and assessments cannot be free previews", async () => {
@@ -304,6 +314,11 @@ describe("the admin warning", () => {
     expect(courseWarnings({ status: "PUBLISHED", modules: lessonsOf([{}, { isFreePreview: true }]) })).toEqual([]);
     expect(courseWarnings({ status: "PUBLISHED", modules: lessonsOf([{ isFreePreview: true, status: "DRAFT" }]) })).toHaveLength(1); // an unpublished preview does not count
     expect(courseWarnings({ status: "ARCHIVED", modules: [] })).toEqual([]);
+    // A welcome preview that is still an external link is flagged; an uploaded one, or a gated link, is not.
+    const video = (over: Record<string, unknown>) => [{ status: "PUBLISHED", lessons: [{ status: "PUBLISHED", isFreePreview: true, title: "Welcome", contentType: "VIDEO", storageKey: null, url: null, ...over }] }];
+    expect(courseWarnings({ status: "PUBLISHED", modules: video({ url: "https://youtu.be/x" }) }).join(" ")).toMatch(/"Welcome" is an external link/);
+    expect(courseWarnings({ status: "PUBLISHED", modules: video({ storageKey: "lessons/c/w.mp4" }) })).toEqual([]);
+    expect(courseWarnings({ status: "PUBLISHED", modules: [...video({ storageKey: "k" }), { status: "PUBLISHED", lessons: [{ status: "PUBLISHED", isFreePreview: false, contentType: "VIDEO", url: "https://youtu.be/y" }] }] })).toEqual([]);
   });
 });
 

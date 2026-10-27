@@ -79,7 +79,7 @@ describe("curriculum: modules and lessons of every content type", () => {
 
     ids.text = await saveLesson(db, await coach(), ids.course, { moduleId: ids.m1, title: "Why openers matter", contentType: "TEXT", body: "## Earn permission\n\nThe first ten seconds decide the call." });
     ids.link = await saveLesson(db, await coach(), ids.course, { moduleId: ids.m1, title: "Reading: objection handling", contentType: "LINK", url: "https://example.com/objections" });
-    ids.video = await saveLesson(db, await coach(), ids.course, { moduleId: ids.m2, title: "Role-play walkthrough", contentType: "VIDEO", isFreePreview: true, url: "https://youtu.be/abc123", durationSec: 540 });
+    ids.video = await saveLesson(db, await coach(), ids.course, { moduleId: ids.m2, title: "Role-play walkthrough", contentType: "VIDEO", url: "https://youtu.be/abc123", durationSec: 540 });
 
     const { course } = await getCourseForCoach(db, await coach(), ids.course);
     expect(course.modules.map((m) => m.title)).toEqual(["Module 1: Openers", "Module 2: Objections"]);

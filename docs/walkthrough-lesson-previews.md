@@ -15,7 +15,7 @@ Built 2026-10-27 from `docs/plan-lesson-previews.md` (all six recommendations ap
 ## Admin
 
 - Lesson settings have a **Free preview** checkbox; new lessons are gated. Free preview lessons carry a badge in the builder. Quizzes, assignments, and assessments cannot be previews.
-- A gated video must be an uploaded file (a YouTube, Vimeo, or Loom link cannot be protected). A free preview may be a hosted link.
+- The free preview (welcome) video must be an uploaded file that Hirewise hosts. Every other video lesson may be a YouTube, Vimeo, or Loom link. Those links are public by nature: the app never shows them to people who do not own the course, but it cannot stop an owner sharing one, whereas an uploaded video is only reachable through a signed link. The builder warns when a free-preview video is still an external link.
 - **Drag and drop** reorders lessons within a module (the up and down buttons remain as the keyboard route). Order never changes access.
 - The builder shows a non-blocking warning when a course has no published free-preview lesson.
 
@@ -39,7 +39,7 @@ Migration `20261027100000_lesson_free_preview`: column `CourseLesson.isFreePrevi
 
 ## To do on your side
 
-- Existing gated video lessons that point at YouTube, Vimeo, or Loom are public by nature; re-upload them as files. They keep working until edited, but saving one as a gated video now asks for an upload. Mark one lesson per course as a free preview (the migration does this for each course that had an intro video).
+- The Welcome lessons the migration created use each course's old intro video link. Replace each with an uploaded video (the builder shows a warning on those courses until you do). Mark one lesson per course as a free preview if a course has none.
 - Post-login return: after signing up from the course page a new account lands on the dashboard, not back on the course (the app has no return-to-page redirect yet).
 
 ## Tests
