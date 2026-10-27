@@ -7,6 +7,7 @@ import { deleteLessonAction, deleteModuleAction, duplicateLessonAction, duplicat
 import { idle, type ActionResult } from "@/server/http/action-result";
 import { Checkbox, Field, FormAlert, Input, Select, SubmitButton, Textarea } from "@/components/ui/Form";
 import { cn } from "@/lib/cn";
+import { acceptFor, checkUploadFile, describeUploadFailure, formatMb, LESSON_UPLOAD_RULES, uploadMimeFor } from "@/lib/lesson-upload";
 import { fmtBytes, fmtDuration, LESSON_TYPE_META, type LessonContentType } from "@/components/academy/lesson-meta";
 
 export type LessonValue = {
@@ -46,11 +47,7 @@ const iconBtn = "rounded-full p-1.5 text-ink-400 hover:bg-white hover:text-ink-8
 const QUESTION_TYPES: LessonContentType[] = ["QUIZ", "ASSESSMENT", "AUDIO"];
 const MEDIA_TYPES: LessonContentType[] = ["VIDEO", "AUDIO"];
 const UPLOAD_KINDS: Partial<Record<LessonContentType, "VIDEO" | "AUDIO" | "DOCUMENT">> = { VIDEO: "VIDEO", AUDIO: "AUDIO", DOCUMENT: "DOCUMENT" };
-const ACCEPT: Record<"VIDEO" | "AUDIO" | "DOCUMENT", string> = {
-  VIDEO: "video/mp4,video/webm,video/quicktime",
-  AUDIO: "audio/mpeg,audio/mp3,audio/wav,audio/x-wav,audio/mp4,audio/x-m4a,audio/webm,audio/ogg",
-  DOCUMENT: ".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.txt,.csv",
-};
+const ACCEPT: Record<"VIDEO" | "AUDIO" | "DOCUMENT", string> = { VIDEO: acceptFor("VIDEO"), AUDIO: acceptFor("AUDIO"), DOCUMENT: acceptFor("DOCUMENT") };
 
 type SmallAction = (prev: ActionResult, fd: FormData) => Promise<ActionResult>;
 
@@ -158,21 +155,29 @@ export function LessonForm({ courseId, modules, moduleId, lesson, onDone, sectio
 
   async function upload(f: File) {
     if (!uploadKind) return;
+    // Check the file here first, so a wrong type or an over-size file is explained at once instead of failing later.
+    const problem = checkUploadFile(f, uploadKind);
+    if (problem) {
+      if (input.current) input.current.value = "";
+      return setFile({ phase: "error", message: problem });
+    }
     setFile({ phase: "uploading", progress: 0 });
-    const req = await requestLessonUploadAction({ courseId, kind: uploadKind, contentType: f.type || "application/octet-stream", sizeBytes: f.size, fileName: f.name });
+    const contentType = uploadMimeFor(f, uploadKind)!;
+    const req = await requestLessonUploadAction({ courseId, kind: uploadKind, contentType, sizeBytes: f.size, fileName: f.name });
     if (!req.ok || !req.data) return setFile({ phase: "error", message: req.error ?? "Upload could not start." });
-    const ok = await new Promise<boolean>((resolve) => {
+    const status = await new Promise<number>((resolve) => {
       const xhr = new XMLHttpRequest();
       xhr.open(req.data!.method, req.data!.url);
       for (const [k, v] of Object.entries(req.data!.headers)) xhr.setRequestHeader(k, v);
       xhr.upload.onprogress = (e) => e.lengthComputable && setFile({ phase: "uploading", progress: Math.round((e.loaded / e.total) * 100) });
-      xhr.onload = () => resolve(xhr.status >= 200 && xhr.status < 300);
-      xhr.onerror = () => resolve(false);
+      xhr.onload = () => resolve(xhr.status);
+      xhr.onerror = () => resolve(0);
+      xhr.onabort = () => resolve(0);
       xhr.send(f);
     });
-    if (!ok) return setFile({ phase: "error", message: "The upload failed. Check your connection and try again." });
+    if (status < 200 || status >= 300) return setFile({ phase: "error", message: describeUploadFailure(status) });
     const durationSec = await readDuration(f);
-    setFile({ phase: "done", key: req.data.key, fileName: f.name, contentMime: f.type, sizeBytes: f.size, durationSec });
+    setFile({ phase: "done", key: req.data.key, fileName: f.name, contentMime: contentType, sizeBytes: f.size, durationSec });
     if (input.current) input.current.value = "";
   }
 
@@ -251,14 +256,14 @@ export function LessonForm({ courseId, modules, moduleId, lesson, onDone, sectio
           </Field>
 
           {(type === "LINK" || type === "VIDEO") && (
-            <Field label={type === "LINK" ? "Link" : "Video URL (YouTube, Vimeo, Loom, or any hosted video)"} htmlFor={`l-url-${uid}`} error={fe.url} hint={type === "VIDEO" ? "External hosting is preferred. Leave empty only if you upload a file below." : "Opens safely in a new tab."}>
+            <Field label={type === "LINK" ? "Link" : "Video URL (YouTube, Vimeo, Loom, or any hosted video)"} htmlFor={`l-url-${uid}`} error={fe.url} hint={type === "VIDEO" ? "YouTube, Vimeo, or Loom links are fine for lessons. A free preview (welcome) video must be uploaded below instead." : "Opens safely in a new tab."}>
               <Input id={`l-url-${uid}`} name="url" type="url" defaultValue={lesson?.url ?? ""} placeholder="https://" invalid={!!fe.url} />
             </Field>
           )}
 
           {uploadKind && (
             <div>
-              <p className="mb-2 text-[13px] font-semibold text-ink-700">{needsFile ? (type === "AUDIO" ? "Audio file (MP3 preferred; M4A, WAV, OGG also work)" : "File") : "Or upload a video file"}</p>
+              <p className="mb-2 text-[13px] font-semibold text-ink-700">{needsFile ? (type === "AUDIO" ? "Audio file (MP3 preferred; M4A, WAV, OGG also work)" : "File") : `Or upload a video file (MP4, MOV, or WebM, up to ${formatMb(LESSON_UPLOAD_RULES.VIDEO.maxBytes)})`}</p>
               <label className={cn("flex cursor-pointer items-center gap-3 rounded-2xl border-2 border-dashed px-4 py-4 transition", busy ? "border-ink-200 bg-ink-50" : "border-ink-200 bg-white hover:border-brand-300")}>
                 <input ref={input} type="file" accept={ACCEPT[uploadKind]} className="sr-only" disabled={busy} onChange={(e) => e.target.files?.[0] && upload(e.target.files[0])} />
                 {busy ? <Loader2 className="h-5 w-5 animate-spin text-brand-600" /> : <UploadCloud className="h-5 w-5 text-ink-400" />}

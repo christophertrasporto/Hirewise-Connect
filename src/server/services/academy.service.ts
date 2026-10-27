@@ -18,6 +18,7 @@ import { coursesLockedFor } from "./onboarding.service";
 import { recalculateAllForCourse, lockedLessonsFor, assertLessonUnlocked } from "./progress.service";
 import { assertCanWatchLesson, entitledToCourse } from "@/server/policies/lesson-access";
 import { getEnv } from "@/server/env";
+import { LESSON_UPLOAD_RULES } from "@/lib/lesson-upload";
 import { applyPromoTx, consumePromoTx, promoForEnrollment } from "./promo.service";
 import { recordLessonVersion, changedFields } from "./lesson-version.service";
 import { categoryRepository } from "@/server/repositories/category.repository";
@@ -298,13 +299,8 @@ export async function getCourseForCoach(db: PrismaClient, actor: Actor, courseId
 export const LESSON_CONTENT_TYPES = ["VIDEO", "AUDIO", "LINK", "DOCUMENT", "TEXT", "QUIZ", "ASSIGNMENT", "ASSESSMENT"] as const;
 export type LessonContentType = (typeof LESSON_CONTENT_TYPES)[number];
 
-/** Upload categories for lesson files: MIME allowlist and size caps (Section 12, security baseline). */
-export const LESSON_UPLOAD_RULES = {
-  VIDEO: { maxBytes: 500 * 1024 * 1024, mimes: { "video/mp4": "mp4", "video/webm": "webm", "video/quicktime": "mov" } },
-  AUDIO: { maxBytes: 100 * 1024 * 1024, mimes: { "audio/mpeg": "mp3", "audio/mp3": "mp3", "audio/wav": "wav", "audio/x-wav": "wav", "audio/mp4": "m4a", "audio/x-m4a": "m4a", "audio/webm": "webm", "audio/ogg": "ogg" } },
-  DOCUMENT: { maxBytes: 50 * 1024 * 1024, mimes: { "application/pdf": "pdf", "application/msword": "doc", "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "docx", "application/vnd.ms-powerpoint": "ppt", "application/vnd.openxmlformats-officedocument.presentationml.presentation": "pptx", "application/vnd.ms-excel": "xls", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": "xlsx", "text/plain": "txt", "text/csv": "csv" } },
-} as const;
-export type LessonUploadKind = keyof typeof LESSON_UPLOAD_RULES;
+export { LESSON_UPLOAD_RULES, type LessonUploadKind } from "@/lib/lesson-upload";
+
 
 export const lessonUploadRequestSchema = z.object({
   kind: z.enum(["VIDEO", "AUDIO", "DOCUMENT"]),
