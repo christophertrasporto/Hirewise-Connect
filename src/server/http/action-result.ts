@@ -33,6 +33,7 @@ export function toActionError<T = undefined>(err: unknown): ActionResult<T> {
   if (e && typeof e === "object" && "digest" in e && String((e as { digest?: string }).digest).startsWith("NEXT_REDIRECT")) throw err;
   switch (e?.name) {
     case "AuthError":
+    case "PromoError":
     case "RegistrationError":
     case "DuplicateDetectedError":
     case "SeatCapacityError":

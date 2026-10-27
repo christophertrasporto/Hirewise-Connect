@@ -345,7 +345,7 @@ export async function enrolAction(_prev: ActionResult, fd: FormData): Promise<Ac
   try {
     const actor = await requireActor();
     const courseId = formString(fd, "courseId");
-    await enrol(prisma, actor, courseId);
+    await enrol(prisma, actor, courseId, formString(fd, "promoCode"));
     revalidatePath("/courses");
     revalidatePath(`/courses/${courseId}`);
     return { ok: true };

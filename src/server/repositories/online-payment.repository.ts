@@ -29,6 +29,11 @@ export const onlinePaymentRepository = {
     const r = await db.onlinePayment.updateMany({ where: { id, status: { in: from } }, data });
     return r.count;
   },
+  /** The price changed under an open checkout (a promo code): that attempt can no longer settle the enrolment. */
+  async cancelOpenForEnrollment(db: Db, enrollmentId: string, reason: string) {
+    const r = await db.onlinePayment.updateMany({ where: { enrollmentId, status: { in: ["CREATED", "PENDING"] } }, data: { status: "CANCELLED", failureReason: reason } });
+    return r.count;
+  },
   listToReconcile(db: Db, olderThan: Date, newerThan: Date, take = 25) {
     return db.onlinePayment.findMany({ where: { status: { in: ["CREATED", "PENDING"] }, createdAt: { lte: olderThan, gte: newerThan } }, orderBy: { createdAt: "asc" }, take, select: { id: true } });
   },

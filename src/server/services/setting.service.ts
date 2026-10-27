@@ -124,6 +124,8 @@ export const SETTING_SCHEMAS = {
       videoKey: z.string().default("v1"),
     })
     .default(() => ({ enabled: false, title: "Welcome to Hirewise", instructions: "", videoUrl: null, storageKey: null, fileName: null, durationSec: null, requiredPercent: 90, lockCourses: true, appliesTo: "NEW" as const, effectiveFrom: null, videoKey: "v1" })),
+  /** Promo codes: a use reserved on an unpaid enrolment is released after this many days. */
+  promos: z.object({ reservationDays: z.number().int().min(1).max(90).default(7) }).default(() => ({ reservationDays: 7 })),
   /** Referral affiliate program. Money is integer minor units of payoutCurrency (USD cents by default). */
   referrals: z
     .object({

@@ -88,6 +88,9 @@ export async function runMaintenance(prisma: PrismaClient, now = new Date()): Pr
   // Online course payments: a lost or late Maya webhook is made up for by looking open payments up.
   const { reconcilePendingOnlinePayments } = await import("@/server/services/maya-payment.service");
   await reconcilePendingOnlinePayments(prisma, now);
+  // Promo codes: a use reserved on an enrolment that stayed unpaid is given back.
+  const { releaseStaleReservations } = await import("@/server/services/promo.service");
+  await releaseStaleReservations(prisma, now);
   // Referral program: commissions whose hold has ended become payable (idempotent).
   const { releaseCommissionHolds } = await import("@/server/services/commission.service");
   await releaseCommissionHolds(prisma, now);
