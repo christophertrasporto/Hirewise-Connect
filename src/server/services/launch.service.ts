@@ -167,6 +167,7 @@ export const SETTING_META: Record<SettingKey, { label: string; help: string; kin
   agencyApplications: { label: "Agency applications", help: "Re-application cooldown after a rejection (days), document limits, and the review due time (Agency A1). Nothing is hardcoded.", kind: "json" },
   retentionDays: { label: "Retention period (days)", help: "Inactive accounts are anonymised by the retention job after this many days (Q18).", kind: "number" },
   profileViewBurstPerHour: { label: "Profile-view burst threshold", help: "Views per hour by one client before a scraping flag is raised (Section 8.8).", kind: "number" },
+  promos: { label: "Promo codes", help: "Days an unpaid enrolment keeps a promo code reserved before the use is given back (reservationDays). Codes themselves are managed under Academy, Promo codes.", kind: "json" },
   referrals: { label: "Referral program", help: "Commission rate in basis points (1500 = 15%), hold days, cookie days, minimum payout in minor units, and payout currency. Admins edit these under Referrals.", kind: "json" },
   shortlistChurnPerDay: { label: "Shortlist churn threshold", help: "Adds plus removals per day before a churn flag is raised.", kind: "number" },
 };
