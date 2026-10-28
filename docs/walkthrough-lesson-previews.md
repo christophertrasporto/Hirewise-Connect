@@ -40,8 +40,18 @@ Migration `20261027100000_lesson_free_preview`: column `CourseLesson.isFreePrevi
 ## To do on your side
 
 - The Welcome lessons the migration created use each course's old intro video link. Replace each with an uploaded video (the builder shows a warning on those courses until you do). Mark one lesson per course as a free preview if a course has none.
-- Post-login return: after signing up from the course page a new account lands on the dashboard, not back on the course (the app has no return-to-page redirect yet).
+- Post-sign-up return (added afterwards): Buy course and Log in on the public course page now bring the visitor back to the course once they are signed in; see "Return to the course after sign-up" below.
 
 ## Tests
 
 `tests/integration/lesson-previews.test.ts` (26): logged-out visitor watches a preview and gets 401 on a gated lesson; non-owner and pending buyers get 403; owners watch everything; a refund, chargeback, and revoke remove access at once; reordering changes no access; the public and non-owner views never carry a source, storage key, or bucket address; signed links expire (two hours for video, ten minutes otherwise, setting honoured); unpublished lessons, modules and previews are hidden from everyone except staff; previews cannot be tracked by non-owners; saving rules; the admin warning; referral capture; the Welcome migration (first, free, not required, idempotent, completion unchanged).
+
+## Return to the course after sign-up
+
+A signed-out visitor who clicks **Buy course** (or **Log in**) on a public course page is sent to sign up (or log in), and after every sign-in gate (email verification, terms, two-factor) they land on that course's page ready to enrol and pay, instead of on the dashboard.
+
+- The course page links go to `/api/return/start?to=/courses/<id>&next=register|login`. That route validates the destination, stores it in the first-party cookie `hw_return` (httpOnly, SameSite Lax, 24 hours), and redirects to sign-up (talent) or login. These are plain anchors, not prefetched links.
+- Every sign-in path already ends at the dashboard after the gates, so the dashboard is the single place that uses it: for a talent account with a valid `hw_return` cookie it redirects to `/api/return/continue`, which goes to `/courses/<id>` and deletes the cookie. It is used once. Clients, agencies, and staff are not redirected.
+- The cookie survives the verification email (same browser). Logging out deletes it.
+- Only course pages are ever allowed (`safeReturnPath` in `src/lib/return-to.ts`: `/courses/<id>` or `/academy/courses/<id>`, query and fragment dropped, nothing else). The value is checked when it is set and again when it is used, so a tampered cookie can only land on the dashboard; there is no open redirect.
+- Not covered: signing up on a different device or browser than the one that clicked Buy course (the cookie is per browser), and a signed-out visitor who opens `/courses/<id>` directly and is bounced to login.

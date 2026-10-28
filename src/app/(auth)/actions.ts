@@ -1,6 +1,7 @@
 "use server";
 
 import { cookies } from "next/headers";
+import { RETURN_COOKIE } from "@/lib/return-to";
 import { REFERRAL_COOKIE } from "@/server/services/referral.service";
 import { registerViaInvite } from "@/server/services/invite.service";
 import { redirect } from "next/navigation";
@@ -63,6 +64,8 @@ export async function resetPasswordAction(_prev: ActionResult, fd: FormData): Pr
 export async function logoutAction(): Promise<void> {
   await logout(prisma, await readSessionCookie());
   await clearSessionCookie();
+  // A remembered course belongs to whoever was about to sign up, not to the next person on this browser.
+  (await cookies()).delete(RETURN_COOKIE);
   redirect("/login");
 }
 

@@ -4,6 +4,8 @@ import { termsForRole } from "@/server/services/terms.service";
 import { myMembership } from "@/server/services/exit.service";
 import { AgentAgencyCard, FormerAgentHolding } from "@/components/agency/AgentAgencyCard";
 import { redirect } from "next/navigation";
+import { cookies } from "next/headers";
+import { RETURN_COOKIE, safeReturnPath } from "@/lib/return-to";
 import { Banner } from "@/components/app/ui";
 import { prisma } from "@/server/db/client";
 import { requireAuth } from "@/server/auth/require-actor";
@@ -24,6 +26,8 @@ export const metadata: Metadata = { title: "Dashboard" };
 
 export default async function DashboardPage({ searchParams }: { searchParams?: Promise<{ verified?: string }> }) {
   const { actor, email } = await requireAuth();
+  // Every sign-in gate has passed: a talent who came from a course page's Buy course button goes back to that course.
+  if (actor.role === "AGENT" && safeReturnPath((await cookies()).get(RETURN_COOKIE)?.value)) redirect("/api/return/continue");
   const sp = searchParams ? await searchParams : {};
   const justVerified = sp.verified === "1";
   const notifications = await listNotifications(prisma, actor);
