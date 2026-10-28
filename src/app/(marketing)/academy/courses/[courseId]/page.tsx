@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowRight, Award, Clock, Lock, PlayCircle } from "lucide-react";
 import { prisma } from "@/server/db/client";
@@ -9,6 +8,7 @@ import { getPublicCourse } from "@/server/services/course-public.service";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { ReferralCapture } from "@/components/marketing/ReferralCapture";
+import { startReturnHref } from "@/lib/return-to";
 import { LessonContent } from "@/components/academy/LessonContent";
 import { LESSON_TYPE_META, fmtDuration } from "@/components/academy/lesson-meta";
 
@@ -40,8 +40,12 @@ export default async function PublicCoursePage({ params }: { params: Promise<{ c
     throw e;
   }
   const appHref = `/courses/${course.id}`;
+  // Signed out: these links remember the course, then go to sign-up or login, and the dashboard brings them back.
+  // Plain anchors (not Link) so nothing prefetches the cookie-setting route.
+  const signUpHref = startReturnHref(course.id, "register");
+  const logInHref = startReturnHref(course.id, "login");
   const cta = {
-    SIGNED_OUT: { label: course.priceCents === 0 ? "Enrol for free" : "Buy course", href: "/register?as=talent", note: "Create a free talent account, then buy this course from your dashboard. Already have an account?" },
+    SIGNED_OUT: { label: course.priceCents === 0 ? "Enrol for free" : "Buy course", href: signUpHref, note: "Create a free talent account and you will come straight back here to buy this course. Already have an account?" },
     CAN_BUY: { label: course.priceCents === 0 ? "Enrol for free" : "Buy course", href: appHref, note: null },
     PENDING: { label: "Complete your payment", href: appHref, note: "You are enrolled; the lessons unlock when your payment is confirmed." },
     OWNER: { label: "Continue learning", href: appHref, note: "You own this course." },
@@ -80,14 +84,14 @@ export default async function PublicCoursePage({ params }: { params: Promise<{ c
               <p className="text-[12px] font-semibold uppercase tracking-[0.14em] text-ink-400">Price</p>
               <p className="mt-1 font-display text-[2rem] font-extrabold text-ink-900">{course.priceLabel}</p>
               {cta.label && (
-                <Button href={cta.href} size="lg" className="mt-4 w-full justify-center">
+                <Button href={cta.href} prefetch={false} size="lg" className="mt-4 w-full justify-center">
                   {cta.label} <ArrowRight className="h-4 w-4" />
                 </Button>
               )}
               {cta.note && (
                 <p className="mt-3 text-[13px] leading-relaxed text-ink-500">
                   {cta.note}
-                  {course.state === "SIGNED_OUT" && <> <Link href="/login" className="font-semibold text-brand-700 hover:text-brand-800">Log in</Link>.</>}
+                  {course.state === "SIGNED_OUT" && <> <a href={logInHref} className="font-semibold text-brand-700 hover:text-brand-800">Log in</a>.</>}
                 </p>
               )}
               <ul className="mt-5 space-y-2 border-t border-ink-100 pt-5 text-[13.5px] text-ink-600">
@@ -130,7 +134,7 @@ export default async function PublicCoursePage({ params }: { params: Promise<{ c
           </ol>
           {cta.label && (
             <div className="mt-10">
-              <Button href={cta.href} size="lg">{cta.label} <ArrowRight className="h-4 w-4" /></Button>
+              <Button href={cta.href} prefetch={false} size="lg">{cta.label} <ArrowRight className="h-4 w-4" /></Button>
             </div>
           )}
         </div>
