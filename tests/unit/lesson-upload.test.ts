@@ -42,13 +42,13 @@ describe("checking a file before it is sent", () => {
   it("passes a normal MP4, including one with a blank type", () => {
     expect(checkUploadFile(file("welcome.mp4", "video/mp4", 120 * MB), "VIDEO")).toBeNull();
     expect(checkUploadFile(file("welcome.mp4", "", 120 * MB), "VIDEO")).toBeNull();
-    expect(checkUploadFile(file("big.mp4", "video/mp4", 500 * MB), "VIDEO")).toBeNull(); // exactly the limit is fine
+    expect(checkUploadFile(file("big.mp4", "video/mp4", 2048 * MB), "VIDEO")).toBeNull(); // exactly the limit is fine
   });
 
   it("explains a file that is too large, with its size and the limit", () => {
-    const msg = checkUploadFile(file("big.mp4", "video/mp4", 801 * MB), "VIDEO")!;
-    expect(msg).toContain("801 MB");
-    expect(msg).toContain("500 MB");
+    const msg = checkUploadFile(file("big.mp4", "video/mp4", 2500 * MB), "VIDEO")!;
+    expect(msg).toContain("2500 MB");
+    expect(msg).toContain("2048 MB");
   });
 
   it("explains an unsupported type and an empty file", () => {

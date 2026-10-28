@@ -7,7 +7,7 @@ export type LessonContentType = "VIDEO" | "AUDIO" | "LINK" | "DOCUMENT" | "TEXT"
 export const EDITABLE_LESSON_TYPES: LessonContentType[] = ["VIDEO", "AUDIO", "LINK", "DOCUMENT", "TEXT"];
 
 export const LESSON_TYPE_META: Record<LessonContentType, { label: string; hint: string; icon: typeof Video }> = {
-  VIDEO: { label: "Video", hint: "Upload an MP4, WebM, or MOV (up to 500 MB) or paste a YouTube, Vimeo, or Loom link.", icon: Video },
+  VIDEO: { label: "Video", hint: "Upload an MP4, WebM, or MOV (up to 2 GB) or paste a YouTube, Vimeo, or Loom link.", icon: Video },
   AUDIO: { label: "Audio", hint: "Upload an MP3, WAV, M4A, or OGG (up to 100 MB).", icon: Headphones },
   LINK: { label: "External link", hint: "Any web page, article, tool, or externally hosted lesson.", icon: Link2 },
   DOCUMENT: { label: "Document", hint: "PDF, Word, PowerPoint, Excel, or text (up to 50 MB).", icon: FileText },

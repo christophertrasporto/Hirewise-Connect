@@ -98,7 +98,7 @@ Set it once per bucket. In Cloudflare R2: the bucket, Settings, CORS Policy, and
 Other causes, in order of likelihood when an upload still fails:
 
 - **403 from storage:** the signed link expired before the upload started (links last `SIGNED_URL_TTL_SECONDS`, 600 s) or the `S3_ACCESS_KEY_ID` and `S3_SECRET_ACCESS_KEY` token lacks write access to the bucket. The R2 token needs Object Read and Write on this bucket.
-- **"File is too large":** videos are limited to 500 MB, audio to 100 MB, documents to 50 MB. Compress the video first.
+- **"File is too large":** videos are limited to 2 GB, audio to 100 MB, documents to 50 MB. A single upload of that size is slow on a weak connection; compressing a welcome video (a few minutes at 1080p is usually well under 200 MB) makes it start playing sooner for learners too.
 - **"File type is not supported":** MP4, MOV, and WebM only for video. Other formats (AVI, MKV) must be converted.
 - **"The file was not uploaded":** the upload finished but the app could not find the object; check the bucket name and the token's read access (the app confirms the object exists before saving the lesson).
 
