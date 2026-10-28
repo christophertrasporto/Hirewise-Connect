@@ -125,6 +125,11 @@ export const referralRepository = {
   createAdjustment(db: Db, d: { referrerId: string; commissionId: string | null; kind: AdjustmentKind; amount: number; currency: string; note: string; createdById: string }) {
     return db.commissionAdjustment.create({ data: d });
   },
+  /** The (negative) adjustments already made for part-refunds of one commission, as a positive number. */
+  async partialRefundTotal(db: Db, commissionId: string) {
+    const a = await db.commissionAdjustment.aggregate({ where: { commissionId, kind: "REFUND_AFTER_PAYOUT", amount: { lt: 0 } }, _sum: { amount: true } });
+    return -(a._sum.amount ?? 0);
+  },
   unsettledAdjustments(db: Db, referrerId: string, currency: string) {
     return db.commissionAdjustment.findMany({ where: { referrerId, currency, settledPayoutId: null }, select: { id: true, amount: true } });
   },

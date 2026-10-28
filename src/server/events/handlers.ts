@@ -197,6 +197,17 @@ export const EVENT_HANDLERS: { [T in DomainEventType]: EventHandler<T> } = {
   ONLINE_PAYMENT_PROBLEM: async (db, p) => {
     await notifyStaff(db, ["ADMIN", "SALES"], { type: "ONLINE_PAYMENT_PROBLEM", title: `Online payment needs attention: ${p.courseTitle}`, body: `${p.learnerEmail}: ${p.reason}`, dedupeKey: `ONLPAY:${p.onlinePaymentId}` });
   },
+  // Coach wallet
+  WALLET_EARNING_CREATED: async () => {},
+  WALLET_EARNING_REVERSED: async () => {},
+  WALLET_WITHDRAWAL_REQUESTED: async (db, p) => {
+    await notifyStaff(db, ["ADMIN", "SUPER_ADMIN"], { type: "WALLET_WITHDRAWAL_REQUESTED", title: `Coach withdrawal requested: ${formatMoney(p.amount, p.currency)}`, body: "Review it under Wallet, Withdrawals.", dedupeKey: `WDREQ:${p.withdrawalId}` });
+  },
+  WALLET_WITHDRAWAL_DECIDED: async (db, p) => {
+    const money = formatMoney(p.amount, p.currency);
+    const copy = p.outcome === "PAID" ? `Your ${money} withdrawal was sent.${p.reference ? ` Reference: ${p.reference}.` : ""}` : p.outcome === "APPROVED" ? `Your ${money} withdrawal was approved and will be sent soon.` : `Your ${money} withdrawal request was declined${p.reason ? `: ${p.reason}` : "."} The amount is back in your available balance.`;
+    await notifyUser(db, { userId: p.coachUserId, type: `WALLET_WITHDRAWAL_${p.outcome}`, title: `Withdrawal ${p.outcome.toLowerCase()}`, body: copy, dedupeKey: `WDDEC:${p.withdrawalId}:${p.outcome}` });
+  },
   // Promo codes: audited, nothing to notify.
   PROMO_CHANGED: async () => {},
   PROMO_REDEEMED: async () => {},

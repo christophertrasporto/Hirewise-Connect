@@ -34,6 +34,7 @@ export function toActionError<T = undefined>(err: unknown): ActionResult<T> {
   switch (e?.name) {
     case "AuthError":
     case "PromoError":
+    case "WalletError":
     case "RegistrationError":
     case "DuplicateDetectedError":
     case "SeatCapacityError":

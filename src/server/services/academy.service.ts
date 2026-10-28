@@ -9,7 +9,7 @@ import { certificationRepository } from "@/server/repositories/certification.rep
 import { audit } from "@/server/audit/audit";
 import { publishEvent } from "@/server/events/outbox";
 import { evaluateCertification } from "./certification.service";
-import { recordCommissionForPayment, reverseCommissionForSource } from "./commission.service";
+import { recordCommissionForPayment, reverseCommissionForSource, reduceCommissionForPartialRefund } from "./commission.service";
 import { toCourseAgentView, toCourseCoachView, toEnrollmentAgentView } from "@/server/views/academy.views";
 import { getStorage, newStorageKey } from "@/server/adapters/storage";
 import { rateLimit } from "@/server/auth/rate-limit";
@@ -20,6 +20,8 @@ import { assertCanWatchLesson, entitledToCourse } from "@/server/policies/lesson
 import { getEnv } from "@/server/env";
 import { LESSON_UPLOAD_RULES } from "@/lib/lesson-upload";
 import { applyPromoTx, consumePromoTx, promoForEnrollment } from "./promo.service";
+import { recordEarningForPaymentTx, reverseEarningForRefundTx } from "./wallet.service";
+import { parseMoneyToMinor } from "@/lib/coach-wallet";
 import { recordLessonVersion, changedFields } from "./lesson-version.service";
 import { categoryRepository } from "@/server/repositories/category.repository";
 import { assignmentRepository } from "@/server/repositories/assignment.repository";
@@ -717,7 +719,7 @@ type EnrollmentForPayment = NonNullable<Awaited<ReturnType<typeof academyReposit
  * verified online payment (Maya). Marks it once, then handles the credential source, the referral commission, the
  * audit entry, and the learner's notification, all inside the caller's transaction.
  */
-export async function settleEnrollmentPaymentTx(tx: Db, actor: Actor, e: EnrollmentForPayment, p: { paidCents: number | null; reference: string | null; waived: boolean; reason?: string; recordedById: string | null; channel: "STAFF" | "MAYA" }) {
+export async function settleEnrollmentPaymentTx(tx: Db, actor: Actor, e: EnrollmentForPayment, p: { paidCents: number | null; reference: string | null; waived: boolean; reason?: string; recordedById: string | null; channel: "STAFF" | "MAYA"; /** The fee the gateway reported, when known. Maya sales leave it out and wait for the real fee. */ gatewayFeeMinor?: number | null }) {
   const changed = await academyRepository.recordPaymentIfPending(tx, e.id, { paidCents: p.paidCents, paymentReference: p.reference, waived: p.waived, recordedById: p.recordedById });
   if (changed !== 1) throw new Error("This enrolment does not have a pending payment.");
   // Promo codes: a reserved use becomes consumed the moment the enrolment is paid or waived.
@@ -726,11 +728,13 @@ export async function settleEnrollmentPaymentTx(tx: Db, actor: Actor, e: Enrollm
   if (p.waived) await trainingRepository.setEnrollmentSource(tx, e.id, "ADMIN_ASSIGNMENT");
   // Referral program: the confirmed payment is the only moment a commission can be created (idempotent per enrolment).
   else await recordCommissionForPayment(tx, { sourceType: "ENROLLMENT", sourceId: e.id, buyerUserId: e.agentProfile.userId, courseId: e.courseId, courseTitle: e.course.title, paidMinor: p.paidCents ?? 0, listMinor: e.priceCents, currency: e.currency, paidAt: new Date() });
+  // Coach wallet: the coach's share of this sale, created exactly here and nowhere else (never from the checkout page).
+  if (!p.waived && (p.paidCents ?? 0) > 0) await recordEarningForPaymentTx(tx, { enrollmentId: e.id, channel: p.channel, gatewayFeeMinor: p.gatewayFeeMinor, paidAt: new Date() });
   await audit(tx, { actor, action: "COURSE_PAYMENT_RECORDED", entityType: "CourseEnrollment", entityId: e.id, newValue: { paidCents: p.paidCents, waived: p.waived, reference: p.reference, currency: e.currency, channel: p.channel }, reason: p.reason });
   await publishEvent(tx, "COURSE_PAYMENT_RECORDED", { enrollmentId: e.id, courseTitle: e.course.title, agentUserId: e.agentProfile.userId, agentEmail: e.agentProfile.user.email, waived: p.waived });
 }
 
-export async function recordCoursePayment(db: PrismaClient, actor: Actor, enrollmentId: string, p: { paid?: string; /** Legacy name for paid. */ paidUsd?: string; reference?: string; waived: boolean; reason?: string }) {
+export async function recordCoursePayment(db: PrismaClient, actor: Actor, enrollmentId: string, p: { paid?: string; /** Legacy name for paid. */ paidUsd?: string; reference?: string; waived: boolean; reason?: string; /** Bank or GCash fees staff want recorded against the sale; empty means none. */ gatewayFee?: string }) {
   authorize(actor, "course.payment.record");
   const e = await academyRepository.findEnrollmentById(db, enrollmentId);
   if (!e) throw new NotFoundError();
@@ -739,12 +743,14 @@ export async function recordCoursePayment(db: PrismaClient, actor: Actor, enroll
   const paidCents = p.waived ? null : usdToCents(p.paid ?? p.paidUsd);
   if (!p.waived && (paidCents ?? 0) < e.priceCents) throw new Error(`Payment must cover the course price (${(e.priceCents / 100).toFixed(2)} ${e.currency}).`);
   await db.$transaction(async (tx) => {
-    await settleEnrollmentPaymentTx(tx, actor, e, { paidCents, reference: p.reference?.trim() || null, waived: p.waived, reason: p.reason, recordedById: actor.userId, channel: "STAFF" });
+    await settleEnrollmentPaymentTx(tx, actor, e, { paidCents, reference: p.reference?.trim() || null, waived: p.waived, reason: p.reason, recordedById: actor.userId, channel: "STAFF", gatewayFeeMinor: p.gatewayFee ? (parseMoneyToMinor(p.gatewayFee) ?? 0) : 0 });
   });
 }
 
 export const refundSchema = z.object({
   kind: z.enum(["REFUND", "CHARGEBACK"]),
+  /** Empty or omitted refunds everything that is left; an amount below that is a partial refund and the learner keeps access. */
+  amount: z.string().trim().regex(/^\d+(\.\d{1,2})?$/, "Enter an amount like 250 or 249.50.").optional().or(z.literal("")),
   reason: z.string().trim().min(3, "Say why the money went back.").max(500),
 });
 
@@ -755,11 +761,27 @@ export async function recordCourseRefund(db: PrismaClient, actor: Actor, enrollm
   const e = await academyRepository.findEnrollmentById(db, enrollmentId);
   if (!e) throw new NotFoundError();
   if (e.paymentStatus !== "PAID") throw new Error("Only a paid enrolment can be refunded.");
+  const paid = e.paidCents ?? 0;
+  const remaining = paid - e.refundedCents;
+  const requested = input.amount ? parseMoneyToMinor(input.amount) : null;
+  if (requested !== null && (requested <= 0 || requested > remaining)) throw new Error(`The refund must be between 0.01 and ${(remaining / 100).toFixed(2)} ${e.currency}.`);
+  // Less than what is left is a partial refund: the learner keeps access and every share is reversed in proportion.
+  const partial = requested !== null && requested < remaining;
   await db.$transaction(async (tx) => {
+    if (partial) {
+      if ((await academyRepository.addPartialRefund(tx, e.id, requested!)) !== 1) throw new Error("This enrolment was changed while the refund was being recorded. Try again.");
+      const refundedTotal = e.refundedCents + requested!;
+      const commission = await reduceCommissionForPartialRefund(tx, actor, { sourceType: "ENROLLMENT", sourceId: e.id, refundedTotalMinor: refundedTotal, paidMinor: paid, reason: `${input.kind.toLowerCase()}: ${input.reason}` });
+      const wallet = await reverseEarningForRefundTx(tx, actor, { enrollmentId: e.id, refundMinor: requested!, kind: input.kind, reason: input.reason });
+      await audit(tx, { actor, action: "COURSE_PAYMENT_REFUNDED", entityType: "CourseEnrollment", entityId: e.id, previousValue: { paymentStatus: "PAID", refundedCents: e.refundedCents }, newValue: { paymentStatus: "PAID", partial: true, kind: input.kind, refundedCents: refundedTotal, commissionReducedMinor: commission.reducedMinor, coachReversedMinor: wallet?.coachReversedMinor ?? 0 }, reason: input.reason });
+      return;
+    }
     const changed = await academyRepository.refundEnrollment(tx, e.id, { kind: input.kind, reason: input.reason, completed: e.status === "COMPLETED" });
     if (changed !== 1) throw new Error("This enrolment was already refunded.");
     const reversal = await reverseCommissionForSource(tx, actor, { sourceType: "ENROLLMENT", sourceId: e.id, reason: `${input.kind.toLowerCase()}: ${input.reason}` });
-    await audit(tx, { actor, action: "COURSE_PAYMENT_REFUNDED", entityType: "CourseEnrollment", entityId: e.id, previousValue: { paymentStatus: "PAID" }, newValue: { paymentStatus: "REFUNDED", kind: input.kind, commissionReversed: reversal.reversed }, reason: input.reason });
+    // Coach wallet: whatever is left of the sale is reversed (before withdrawal it leaves the wallet; after, the balance can go negative).
+    const wallet = await reverseEarningForRefundTx(tx, actor, { enrollmentId: e.id, kind: input.kind, reason: input.reason });
+    await audit(tx, { actor, action: "COURSE_PAYMENT_REFUNDED", entityType: "CourseEnrollment", entityId: e.id, previousValue: { paymentStatus: "PAID" }, newValue: { paymentStatus: "REFUNDED", kind: input.kind, commissionReversed: reversal.reversed, coachReversedMinor: wallet?.coachReversedMinor ?? 0, feeAbsorbedMinor: wallet?.feeAbsorbedMinor ?? 0 }, reason: input.reason });
   });
 }
 

@@ -91,6 +91,9 @@ export async function runMaintenance(prisma: PrismaClient, now = new Date()): Pr
   // Promo codes: a use reserved on an enrolment that stayed unpaid is given back.
   const { releaseStaleReservations } = await import("@/server/services/promo.service");
   await releaseStaleReservations(prisma, now);
+  // Coach wallet: earnings whose refund window and buffer have passed become withdrawable (idempotent).
+  const { releaseDueEarnings } = await import("@/server/services/wallet.service");
+  await releaseDueEarnings(prisma, now);
   // Referral program: commissions whose hold has ended become payable (idempotent).
   const { releaseCommissionHolds } = await import("@/server/services/commission.service");
   await releaseCommissionHolds(prisma, now);

@@ -142,9 +142,18 @@ export const academyRepository = {
   },
 
   /** Refund or chargeback on a paid enrolment: guarded so it applies once. Returns how many rows changed. */
+  /** A part-refund: the learner keeps access, the amount refunded so far goes up. Guarded so it can never exceed what was paid. */
+  async addPartialRefund(db: Db, id: string, amountMinor: number) {
+    const e = await db.courseEnrollment.findUnique({ where: { id }, select: { paidCents: true, refundedCents: true, paymentStatus: true } });
+    if (!e || e.paymentStatus !== "PAID" || (e.paidCents ?? 0) - e.refundedCents < amountMinor) return 0;
+    const r = await db.courseEnrollment.updateMany({ where: { id, paymentStatus: "PAID", refundedCents: e.refundedCents }, data: { refundedCents: { increment: amountMinor } } });
+    return r.count;
+  },
+
   async refundEnrollment(db: Db, id: string, d: { kind: "REFUND" | "CHARGEBACK"; reason: string; completed: boolean }) {
     const now = new Date();
-    const r = await db.courseEnrollment.updateMany({ where: { id, paymentStatus: "PAID" }, data: { paymentStatus: "REFUNDED", refundedAt: now, refundKind: d.kind, refundReason: d.reason, accessRevokedAt: now, revokeReason: `${d.kind === "REFUND" ? "Refunded" : "Chargeback"}: ${d.reason}`, ...(d.completed ? {} : { status: "REVOKED" as const }) } });
+    const paid = await db.courseEnrollment.findUnique({ where: { id }, select: { paidCents: true } });
+    const r = await db.courseEnrollment.updateMany({ where: { id, paymentStatus: "PAID" }, data: { paymentStatus: "REFUNDED", refundedCents: paid?.paidCents ?? 0, refundedAt: now, refundKind: d.kind, refundReason: d.reason, accessRevokedAt: now, revokeReason: `${d.kind === "REFUND" ? "Refunded" : "Chargeback"}: ${d.reason}`, ...(d.completed ? {} : { status: "REVOKED" as const }) } });
     return r.count;
   },
 
