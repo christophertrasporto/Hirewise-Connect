@@ -5,7 +5,8 @@ import path from "node:path";
 import { testDb, resetDb } from "../setup/db";
 import { resetEnvCache } from "@/server/env";
 import { getStorage, LocalDiskStorage } from "@/server/adapters/storage";
-import { createUploadUrl, confirmVideoUpload, confirmRecordingUpload, confirmResumeUpload, mediaDownloadUrl, UploadRejectedError } from "@/server/services/media.service";
+import { createUploadUrl, confirmVideoUpload, confirmRecordingUpload, confirmResumeUpload, confirmPhotoUpload, removeOwnPhoto, profilePhotoUrl, mediaDownloadUrl, UploadRejectedError } from "@/server/services/media.service";
+import { getOwnProfile } from "@/server/services/agent.service";
 import { makeActor } from "@/server/auth/actor";
 import { ForbiddenError, NotFoundError } from "@/server/policies/authorize";
 import { ROLE_NAMES, type RoleKey } from "@/server/policies/permissions";
@@ -111,5 +112,51 @@ describe("confirm and authorization", () => {
     await expect(mediaDownloadUrl(db, makeActor("SALES"), { type: "RESUME", id: agentProfileId })).rejects.toThrow(ForbiddenError);
     expect(await mediaDownloadUrl(db, makeActor("RECRUITER"), { type: "RESUME", id: agentProfileId })).toMatch(/sig=/);
     expect(await mediaDownloadUrl(db, agent(), { type: "RESUME", id: agentProfileId })).toMatch(/sig=/);
+  });
+});
+
+describe("profile photo", () => {
+  it("saving records the photo, replacing deletes the old file, and the views carry a version but never the key", async () => {
+    const first = await createUploadUrl(agent(), { kind: "PHOTO", contentType: "image/png", sizeBytes: 3 });
+    await expect(confirmPhotoUpload(db, agent(), first.key)).rejects.toThrow(UploadRejectedError); // not uploaded yet
+    await getStorage().put(first.key, Buffer.from("png"), "image/png");
+    await confirmPhotoUpload(db, agent(), first.key);
+    expect((await db.agentProfile.findUniqueOrThrow({ where: { id: agentProfileId } })).photoKey).toBe(first.key);
+
+    const second = await createUploadUrl(agent(), { kind: "PHOTO", contentType: "image/jpeg", sizeBytes: 3 });
+    await getStorage().put(second.key, Buffer.from("jpg"), "image/jpeg");
+    await confirmPhotoUpload(db, agent(), second.key);
+    expect(await getStorage().exists(first.key)).toBe(false);
+    expect(await getStorage().exists(second.key)).toBe(true);
+
+    const view = await getOwnProfile(db, agent());
+    expect(view.hasPhoto).toBe(true);
+    expect(view.photoVersion).toMatch(/^[0-9a-f]{10}$/);
+    expect(JSON.stringify(view)).not.toContain(second.key);
+  });
+
+  it("a photo key from another profile is refused", async () => {
+    const theirs = await createUploadUrl(other(), { kind: "PHOTO", contentType: "image/png", sizeBytes: 3 });
+    await getStorage().put(theirs.key, Buffer.from("png"), "image/png");
+    await expect(confirmPhotoUpload(db, agent(), theirs.key)).rejects.toThrow(ForbiddenError);
+  });
+
+  it("is shown to its owner and to staff, and to nobody else (clients and other agents get NotFound)", async () => {
+    expect(await profilePhotoUrl(db, agent(), agentProfileId)).toMatch(/sig=/);
+    expect(await profilePhotoUrl(db, makeActor("RECRUITER"), agentProfileId)).toMatch(/sig=/);
+    await expect(profilePhotoUrl(db, other(), agentProfileId)).rejects.toThrow(NotFoundError);
+    await expect(profilePhotoUrl(db, makeActor("CLIENT", { clientId: "c" }), agentProfileId)).rejects.toThrow(NotFoundError);
+    await expect(profilePhotoUrl(db, agent(), otherProfileId)).rejects.toThrow(NotFoundError);
+  });
+
+  it("removing clears the photo and deletes the file; only an agent can remove", async () => {
+    const key = (await db.agentProfile.findUniqueOrThrow({ where: { id: agentProfileId } })).photoKey!;
+    await expect(removeOwnPhoto(db, makeActor("CLIENT", { clientId: "c" }))).rejects.toThrow(ForbiddenError);
+    await removeOwnPhoto(db, agent());
+    expect((await db.agentProfile.findUniqueOrThrow({ where: { id: agentProfileId } })).photoKey).toBeNull();
+    expect(await getStorage().exists(key)).toBe(false);
+    await expect(profilePhotoUrl(db, agent(), agentProfileId)).rejects.toThrow(NotFoundError);
+    await removeOwnPhoto(db, agent()); // already gone: no error
+    expect((await getOwnProfile(db, agent())).hasPhoto).toBe(false);
   });
 });

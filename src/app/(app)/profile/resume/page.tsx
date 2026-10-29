@@ -4,6 +4,7 @@ import { requireActor } from "@/server/auth/require-actor";
 import { getOwnProfile } from "@/server/services/agent.service";
 import { PageHeader, Card, Banner } from "@/components/app/ui";
 import { ResumeUpload } from "@/components/profile/ResumeUpload";
+import { PhotoUploader } from "@/components/profile/PhotoUploader";
 
 export const metadata: Metadata = { title: "Résumé" };
 
@@ -19,7 +20,7 @@ export default async function ResumePage() {
           <ResumeUpload agentProfileId={p.id} hasResume={!!p.privateContact?.hasResume} />
         </Card>
         <Card title="Profile photo">
-          <ResumeUpload agentProfileId={p.id} hasResume={false} photo />
+          <PhotoUploader agentProfileId={p.id} name={p.displayName} version={p.photoVersion} />
         </Card>
       </div>
     </>

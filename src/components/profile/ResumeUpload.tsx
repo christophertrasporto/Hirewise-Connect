@@ -5,7 +5,7 @@ import { useState } from "react";
 import { Uploader } from "./Uploader";
 import { mediaUrlAction } from "@/app/(app)/actions";
 
-export function ResumeUpload({ agentProfileId, hasResume, photo = false }: { agentProfileId: string; hasResume: boolean; photo?: boolean }) {
+export function ResumeUpload({ agentProfileId, hasResume }: { agentProfileId: string; hasResume: boolean }) {
   const router = useRouter();
   const [err, setErr] = useState<string | null>(null);
 
@@ -15,9 +15,6 @@ export function ResumeUpload({ agentProfileId, hasResume, photo = false }: { age
     else setErr(r.error ?? "Could not open the file.");
   }
 
-  if (photo) {
-    return <Uploader kind="PHOTO" accept="image/jpeg,image/png,image/webp" label="Choose a photo" hint="JPG, PNG, or WebP up to 5 MB. A clear, professional headshot." onDone={() => router.refresh()} />;
-  }
   return (
     <div className="space-y-3">
       <Uploader kind="RESUME" accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" label={hasResume ? "Replace résumé" : "Choose your résumé"} hint="PDF or Word, up to 10 MB" onDone={() => router.refresh()} />

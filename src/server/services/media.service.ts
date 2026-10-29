@@ -74,7 +74,9 @@ export async function confirmResumeUpload(db: PrismaClient, actor: Actor, key: s
 
 export async function confirmPhotoUpload(db: PrismaClient, actor: Actor, key: string) {
   const profileId = await assertOwnedUploadedKey(actor, "PHOTO", key);
+  const before = await agentRepository.photoKeyOf(db, profileId);
   await agentRepository.setPhotoKey(db, profileId, key);
+  if (before?.photoKey && before.photoKey !== key) await getStorage().delete(before.photoKey).catch(() => undefined);
 }
 
 export async function confirmVideoUpload(db: PrismaClient, actor: Actor, key: string, durationSec: number | null) {
@@ -156,4 +158,26 @@ export async function reviewMedia(db: PrismaClient, actor: Actor, input: z.infer
       await publishEvent(tx, "MEDIA_REVIEWED", { type: input.type, mediaId: m.id, agentProfileId: m.agentProfileId, userId: m.agentProfile.userId, email: m.agentProfile.user.email, outcome: input.decision, feedback, title: input.type === "RECORDING" && "title" in m ? String(m.title) : "Video introduction" });
     }
   });
+}
+
+/**
+ * The profile photo is shown to its owner and to staff who can read profiles, never to clients (a client photo would
+ * reveal the identity the label protects). Everyone else gets NotFound.
+ */
+export async function profilePhotoUrl(db: PrismaClient, actor: Actor, agentProfileId: string): Promise<string> {
+  const own = actor.role === "AGENT" && actor.agentProfileId === agentProfileId;
+  const staff = actor.permissions.has("agent.read_public") || actor.permissions.has("media.review");
+  if (!own && !staff) throw new NotFoundError();
+  const p = await agentRepository.photoKeyOf(db, agentProfileId);
+  if (!p?.photoKey) throw new NotFoundError();
+  return getStorage().createDownloadUrl(p.photoKey);
+}
+
+/** The owner takes their photo down. The file is deleted from storage after the profile no longer points at it. */
+export async function removeOwnPhoto(db: PrismaClient, actor: Actor) {
+  const profileId = ownProfileId(actor);
+  const p = await agentRepository.photoKeyOf(db, profileId);
+  if (!p?.photoKey) return;
+  await agentRepository.setPhotoKey(db, profileId, null);
+  await getStorage().delete(p.photoKey).catch(() => undefined);
 }
