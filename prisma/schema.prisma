@@ -361,20 +361,24 @@ model Task {
 // ---------------------------------------------------------------------------
 
 model User {
-  id              String     @id @default(cuid())
-  email           String     @unique @db.Citext
-  passwordHash    String?
-  status          UserStatus @default(ACTIVE)
-  roleId          String
-  role            Role       @relation(fields: [roleId], references: [id])
-  emailVerifiedAt DateTime?
-  mfaEnabled      Boolean    @default(false)
+  id                  String              @id @default(cuid())
+  coachEarnings       CoachEarning[]      @relation("CoachEarningCoach")
+  walletLedgerEntries WalletLedgerEntry[] @relation("WalletLedgerCoach")
+  coachWithdrawals    CoachWithdrawal[]   @relation("CoachWithdrawalCoach")
+  coachShareOverride  CoachShareOverride? @relation("CoachOverrideCoach")
+  email               String              @unique @db.Citext
+  passwordHash        String?
+  status              UserStatus          @default(ACTIVE)
+  roleId              String
+  role                Role                @relation(fields: [roleId], references: [id])
+  emailVerifiedAt     DateTime?
+  mfaEnabled          Boolean             @default(false)
   /// TOTP secret, AES-256-GCM encrypted with AUTH_SECRET. Never returned by any view.
-  mfaSecretEnc    String?
-  lastLoginAt     DateTime?
-  deletedAt       DateTime?
-  createdAt       DateTime   @default(now())
-  updatedAt       DateTime   @updatedAt
+  mfaSecretEnc        String?
+  lastLoginAt         DateTime?
+  deletedAt           DateTime?
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
 
   sessions                  Session[]
   authTokens                AuthToken[]
@@ -1813,6 +1817,10 @@ model CourseEnrollment {
   /// Promo codes: the course price before a code was applied. priceCents is always the amount payable.
   listPriceCents   Int?
   promoRedemptions PromoRedemption[]
+
+  /// Coach wallet: money refunded so far (partial refunds keep access; a full refund ends it).
+  refundedCents Int           @default(0)
+  coachEarning  CoachEarning?
 
   @@unique([courseId, agentProfileId])
   @@index([agentProfileId, status])
@@ -3448,6 +3456,7 @@ enum PayoutStatus {
 enum PayoutMethodKind {
   GCASH
   BANK_TRANSFER
+  MAYA
 }
 
 enum ReferralFlagKind {
@@ -3700,4 +3709,139 @@ model PromoRedemption {
   @@index([userId, promoCodeId, status])
   @@index([enrollmentId])
   @@index([status, createdAt])
+}
+
+enum CoachEarningStatus {
+  /// Paid through the gateway; the real fee has not been reported yet, so nothing is credited.
+  PENDING_FEE
+  ON_HOLD
+  AVAILABLE
+  WITHDRAWN
+  REVERSED
+}
+
+enum EarningFeeSource {
+  /// Bank or GCash payment recorded by staff: no gateway was involved.
+  OFFLINE
+  STAFF_ENTRY
+  SETTLEMENT_IMPORT
+  GATEWAY_API
+}
+
+enum WalletEntryType {
+  EARNING
+  /// A refund or chargeback before the money was withdrawn: takes the earning (or its share) back out.
+  REVERSAL
+  /// A refund or chargeback after the coach withdrew: the balance can go negative.
+  REFUND_AFTER_WITHDRAWAL
+  WITHDRAWAL
+  WITHDRAWAL_RELEASED
+  ADJUSTMENT
+}
+
+enum CoachWithdrawalStatus {
+  REQUESTED
+  APPROVED
+  PAID
+  REJECTED
+}
+
+/// One coach's share of one paid enrolment. Money is integer minor units. The split rate is locked here at the sale.
+model CoachEarning {
+  id                 String             @id @default(cuid())
+  coachUserId        String
+  coach              User               @relation("CoachEarningCoach", fields: [coachUserId], references: [id])
+  enrollmentId       String             @unique
+  enrollment         CourseEnrollment   @relation(fields: [enrollmentId], references: [id])
+  courseId           String
+  courseTitle        String
+  buyerUserId        String
+  /// First name and last initial, frozen at the sale (the coach never sees more).
+  buyerLabel         String
+  /// What the buyer actually paid, after discounts.
+  saleAmount         Int
+  /// The actual fee the gateway charged; null while PENDING_FEE.
+  gatewayFee         Int?
+  netAmount          Int?
+  coachRateBps       Int
+  coachAmount        Int?
+  platformAmount     Int?
+  /// The referral commission for this sale, paid out of the platform share.
+  affiliateAmount    Int                @default(0)
+  currency           String             @db.Char(3)
+  channel            String
+  feeSource          EarningFeeSource?
+  status             CoachEarningStatus
+  paidAt             DateTime
+  availableAt        DateTime
+  refundedSaleMinor  Int                @default(0)
+  coachReversedMinor Int                @default(0)
+  /// Gateway fee the platform lost because it was not returned on a refund.
+  feeAbsorbedMinor   Int                @default(0)
+  reversedAt         DateTime?
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+
+  ledger WalletLedgerEntry[]
+
+  @@index([coachUserId, status])
+  @@index([status, availableAt])
+  @@index([courseId])
+  @@index([paidAt])
+}
+
+/// Append-only (database trigger). A coach's balance is always the sum of these rows, never a stored number.
+model WalletLedgerEntry {
+  id           String          @id @default(cuid())
+  coachUserId  String
+  coach        User            @relation("WalletLedgerCoach", fields: [coachUserId], references: [id])
+  type         WalletEntryType
+  /// Signed: credits positive, debits negative.
+  amount       Int
+  currency     String          @db.Char(3)
+  earningId    String?
+  earning      CoachEarning?   @relation(fields: [earningId], references: [id])
+  withdrawalId String?
+  note         String?
+  createdById  String?
+  createdAt    DateTime        @default(now())
+
+  @@index([coachUserId, createdAt])
+  @@index([earningId])
+  @@index([withdrawalId])
+}
+
+model CoachWithdrawal {
+  id               String                @id @default(cuid())
+  coachUserId      String
+  coach            User                  @relation("CoachWithdrawalCoach", fields: [coachUserId], references: [id])
+  amount           Int
+  currency         String                @db.Char(3)
+  method           PayoutMethodKind
+  accountName      String
+  /// Copied from the coach's payout details at the time of the request; AES-256-GCM, never returned in full.
+  accountNumberEnc String
+  bankName         String?
+  /// Masked label for lists, such as "GCash ****1234".
+  accountLabel     String
+  status           CoachWithdrawalStatus @default(REQUESTED)
+  reference        String?
+  rejectionReason  String?
+  requestedAt      DateTime              @default(now())
+  decidedById      String?
+  decidedAt        DateTime?
+  paidAt           DateTime?
+
+  @@index([coachUserId, status])
+  @@index([status, requestedAt])
+}
+
+/// A special deal: this coach's share replaces the global rate for new sales only.
+model CoachShareOverride {
+  coachUserId String   @id
+  coach       User     @relation("CoachOverrideCoach", fields: [coachUserId], references: [id])
+  shareBps    Int
+  note        String
+  createdById String
+  updatedAt   DateTime @updatedAt
 }

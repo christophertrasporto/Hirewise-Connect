@@ -115,6 +115,8 @@ export const PERMISSIONS = {
   "audit.read": { group: "system", description: "Read the audit log" },
   "settings.manage": { group: "system", description: "Change platform settings" },
   "referral.manage": { group: "system", description: "Manage the referral program: settings, affiliates, fraud flags, and commission adjustments" },
+  "coach.wallet": { group: "academy", description: "See and withdraw the actor's own coach earnings" },
+  "wallet.manage": { group: "system", description: "Manage coach wallets: settings, special rates, gateway fees, adjustments, the withdrawal queue, and the revenue report" },
   "payout.manage": { group: "system", description: "Review, approve, and pay referral payouts" },
   "rbac.manage": { group: "system", description: "Manage roles, permissions, and overrides" },
   "user.manage": { group: "system", description: "Create, suspend, and deactivate users" },
@@ -187,7 +189,7 @@ export const ROLE_PERMISSIONS: Record<RoleKey, readonly PermissionKey[]> = {
     "note.internal.write",
     "report.talent",
   ],
-  COACH: ["agent.read_public", "course.read_assigned", "course.create_own", "course.audio.upload", "course.quiz.build", "assignment.review", "learner.progress.read", "assessment.write", "report.academy"],
+  COACH: ["coach.wallet", "agent.read_public", "course.read_assigned", "course.create_own", "course.audio.upload", "course.quiz.build", "assignment.review", "learner.progress.read", "assessment.write", "report.academy"],
   OPERATIONS: [
     "agent.read_public",
     "agent.read_private_contact",

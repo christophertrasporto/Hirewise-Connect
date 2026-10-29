@@ -78,6 +78,11 @@ export type DomainEventMap = {
   SUBMISSION_WITHDRAWN: { submissionId: string; opportunityId: string; title: string; displayName: string; agencyName: string | null; reason: string; accountManagerUserId: string | null; byExit: boolean };
   // Online course payments (Maya)
   ONLINE_PAYMENT_PROBLEM: { onlinePaymentId: string; enrollmentId: string; courseTitle: string; learnerEmail: string; reason: string };
+  // Coach wallet
+  WALLET_EARNING_CREATED: { earningId: string; coachUserId: string; courseTitle: string; status: "PENDING_FEE" | "ON_HOLD" };
+  WALLET_EARNING_REVERSED: { earningId: string; coachUserId: string; courseTitle: string; afterWithdrawal: boolean };
+  WALLET_WITHDRAWAL_REQUESTED: { withdrawalId: string; coachUserId: string; amount: number; currency: string };
+  WALLET_WITHDRAWAL_DECIDED: { withdrawalId: string; coachUserId: string; outcome: "APPROVED" | "PAID" | "REJECTED"; amount: number; currency: string; reference: string | null; reason: string | null };
   // Promo codes
   PROMO_CHANGED: { promoCodeId: string; code: string; change: "CREATED" | "UPDATED" | "ACTIVE" | "PAUSED" | "ARCHIVED" };
   PROMO_REDEEMED: { promoCodeId: string; code: string; enrollmentId: string; userId: string; discountMinor: number; finalMinor: number; currency: string };

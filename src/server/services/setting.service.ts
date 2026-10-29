@@ -124,6 +124,19 @@ export const SETTING_SCHEMAS = {
       videoKey: z.string().default("v1"),
     })
     .default(() => ({ enabled: false, title: "Welcome to Hirewise", instructions: "", videoUrl: null, storageKey: null, fileName: null, durationSec: null, requiredPercent: 90, lockCourses: true, appliesTo: "NEW" as const, effectiveFrom: null, videoKey: "v1" })),
+  /** Coach Wallet. Money is integer minor units. The coach share is locked on each earning at the sale. */
+  coachWallet: z
+    .object({
+      coachShareBps: z.number().int().min(0).max(8000).default(6000),
+      /** Days a buyer can still get a refund; match the refund policy. */
+      refundWindowDays: z.number().int().min(0).max(365).default(14),
+      /** Extra days on top of the refund window before an earning is withdrawable. */
+      holdBufferDays: z.number().int().min(0).max(365).default(7),
+      minimumWithdrawalMinor: z.number().int().min(0).default(50_000),
+      /** Coaches see the buyer's first name and last initial only; this adds the email. Phone is never shown. */
+      showBuyerEmail: z.boolean().default(false),
+    })
+    .default(() => ({ coachShareBps: 6000, refundWindowDays: 14, holdBufferDays: 7, minimumWithdrawalMinor: 50_000, showBuyerEmail: false })),
   /** Promo codes: a use reserved on an unpaid enrolment is released after this many days. */
   promos: z.object({ reservationDays: z.number().int().min(1).max(90).default(7) }).default(() => ({ reservationDays: 7 })),
   /** Referral affiliate program. Money is integer minor units of payoutCurrency (USD cents by default). */

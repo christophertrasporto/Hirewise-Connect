@@ -8,6 +8,7 @@ import { audit } from "@/server/audit/audit";
 import { publishEvent } from "@/server/events/outbox";
 import { getSetting } from "./setting.service";
 import { commissionAmount, commissionBase, type CommissionSource } from "@/lib/referral";
+import { proportionalShare } from "@/lib/coach-wallet";
 type CommissionSourceType = CommissionSource;
 
 /**
@@ -81,9 +82,14 @@ async function reverseTx(tx: Db, actor: Actor, c: ReversibleCommission, reason: 
   const afterPayout = c.status === "PAID";
   const openPayout = c.payout && (c.payout.status === "REQUESTED" || c.payout.status === "APPROVED") ? c.payout : null;
   await referralRepository.markReversed(tx, c.id, reason);
+  // Part-refunds already took their share off this commission; the full reversal only takes what is left.
+  const priorPartial = await referralRepository.partialRefundTotal(tx, c.id);
   if (afterPayout) {
     // Already paid out: the money is gone, so the referrer's balance takes the hit.
-    await referralRepository.createAdjustment(tx, { referrerId: c.referrerId, commissionId: c.id, kind: "REFUND_AFTER_PAYOUT", amount: -c.commissionAmount, currency: c.currency, note: `Refund after payout: ${reason}`, createdById: actor.userId });
+    await referralRepository.createAdjustment(tx, { referrerId: c.referrerId, commissionId: c.id, kind: "REFUND_AFTER_PAYOUT", amount: -(c.commissionAmount - priorPartial), currency: c.currency, note: `Refund after payout: ${reason}`, createdById: actor.userId });
+  } else if (priorPartial > 0) {
+    // The commission is gone entirely, so the earlier part-refund deductions are undone.
+    await referralRepository.createAdjustment(tx, { referrerId: c.referrerId, commissionId: c.id, kind: "MANUAL", amount: priorPartial, currency: c.currency, note: "Part-refund deductions undone: the commission was fully reversed", createdById: actor.userId });
   }
   if (openPayout) {
     // Included in a payout nobody has paid yet: take it out of that payout.
@@ -104,6 +110,22 @@ export async function reverseCommissionForSource(tx: Db, actor: Actor, p: { sour
   const c = await referralRepository.findBySource(tx, p.sourceType, p.sourceId);
   if (!c) return { reversed: false };
   return { reversed: await reverseTx(tx, actor, c, p.reason) };
+}
+
+/**
+ * A partial refund takes the same share off the referral commission as it takes off the sale, as a signed adjustment (the
+ * referrer's payable balance can dip below zero until the commission is payable, as it can after a refund on a paid one).
+ * `refundedTotalMinor` is everything refunded on the sale so far, so repeated part-refunds never take more than their share.
+ */
+export async function reduceCommissionForPartialRefund(tx: Db, actor: Actor, p: { sourceType: CommissionSourceType; sourceId: string; refundedTotalMinor: number; paidMinor: number; reason: string }): Promise<{ reducedMinor: number }> {
+  const c = await referralRepository.findBySource(tx, p.sourceType, p.sourceId);
+  if (!c || c.status === "REVERSED") return { reducedMinor: 0 };
+  const target = proportionalShare(c.commissionAmount, p.refundedTotalMinor, p.paidMinor);
+  const delta = target - (await referralRepository.partialRefundTotal(tx, c.id));
+  if (delta <= 0) return { reducedMinor: 0 };
+  await referralRepository.createAdjustment(tx, { referrerId: c.referrerId, commissionId: c.id, kind: "REFUND_AFTER_PAYOUT", amount: -delta, currency: c.currency, note: `Partial refund: ${p.reason}`, createdById: actor.userId });
+  await audit(tx, { actor, action: "COMMISSION_ADJUSTED", entityType: "Commission", entityId: c.id, newValue: { amount: -delta, partialRefund: true }, reason: p.reason });
+  return { reducedMinor: delta };
 }
 
 export async function releaseCommissionHolds(db: Db, now = new Date()): Promise<number> {

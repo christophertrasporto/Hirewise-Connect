@@ -84,6 +84,7 @@
 :root[data-theme="dark"] span.bg-ink-900,
 :root[data-theme="dark"] label.bg-ink-900,
 :root[data-theme="dark"] input.bg-ink-900 { background-color: #096b50; }
+:root[data-theme="dark"] .file\:bg-ink-100::file-selector-button { background-color: #15233b; }
 :root[data-theme="dark"] .placeholder\:text-ink-300::placeholder { color: var(--color-ink-300); }
 @media (hover: hover) {
   :root[data-theme="dark"] .hover\:bg-brand-50:hover { background-color: rgb(14 164 122 / 0.14); }

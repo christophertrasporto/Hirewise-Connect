@@ -55,6 +55,7 @@ type Variant = { order: number; selector: (cls: string) => string; media?: strin
 const VARIANTS: Record<string, Variant> = {
   "": { order: 0, selector: (c) => `.${c}` },
   "placeholder:": { order: 1, selector: (c) => `.${c}::placeholder` },
+  "file:": { order: 1, selector: (c) => `.${c}::file-selector-button` },
   "hover:": { order: 2, selector: (c) => `.${c}:hover`, media: "(hover: hover)" },
   "focus:": { order: 3, selector: (c) => `.${c}:focus` },
   "focus-visible:": { order: 3, selector: (c) => `.${c}:focus-visible` },
