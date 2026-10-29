@@ -5,6 +5,7 @@ import type { Db, PrismaClient } from "@/server/db/types";
 import type { Actor } from "@/server/auth/actor";
 import { authorize, ForbiddenError, NotFoundError } from "@/server/policies/authorize";
 import { academyRepository } from "@/server/repositories/academy.repository";
+import { publicAcademyRepository } from "@/server/repositories/public-academy.repository";
 import { certificationRepository } from "@/server/repositories/certification.repository";
 import { audit } from "@/server/audit/audit";
 import { publishEvent } from "@/server/events/outbox";
@@ -23,6 +24,8 @@ import { applyPromoTx, consumePromoTx, promoForEnrollment } from "./promo.servic
 import { recordEarningForPaymentTx, reverseEarningForRefundTx } from "./wallet.service";
 import { parseMoneyToMinor } from "@/lib/coach-wallet";
 import { recordLessonVersion, changedFields } from "./lesson-version.service";
+import { newSlug } from "./slug.service";
+import { getSetting } from "./setting.service";
 import { categoryRepository } from "@/server/repositories/category.repository";
 import { assignmentRepository } from "@/server/repositories/assignment.repository";
 import { toSubmissionLearnerView as toSubmissionView, type SubmissionLearnerView } from "@/server/views/academy.views";
@@ -131,7 +134,7 @@ export async function createCourse(db: PrismaClient, actor: Actor, raw: CourseIn
   let code = slug(input.title) || `course-${Date.now()}`;
   if (await academyRepository.findCourseByCode(db, code)) code = `${code}-${Date.now().toString(36).slice(-4)}`;
   const course = await db.$transaction(async (tx) => {
-    const c = await academyRepository.createCourse(tx, { currency, code, title: input.title, ...builderFields(input, cat.name), description: input.description, syllabus: input.syllabus || null, contentUrl: input.contentUrl || null, ownerCoachUserId: actor.userId, priceCents, passingScore: input.passingScore, requiresCoachReview: input.requiresCoachReview });
+    const c = await academyRepository.createCourse(tx, { slug: await newSlug(tx, "COURSE", input.title), currency, code, title: input.title, ...builderFields(input, cat.name), description: input.description, syllabus: input.syllabus || null, contentUrl: input.contentUrl || null, ownerCoachUserId: actor.userId, priceCents, passingScore: input.passingScore, requiresCoachReview: input.requiresCoachReview });
     await audit(tx, { actor, action: "COURSE_CREATED", entityType: "AcademyCourse", entityId: c.id, newValue: { title: c.title, priceCents, currency } });
     return c;
   });
@@ -217,6 +220,7 @@ export async function submitCourseForApproval(db: PrismaClient, actor: Actor, co
   if (publishedLessonCount(c) === 0) throw new Error("Add at least one published lesson in a published module before submitting.");
   await db.$transaction(async (tx) => {
     await academyRepository.setCourseStatus(tx, c.id, "PENDING_APPROVAL");
+    if (c.reviewNote) await publicAcademyRepository.setReviewNote(tx, c.id, null);
     await audit(tx, { actor, action: "COURSE_SUBMITTED", entityType: "AcademyCourse", entityId: c.id });
     await publishEvent(tx, "COURSE_SUBMITTED_FOR_APPROVAL", { courseId: c.id, title: c.title, coachUserId: c.ownerCoachUserId, priceCents: c.priceCents });
   });
@@ -231,7 +235,41 @@ export async function publishCourse(db: PrismaClient, actor: Actor, courseId: st
   await db.$transaction(async (tx) => {
     if (opts.certificationTemplateId !== undefined) await academyRepository.updateCourse(tx, c.id, { certificationTemplateId: opts.certificationTemplateId || null });
     await academyRepository.setCourseStatus(tx, c.id, "PUBLISHED", { publishedById: actor.userId, publishedAt: new Date() });
+    if (c.reviewNote) await publicAcademyRepository.setReviewNote(tx, c.id, null);
     await audit(tx, { actor, action: "COURSE_PUBLISHED", entityType: "AcademyCourse", entityId: c.id, newValue: { certificationTemplateId: opts.certificationTemplateId ?? c.certificationTemplateId, priceCents: c.priceCents } });
+    await publishEvent(tx, "COURSE_PUBLISHED", { courseId: c.id, title: c.title, coachUserId: c.ownerCoachUserId });
+  });
+}
+
+/** Admin sends a submitted course back to draft with the reason the coach sees. The coach fixes it and submits again. */
+export async function rejectCourse(db: PrismaClient, actor: Actor, courseId: string, reason: string) {
+  authorize(actor, "course.manage");
+  const why = reason.trim();
+  if (why.length < 5) throw new Error("Tell the coach what to change (at least 5 characters).");
+  const c = await academyRepository.findCourse(db, courseId);
+  if (!c) throw new NotFoundError();
+  if (c.status !== "PENDING_APPROVAL") throw new Error("Only a course waiting for approval can be sent back.");
+  await db.$transaction(async (tx) => {
+    await academyRepository.setCourseStatus(tx, c.id, "DRAFT");
+    await publicAcademyRepository.setReviewNote(tx, c.id, why.slice(0, 1000));
+    await audit(tx, { actor, action: "COURSE_REJECTED", entityType: "AcademyCourse", entityId: c.id, previousValue: { status: "PENDING_APPROVAL" }, newValue: { status: "DRAFT" }, reason: why });
+    await publishEvent(tx, "COURSE_REJECTED", { courseId: c.id, title: c.title, coachUserId: c.ownerCoachUserId, reason: why.slice(0, 1000) });
+  });
+}
+
+/**
+ * With the setting `academy.requireApproval` off, a coach publishes their own draft. It is the same publish as the Admin's
+ * (status, audit, event) but without a certification template change, and it needs a published lesson like any course.
+ */
+export async function publishOwnCourse(db: PrismaClient, actor: Actor, courseId: string) {
+  const c = await loadEditableCourse(db, actor, courseId);
+  if ((await getSetting(db, "academy")).requireApproval) throw new ForbiddenError("Courses need Hirewise approval before they go live");
+  if (c.status !== "DRAFT") throw new Error("Only a draft course can be published.");
+  if (publishedLessonCount(c) === 0) throw new Error("Add at least one published lesson in a published module before publishing.");
+  await db.$transaction(async (tx) => {
+    await academyRepository.setCourseStatus(tx, c.id, "PUBLISHED", { publishedById: actor.userId, publishedAt: new Date() });
+    if (c.reviewNote) await publicAcademyRepository.setReviewNote(tx, c.id, null);
+    await audit(tx, { actor, action: "COURSE_PUBLISHED", entityType: "AcademyCourse", entityId: c.id, newValue: { selfPublished: true } });
     await publishEvent(tx, "COURSE_PUBLISHED", { courseId: c.id, title: c.title, coachUserId: c.ownerCoachUserId });
   });
 }
@@ -255,6 +293,7 @@ export async function archiveCourse(db: PrismaClient, actor: Actor, courseId: st
   authorize(actor, "course.manage");
   await db.$transaction(async (tx) => {
     await academyRepository.setCourseStatus(tx, courseId, "ARCHIVED");
+    await publicAcademyRepository.setFeaturedRank(tx, courseId, null);
     await audit(tx, { actor, action: "COURSE_ARCHIVED", entityType: "AcademyCourse", entityId: courseId });
   });
 }

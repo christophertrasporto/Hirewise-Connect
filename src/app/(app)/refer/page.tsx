@@ -12,7 +12,7 @@ export const metadata: Metadata = { title: "Refer & Earn" };
 /** Member page: the personal link, the totals, the commission history, and payouts. */
 export default async function ReferPage() {
   const actor = await requireActor();
-  if (!canRefer(actor)) return <Banner tone="warn" title="Refer & Earn">Referral links are available to talent and agency owners.</Banner>;
+  if (!canRefer(actor)) return <Banner tone="warn" title="Refer & Earn">Referral links are available to talent, coaches and agency owners.</Banner>;
   const [o, commissions, payouts, details] = await Promise.all([referralOverview(prisma, actor), myCommissions(prisma, actor), myPayouts(prisma, actor), myPayoutDetails(prisma, actor)]);
   const m = (n: number) => formatMoney(n, o.currency);
   const open = payouts.find((p) => p.status === "REQUESTED" || p.status === "APPROVED");

@@ -54,7 +54,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     nav.push({ href: "/messages", label: "Messages", icon: <MessageSquare /> });
     nav.push({ href: "/report-bypass", label: "Report a bypass attempt", icon: <Flag /> });
   }
-  if (actor.role === "AGENCY_OWNER") nav.push({ href: "/refer", label: "Refer & Earn", icon: <Gift /> });
+  if (actor.role === "AGENCY_OWNER" || actor.role === "COACH") nav.push({ href: "/refer", label: "Refer & Earn", icon: <Gift /> });
+  if (actor.role === "COACH") nav.push({ href: "/coach/profile", label: "Coach profile", icon: <UserCircle /> });
   // Coach wallet: coaches see their own; staff who manage wallets see everyone's.
   if (actor.role === "COACH" && can(actor, "coach.wallet")) nav.push({ href: "/wallet", label: "Wallet", icon: <Wallet /> });
   if (can(actor, "wallet.manage")) nav.push({ href: "/staff/wallet", label: "Coach wallets", icon: <Wallet /> });

@@ -610,14 +610,17 @@ describe("what members and staff can see and do", () => {
     expect(await myCommissions(db, member(ids.ben))).not.toEqual(expect.arrayContaining([expect.objectContaining({ buyer: "Joaquin C." })]));
   });
 
-  it("only talent and agency owners have a link; other roles are refused", async () => {
-    for (const actor of [makeActor("CLIENT", { userId: "x" }), makeActor("COACH", { userId: ids.coach }), sales(), admin()]) {
+  it("only talent, coaches and agency owners have a link; other roles are refused", async () => {
+    for (const actor of [makeActor("CLIENT", { userId: "x" }), makeActor("OPERATIONS", { userId: ids.sales }), sales(), admin()]) {
       await expect(referralOverview(db, actor)).rejects.toThrow(ForbiddenError);
       await expect(myCommissions(db, actor)).rejects.toThrow(ForbiddenError);
       await expect(requestPayout(db, actor)).rejects.toThrow(ForbiddenError);
     }
     expect((await referralOverview(db, member(ids.maria))).link).toBe(`http://localhost:3000/join?ref=${ids.mariaCode}`);
     expect((await referralOverview(db, member(ids.maria, "AGENCY_OWNER"))).code).toBe(ids.mariaCode);
+    // Public Academy: coaches may hold a code too, so the Share button on a course can carry it.
+    const coachOverview = await referralOverview(db, makeActor("COACH", { userId: ids.coach }));
+    expect(coachOverview.link).toBe(`http://localhost:3000/join?ref=${coachOverview.code}`);
   });
 
   it("settings and the affiliate tools need referral.manage; changes are audited and notes are required", async () => {
@@ -633,7 +636,7 @@ describe("what members and staff can see and do", () => {
     await expect(updateReferralSettings(db, admin(), { commissionRateBps: 1500, cookieDays: 0 })).rejects.toThrow();
     await expect(adjustReferrerBalance(db, admin(), { referrerId: ids.maria, amountMinor: 0, note: "nothing" })).rejects.toThrow();
     await expect(adjustReferrerBalance(db, admin(), { referrerId: ids.maria, amountMinor: 500, note: "" })).rejects.toThrow(/note/i);
-    await expect(adjustReferrerBalance(db, admin(), { referrerId: ids.coach, amountMinor: 500, note: "not a member" })).rejects.toThrow(NotFoundError);
+    await expect(adjustReferrerBalance(db, admin(), { referrerId: ids.sales, amountMinor: 500, note: "not a member" })).rejects.toThrow(NotFoundError);
     const a = await adjustReferrerBalance(db, admin(), { referrerId: ids.maria, amountMinor: 250, note: "Goodwill credit" });
     const audit = await db.auditLog.findFirstOrThrow({ where: { action: "COMMISSION_ADJUSTED", entityId: ids.maria } });
     expect(audit.reason).toBe("Goodwill credit");

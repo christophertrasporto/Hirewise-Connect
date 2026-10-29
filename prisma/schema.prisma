@@ -387,6 +387,8 @@ model User {
   placementsManaged         Placement[]         @relation("PlacementManager")
   coursesOwned              AcademyCourse[]     @relation("CourseOwner")
   courseCoachings           CourseCoach[]       @relation("CourseCoach")
+  coachProfile              CoachProfile?       @relation("CoachProfileUser")
+  courseReviews             CourseReview[]      @relation("CourseReviewUser")
   assessmentsGiven          Assessment[]        @relation("AssessmentCoach")
   evaluationsGiven          CoachEvaluation[]   @relation("EvaluationCoach")
   ratesProposed             ClientBillingRate[] @relation("RateProposer")
@@ -1313,6 +1315,16 @@ model ActivityFlag {
 // 4.4 Academy (Phase 3) — courses, exams, enrollments, assessments, certifications
 // ---------------------------------------------------------------------------
 
+enum CourseListing {
+  LISTED
+  UNLISTED
+}
+
+enum SlugKind {
+  COURSE
+  COACH
+}
+
 enum CourseStatus {
   DRAFT
   PENDING_APPROVAL
@@ -1423,6 +1435,21 @@ model AcademyCourse {
   certificationTemplateId           String?
   certificationTemplate             CertificationTemplate? @relation(fields: [certificationTemplateId], references: [id])
   status                            CourseStatus           @default(DRAFT)
+  /// Public Academy: the address segment (unique; old ones live in SlugRedirect). Services set it from the title.
+  slug                              String                 @unique @default(cuid())
+  /// LISTED shows in the public catalog, search, categories and sitemap; UNLISTED is reachable by link only (noindex).
+  listing                           CourseListing          @default(LISTED)
+  pitch                             String?
+  learningPoints                    String[]               @default([])
+  audience                          String?
+  requirements                      String?
+  faq                               Json?
+  hideEnrolledCount                 Boolean                @default(false)
+  /// Featured courses show first in the public catalog, lowest rank first; null = not featured.
+  featuredRank                      Int?
+  /// Why the last approval request was sent back (cleared on resubmission).
+  reviewNote                        String?
+  reviews                           CourseReview[]
   publishedAt                       DateTime?
   publishedById                     String?
   externalId                        String?                @unique
@@ -1780,6 +1807,7 @@ model CourseCoach {
 
 model CourseEnrollment {
   id                     String              @id @default(cuid())
+  review                 CourseReview?
   courseId               String
   course                 AcademyCourse       @relation(fields: [courseId], references: [id], onDelete: Cascade)
   agentProfileId         String
@@ -3844,4 +3872,55 @@ model CoachShareOverride {
   note        String
   createdById String
   updatedAt   DateTime @updatedAt
+}
+
+/// Public Academy: what the world sees of a coach. Replaces the email prefix wherever a coach is named.
+model CoachProfile {
+  id          String   @id @default(cuid())
+  userId      String   @unique
+  user        User     @relation("CoachProfileUser", fields: [userId], references: [id], onDelete: Cascade)
+  slug        String   @unique
+  displayName String
+  headline    String?
+  bio         String?
+  photoKey    String?
+  /// [{ label, url }] https links only.
+  links       Json?
+  /// The coach's page and name are public only while this is on and they have a listed course.
+  isPublic    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+/// One verified review per learner per course; shown as first name and last initial. Staff can hide with a reason.
+model CourseReview {
+  id           String           @id @default(cuid())
+  courseId     String
+  course       AcademyCourse    @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  enrollmentId String           @unique
+  enrollment   CourseEnrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  userId       String
+  user         User             @relation("CourseReviewUser", fields: [userId], references: [id], onDelete: Cascade)
+  rating       Int
+  body         String?
+  hiddenAt     DateTime?
+  hiddenReason String?
+  hiddenById   String?
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+
+  @@unique([courseId, userId])
+  @@index([courseId, hiddenAt])
+}
+
+/// An old course or coach slug that now answers 301 to its current address.
+model SlugRedirect {
+  id        String   @id @default(cuid())
+  kind      SlugKind
+  oldSlug   String
+  targetId  String
+  createdAt DateTime @default(now())
+
+  @@unique([kind, oldSlug])
+  @@index([kind, targetId])
 }

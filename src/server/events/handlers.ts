@@ -325,6 +325,11 @@ export const EVENT_HANDLERS: { [T in DomainEventType]: EventHandler<T> } = {
     await taskRepository.completeByRelated(db, "PUBLISH_COURSE", "AcademyCourse", p.courseId);
   },
 
+  COURSE_REJECTED: async (db, p) => {
+    await notifyUser(db, { userId: p.coachUserId, type: "COURSE_REJECTED", title: `"${p.title}" needs changes`, body: `Hirewise sent the course back to draft: ${p.reason}`, dedupeKey: `COURSE_REJECTED:${p.courseId}:${Date.now()}` });
+    await taskRepository.completeByRelated(db, "PUBLISH_COURSE", "AcademyCourse", p.courseId);
+  },
+
   COURSE_ENROLLED: async (db, p) => {
     for (const id of new Set(p.coachUserIds)) await notifyUser(db, { userId: id, type: "COURSE_ENROLLED", title: `New student in ${p.title}`, body: p.paymentRequired ? "Enrolment is pending payment; the course unlocks once Hirewise records it." : "The student can start the course now.", dedupeKey: `ENROL:${p.courseId}:${p.agentProfileId}:${id}` });
     if (p.paymentRequired) {

@@ -5,7 +5,11 @@ import { redirect } from "next/navigation";
 import { prisma } from "@/server/db/client";
 import { requireActor } from "@/server/auth/require-actor";
 import { toActionError, formList, formString, type ActionResult } from "@/server/http/action-result";
+import { rejectCourse, publishOwnCourse } from "@/server/services/academy.service";
 import { coverUploadRequestSchema, createCourseCoverUploadUrl, setCourseCover, courseSchema, courseSettingsSchema, createCourse, updateCourse, updateCourseSettings, setCourseCertificationTemplate, submitCourseForApproval, publishCourse, archiveCourse, restoreCourse, enrol, recordCoursePayment, addCoachToCourse, moduleSchema, lessonSchema, lessonUploadRequestSchema, saveModule, deleteModule, moveModule, duplicateModule, saveLesson, deleteLesson, moveLesson, reorderLessons, duplicateLesson, createLessonUploadUrl } from "@/server/services/academy.service";
+import { savePublicDetails, setCourseListing, setCourseFeatured } from "@/server/services/public-course.service";
+import { hideReview, unhideReview } from "@/server/services/review.service";
+import { saveOwnCoachProfile } from "@/server/services/coach-profile.service";
 import { categorySchema, saveCategory } from "@/server/services/category.service";
 import { assessmentSchema, evaluationSchema, labelSchema, recordAssessment, recordEvaluation, saveLabel } from "@/server/services/assessment.service";
 import { templateSchema, saveTemplate, issueCertification, reviewCertification, revokeCertification } from "@/server/services/certification.service";
@@ -291,6 +295,8 @@ export async function courseWorkflowAction(_prev: ActionResult, fd: FormData): P
     const op = formString(fd, "op");
     if (op === "SUBMIT") await submitCourseForApproval(prisma, actor, courseId);
     else if (op === "PUBLISH") await publishCourse(prisma, actor, courseId, { certificationTemplateId: formString(fd, "certificationTemplateId") || null });
+    else if (op === "REJECT") await rejectCourse(prisma, actor, courseId, formString(fd, "reason"));
+    else if (op === "PUBLISH_SELF") await publishOwnCourse(prisma, actor, courseId);
     else if (op === "ARCHIVE") await archiveCourse(prisma, actor, courseId);
     else if (op === "RESTORE") await restoreCourse(prisma, actor, courseId);
     else if (op === "ADD_COACH") await addCoachToCourse(prisma, actor, courseId, formString(fd, "coachUserId"));
@@ -482,4 +488,88 @@ export async function saveRequirementAction(_prev: ActionResult, fd: FormData): 
 
 export async function noopList(fd: FormData) {
   return formList(fd, "x");
+}
+
+// ---------------------------------------------------------------------------
+// Public Academy: public page details, listing, featuring, reviews, coach profile
+// ---------------------------------------------------------------------------
+
+/** One entry per blank-line-separated block: the first line is the question, the rest is the answer. */
+function parseFaq(text: string) {
+  return text
+    .split(/\r?\n\s*\r?\n/)
+    .map((b) => b.trim())
+    .filter(Boolean)
+    .map((b) => {
+      const [question, ...rest] = b.split(/\r?\n/);
+      return { question: question.trim(), answer: rest.join("\n").trim() };
+    });
+}
+
+export async function savePublicDetailsAction(_prev: ActionResult, fd: FormData): Promise<ActionResult> {
+  try {
+    const actor = await requireActor();
+    const courseId = formString(fd, "courseId");
+    await savePublicDetails(prisma, actor, courseId, {
+      slug: formString(fd, "slug") || undefined,
+      pitch: formString(fd, "pitch"),
+      learningPoints: formString(fd, "learningPoints").split(/\r?\n/).map((l) => l.trim()).filter(Boolean),
+      audience: formString(fd, "audience"),
+      requirements: formString(fd, "requirements"),
+      faq: parseFaq(formString(fd, "faq")),
+      ...(fd.has("hideEnrolledCountPresent") ? { hideEnrolledCount: fd.get("hideEnrolledCount") === "on" } : {}),
+    });
+    await setCourseListing(prisma, actor, courseId, formString(fd, "listing") === "UNLISTED" ? "UNLISTED" : "LISTED");
+    revalidateCourse(courseId);
+    return { ok: true };
+  } catch (e) {
+    return toActionError(e);
+  }
+}
+
+export async function setFeaturedAction(_prev: ActionResult, fd: FormData): Promise<ActionResult> {
+  try {
+    const actor = await requireActor();
+    const courseId = formString(fd, "courseId");
+    const raw = formString(fd, "rank");
+    await setCourseFeatured(prisma, actor, courseId, raw === "" ? null : Number(raw));
+    revalidateCourse(courseId);
+    return { ok: true };
+  } catch (e) {
+    return toActionError(e);
+  }
+}
+
+export async function reviewModerationAction(_prev: ActionResult, fd: FormData): Promise<ActionResult> {
+  try {
+    const actor = await requireActor();
+    const reviewId = formString(fd, "reviewId");
+    if (formString(fd, "op") === "UNHIDE") await unhideReview(prisma, actor, reviewId);
+    else await hideReview(prisma, actor, reviewId, formString(fd, "reason"));
+    revalidatePath(`/courses/manage/${formString(fd, "courseId")}`, "layout");
+    return { ok: true };
+  } catch (e) {
+    return toActionError(e);
+  }
+}
+
+export async function saveCoachProfileAction(_prev: ActionResult, fd: FormData): Promise<ActionResult> {
+  try {
+    const actor = await requireActor();
+    const links = [1, 2, 3, 4, 5, 6]
+      .map((i) => ({ label: formString(fd, `linkLabel${i}`), url: formString(fd, `linkUrl${i}`) }))
+      .filter((l) => l.label || l.url);
+    await saveOwnCoachProfile(prisma, actor, {
+      displayName: formString(fd, "displayName"),
+      headline: formString(fd, "headline"),
+      bio: formString(fd, "bio"),
+      slug: formString(fd, "slug") || undefined,
+      links,
+      isPublic: fd.get("isPublic") === "on",
+    });
+    revalidatePath("/coach/profile");
+    return { ok: true };
+  } catch (e) {
+    return toActionError(e);
+  }
 }

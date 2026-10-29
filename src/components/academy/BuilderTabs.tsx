@@ -7,13 +7,14 @@ import { cn } from "@/lib/cn";
 const TABS = [
   { seg: "", label: "Overview" },
   { seg: "modules", label: "Modules & Lessons" },
+  { seg: "public", label: "Public page" },
   { seg: "learners", label: "Learners" },
   { seg: "progress", label: "Progress" },
   { seg: "certification", label: "Certification" },
   { seg: "settings", label: "Settings" },
 ];
 
-/** The six Course Builder tabs. Lesson pages highlight "Modules & Lessons". */
+/** The Course Builder tabs. Lesson pages highlight "Modules & Lessons". */
 export function BuilderTabs({ courseId }: { courseId: string }) {
   const pathname = usePathname();
   const base = `/courses/manage/${courseId}`;

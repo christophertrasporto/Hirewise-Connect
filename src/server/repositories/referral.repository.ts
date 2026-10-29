@@ -3,7 +3,7 @@ import type { Db } from "@/server/db/types";
 
 /** Referral program queries: codes, clicks, attribution, flags, commissions, adjustments, and payouts. */
 
-const ELIGIBLE_ROLES = ["AGENT", "AGENCY_OWNER"] as const;
+const ELIGIBLE_ROLES = ["AGENT", "AGENCY_OWNER", "COACH"] as const;
 
 export const referralRepository = {
   // ---------------------------------------------------------------- users and codes
