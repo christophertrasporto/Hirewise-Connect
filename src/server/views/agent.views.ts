@@ -2,7 +2,14 @@ import type { Prisma } from "@/server/db/types";
 import type { agentSelfInclude } from "@/server/repositories/agent.repository";
 import { redactForClient, clientLabelFrom } from "@/lib/client-redaction";
 
+import { createHash } from "node:crypto";
+
 type AgentSelfRecord = Prisma.AgentProfileGetPayload<{ include: ReturnType<typeof agentSelfInclude> }>;
+
+/** A short cache-buster for the photo address, so a new upload shows at once. The storage key itself never leaves the server. */
+export function photoVersionOf(photoKey: string | null): string | null {
+  return photoKey ? createHash("sha1").update(photoKey).digest("hex").slice(0, 10) : null;
+}
 
 /** Client-safe certification: template name, validity, and only the scores the template allows (Section 6, footnote 3). */
 function certificationsForClient(a: AgentSelfRecord) {
@@ -56,7 +63,8 @@ export function toAgentSelfView(a: AgentSelfRecord) {
     headline: a.headline,
     primaryRole: a.primaryRole,
     summary: a.summary,
-    photoKey: a.photoKey,
+    hasPhoto: !!a.photoKey,
+    photoVersion: photoVersionOf(a.photoKey),
     yearsExperience: a.yearsExperience,
     experienceLevel: a.experienceLevel,
     locationCity: a.locationCity,
@@ -148,7 +156,6 @@ export function toCandidateClientView(a: AgentSelfRecord, opts: CandidateViewOpt
     headline: r(a.headline),
     primaryRole: a.primaryRole,
     summary: r(a.summary),
-    photoKey: a.photoKey,
     yearsExperience: a.yearsExperience,
     experienceLevel: a.experienceLevel,
     locationCountry: a.locationCountry,
@@ -192,7 +199,6 @@ export function toCandidateCardView(a: AgentSelfRecord, opts: CandidateViewOptio
     partnerTeam: partnerTeamFor(a),
     headline: r(a.headline),
     primaryRole: a.primaryRole,
-    photoKey: a.photoKey,
     yearsExperience: a.yearsExperience,
     experienceLevel: a.experienceLevel,
     locationCountry: a.locationCountry,

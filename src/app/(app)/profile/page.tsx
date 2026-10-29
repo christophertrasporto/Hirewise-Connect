@@ -6,6 +6,7 @@ import { requireActor } from "@/server/auth/require-actor";
 import { getOwnProfile, computeCompletion } from "@/server/services/agent.service";
 import { PageHeader, Card, StatusBadge, Banner } from "@/components/app/ui";
 import { SubmitProfile } from "@/components/profile/SubmitProfile";
+import { Avatar } from "@/components/profile/Avatar";
 import { labelFor } from "@/lib/options";
 
 export const metadata: Metadata = { title: "My profile" };
@@ -22,6 +23,11 @@ export default async function ProfileOverviewPage() {
       <PageHeader eyebrow="My profile" title={profile.displayName} description={<>{profile.headline ?? "Add a headline in the Professional section."} <span className="block text-[12.5px] text-ink-400">Clients see you as <span className="font-semibold text-ink-700">{profile.clientLabel}</span>{profile.partnerTeam ? <> of <span className="font-semibold text-ink-700">{profile.partnerTeam.name}</span></> : " (Hirewise Direct talent)"}; your full name is disclosed only by Hirewise.</span></>} actions={<><StatusBadge status={profile.status} /><StatusBadge status={profile.verificationLevel} /></>} />
 
       {profile.status === "REVISION_REQUIRED" && <div className="mb-6"><Banner tone="warn" title="Changes requested by Hirewise">Update the sections mentioned in your notification, then submit again.</Banner></div>}
+
+      <div className="mb-6 flex items-center gap-4">
+        <Avatar agentProfileId={profile.id} version={profile.photoVersion} name={profile.displayName} size={64} />
+        <Link href="/profile/resume" className="text-[13.5px] font-semibold text-brand-600 hover:text-brand-700">{profile.hasPhoto ? "Change profile photo" : "Add a profile photo"}</Link>
+      </div>
 
       <div className="grid gap-5 lg:grid-cols-[1.2fr_0.8fr]">
         <Card title={`Checklist · ${completion.total}% complete`} description="Submission needs 80% plus a résumé and a video introduction.">

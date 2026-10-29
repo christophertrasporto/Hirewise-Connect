@@ -8,6 +8,7 @@ export const FORBIDDEN_FOR_CLIENT = [
   "phone",
   "addressLine",
   "resumeKey",
+  "photoKey",
   "governmentIdRefs",
   "privateContact",
   "passwordHash",

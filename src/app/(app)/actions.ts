@@ -6,7 +6,7 @@ import { prisma } from "@/server/db/client";
 import { requireActor } from "@/server/auth/require-actor";
 import { toActionError, formList, formString, type ActionResult } from "@/server/http/action-result";
 import { personalSchema, professionalSchema, skillsSchema, experienceSchema, updatePersonal, updateProfessional, updateSkills, addExperience, removeExperience, submitForReview, reviewTransition } from "@/server/services/agent.service";
-import { createUploadUrl, uploadRequestSchema, confirmResumeUpload, confirmVideoUpload, confirmRecordingUpload, confirmPhotoUpload, recordingKindSchema, mediaDownloadUrl } from "@/server/services/media.service";
+import { createUploadUrl, uploadRequestSchema, confirmResumeUpload, confirmVideoUpload, confirmRecordingUpload, confirmPhotoUpload, removeOwnPhoto, recordingKindSchema, mediaDownloadUrl } from "@/server/services/media.service";
 import { activateClient } from "@/server/services/client.service";
 import { markNotificationRead } from "@/server/services/dashboard.service";
 import { addToShortlist, removeFromShortlist, setShortlistNote } from "@/server/services/shortlist.service";
@@ -155,6 +155,18 @@ export async function confirmUploadAction(input: { kind: string; key: string; du
       default:
         return { ok: false, error: "Unknown upload kind." };
     }
+    refreshProfile();
+    revalidatePath("/staff/talent", "layout");
+    return { ok: true };
+  } catch (e) {
+    return toActionError(e);
+  }
+}
+
+export async function removePhotoAction(): Promise<ActionResult> {
+  try {
+    const actor = await requireActor();
+    await removeOwnPhoto(prisma, actor);
     refreshProfile();
     revalidatePath("/staff/talent", "layout");
     return { ok: true };

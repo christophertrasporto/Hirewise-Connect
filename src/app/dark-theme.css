@@ -96,6 +96,9 @@
   :root[data-theme="dark"] .hover\:bg-brand-600:hover { background-color: #096b50; }
 }
 @media (hover: hover) {
+  :root[data-theme="dark"] .hover\:bg-brand-700:hover { background-color: var(--color-brand-700); }
+}
+@media (hover: hover) {
   :root[data-theme="dark"] .hover\:bg-gold-50:hover { background-color: rgb(232 180 76 / 0.13); }
 }
 @media (hover: hover) {

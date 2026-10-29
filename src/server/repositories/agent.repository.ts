@@ -121,7 +121,11 @@ export const agentRepository = {
     return db.experience.deleteMany({ where: { id: experienceId, agentProfileId } });
   },
 
-  setPhotoKey(db: Db, id: string, photoKey: string) {
+  photoKeyOf(db: Db, id: string) {
+    return db.agentProfile.findUnique({ where: { id, deletedAt: null }, select: { photoKey: true } });
+  },
+
+  setPhotoKey(db: Db, id: string, photoKey: string | null) {
     return db.agentProfile.update({ where: { id }, data: { photoKey } });
   },
 

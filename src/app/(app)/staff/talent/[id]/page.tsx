@@ -20,6 +20,7 @@ import { certificationRepository } from "@/server/repositories/certification.rep
 import { LEVELS } from "@/server/services/verification.service";
 import { IssueCertificationForm, VerificationForm, CertificationReviewActions } from "@/components/academy/CourseActions";
 import { Award } from "lucide-react";
+import { Avatar } from "@/components/profile/Avatar";
 import { incidentsForUser } from "@/server/services/incident.service";
 import { IncidentForm } from "@/components/phase5/IncidentForms";
 import { billingRatesForAgent, currentCompensationFor, compensationHistoryFor } from "@/server/services/rate.service";
@@ -60,6 +61,11 @@ export default async function StaffAgentPage({ params }: { params: Promise<{ id:
     <>
       <Link href="/staff/talent" className="mb-4 inline-flex items-center gap-1.5 text-[13.5px] font-medium text-ink-500 hover:text-ink-900"><ArrowLeft className="h-4 w-4" /> Back to pipeline</Link>
       <PageHeader eyebrow={a.primaryRole ?? "Talent"} title={a.displayName} description={a.headline ?? "No headline yet."} actions={<><StatusBadge status={a.status} /><StatusBadge status={a.verificationLevel} /><StatusBadge status={a.availabilityStatus} /></>} />
+
+      <div className="mb-5 flex items-center gap-3">
+        <Avatar agentProfileId={a.id} version={a.photoVersion} name={a.displayName} size={72} />
+        <span className="text-[13px] text-ink-500">{a.hasPhoto ? "Profile photo (visible to staff only)" : "No profile photo uploaded"}</span>
+      </div>
 
       <div className="grid gap-5 lg:grid-cols-[1.3fr_0.7fr]">
         <div className="space-y-5">
