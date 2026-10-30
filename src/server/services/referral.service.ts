@@ -29,10 +29,10 @@ export function hashIp(ip: string | null | undefined): string | null {
 
 /** Members who can refer: talent and agency owners. */
 export function canRefer(actor: Actor): boolean {
-  return actor.role === "AGENT" || actor.role === "AGENCY_OWNER";
+  return actor.role === "AGENT" || actor.role === "AGENCY_OWNER" || actor.role === "COACH";
 }
 export function assertCanRefer(actor: Actor): void {
-  if (!canRefer(actor)) throw new ForbiddenError("Only talent and agency owners have a referral link.");
+  if (!canRefer(actor)) throw new ForbiddenError("Only talent, coaches and agency owners have a referral link.");
 }
 
 export function referralLink(code: string): string {

@@ -57,7 +57,7 @@ export type CourseBuilderFields = {
   thumbnailKey: string | null;
 };
 
-export type CourseCreate = { currency?: string; code: string; title: string; category: string; description: string; syllabus: string | null; contentUrl: string | null; ownerCoachUserId: string; priceCents: number; passingScore: number; requiresCoachReview: boolean } & Partial<CourseBuilderFields>;
+export type CourseCreate = { currency?: string; slug?: string; code: string; title: string; category: string; description: string; syllabus: string | null; contentUrl: string | null; ownerCoachUserId: string; priceCents: number; passingScore: number; requiresCoachReview: boolean } & Partial<CourseBuilderFields>;
 
 export const academyRepository = {
   createCourse(db: Db, d: CourseCreate) {

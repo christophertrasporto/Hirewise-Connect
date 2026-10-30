@@ -5,7 +5,9 @@ import { listTemplatesForAdmin } from "@/server/services/academy.service";
 import { Card, Banner } from "@/components/app/ui";
 import { CourseForm } from "@/components/academy/CourseForm";
 import { CourseWorkflowButton } from "@/components/academy/CourseActions";
+import { getSetting } from "@/server/services/setting.service";
 import { loadBuilderCourse } from "./load";
+import { getPublicDetails } from "@/server/services/public-course.service";
 
 export const metadata: Metadata = { title: "Course overview" };
 
@@ -14,12 +16,14 @@ export default async function OverviewPage({ params }: { params: Promise<{ id: s
   const { actor, course } = await loadBuilderCourse(id);
   const isAdmin = actor.permissions.has("course.manage");
   const [categories, templates] = await Promise.all([listCategories(prisma), isAdmin ? listTemplatesForAdmin(prisma, actor) : Promise.resolve([])]);
+  const [{ requireApproval }, publicDetails] = await Promise.all([getSetting(prisma, "academy"), getPublicDetails(prisma, actor, id)]);
   const quizLessons = course.modules.flatMap((m) => m.lessons).filter((l) => l.contentType === "QUIZ" || l.contentType === "ASSESSMENT" || l.contentType === "AUDIO");
   const emptyQuizzes = quizLessons.filter((l) => l.questionCount === 0);
 
   return (
     <>
       {course.status === "DRAFT" && <div className="mb-6"><Banner tone="info" title="Draft">Build the modules and lessons, then submit the course. Admin links a certification template and publishes it to the catalog.</Banner></div>}
+      {course.status === "DRAFT" && publicDetails.reviewNote && <div className="mb-6"><Banner tone="warn" title="Hirewise sent this course back">{publicDetails.reviewNote}</Banner></div>}
       {course.status === "PENDING_APPROVAL" && <div className="mb-6"><Banner tone="warn" title="Waiting for Admin approval">You can keep editing everything in the meantime.</Banner></div>}
       {course.status === "PUBLISHED" && <div className="mb-6"><Banner tone="success" title="Live in the catalog">Everything stays editable. Saved changes reach enrolled learners immediately; their progress and past attempts are never erased.</Banner></div>}
       {emptyQuizzes.length > 0 && <div className="mb-6"><Banner tone="warn" title={`${emptyQuizzes.length} lesson${emptyQuizzes.length === 1 ? " has" : "s have"} no questions yet`}>{emptyQuizzes.map((l) => l.title).join(", ")}. Open the lesson to add questions.</Banner></div>}
@@ -31,7 +35,9 @@ export default async function OverviewPage({ params }: { params: Promise<{ id: s
         <div className="space-y-5">
           <Card title="Publishing">
             <div className="space-y-3">
-              {course.status === "DRAFT" && <CourseWorkflowButton courseId={course.id} op="SUBMIT" label="Submit for publishing" variant="primary" />}
+              {course.status === "DRAFT" && requireApproval && <CourseWorkflowButton courseId={course.id} op="SUBMIT" label="Submit for publishing" variant="primary" />}
+              {course.status === "DRAFT" && !requireApproval && !isAdmin && <CourseWorkflowButton courseId={course.id} op="PUBLISH_SELF" label="Publish to catalog" variant="primary" confirm="Publish this course now? It goes live straight away." />}
+              {isAdmin && course.status === "PENDING_APPROVAL" && <CourseWorkflowButton courseId={course.id} op="REJECT" label="Send back with a reason" variant="outline" reason="Tell the coach what to change" />}
               {isAdmin && (course.status === "PENDING_APPROVAL" || course.status === "DRAFT") && <CourseWorkflowButton courseId={course.id} op="PUBLISH" label="Publish to catalog" variant="dark" templates={templates.map((t) => ({ id: t.id, name: t.name }))} />}
               {isAdmin && course.status === "PUBLISHED" && <CourseWorkflowButton courseId={course.id} op="ARCHIVE" label="Archive course" variant="outline" confirm="Archive this course? Enrolled learners keep their progress but new enrolments stop." />}
               {course.status === "PUBLISHED" && !isAdmin && <p className="text-[13.5px] text-ink-500">Live in the catalog. Keep improving it here; contact Admin only to archive.</p>}

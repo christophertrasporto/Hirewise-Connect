@@ -513,7 +513,8 @@ describe("a coach sees only their own money", () => {
     const one = all.sales[0].courseId;
     const byCourse = await myWallet(db, coach1(), { courseId: one });
     expect(byCourse.sales.every((s) => s.courseId === one)).toBe(true);
-    const today = new Date().toISOString().slice(0, 10);
+    // Wallet date filters are Manila days (+08:00), so "today" is the Manila date, not the UTC one.
+    const today = new Date(Date.now() + 8 * 3_600_000).toISOString().slice(0, 10);
     expect((await myWallet(db, coach1(), { from: today, to: today })).sales.length).toBe(all.sales.length);
     expect((await myWallet(db, coach1(), { from: "2020-01-01", to: "2020-01-02" })).sales).toHaveLength(0);
     const csv = await myWalletCsv(db, coach1(), { courseId: one });

@@ -137,6 +137,8 @@ export const SETTING_SCHEMAS = {
       showBuyerEmail: z.boolean().default(false),
     })
     .default(() => ({ coachShareBps: 6000, refundWindowDays: 14, holdBufferDays: 7, minimumWithdrawalMinor: 50_000, showBuyerEmail: false })),
+  /** Public Academy. With requireApproval off, a coach publishes their own course (it still needs a published lesson). */
+  academy: z.object({ requireApproval: z.boolean().default(true) }).default(() => ({ requireApproval: true })),
   /** Promo codes: a use reserved on an unpaid enrolment is released after this many days. */
   promos: z.object({ reservationDays: z.number().int().min(1).max(90).default(7) }).default(() => ({ reservationDays: 7 })),
   /** Referral affiliate program. Money is integer minor units of payoutCurrency (USD cents by default). */

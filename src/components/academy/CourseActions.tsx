@@ -5,7 +5,7 @@ import { courseWorkflowAction, recordAssessmentAction, recordCoursePaymentAction
 import { idle } from "@/server/http/action-result";
 import { Field, Input, Select, Textarea, Checkbox, SubmitButton, FormAlert } from "@/components/ui/Form";
 
-export function CourseWorkflowButton({ courseId, op, label, variant = "dark", confirm, templates }: { courseId: string; op: "SUBMIT" | "PUBLISH" | "ARCHIVE" | "RESTORE"; label: string; variant?: "dark" | "primary" | "outline" | "danger"; confirm?: string; templates?: Array<{ id: string; name: string }>; }) {
+export function CourseWorkflowButton({ courseId, op, label, variant = "dark", confirm, templates, reason }: { courseId: string; op: "SUBMIT" | "PUBLISH" | "PUBLISH_SELF" | "REJECT" | "ARCHIVE" | "RESTORE"; label: string; variant?: "dark" | "primary" | "outline" | "danger"; confirm?: string; templates?: Array<{ id: string; name: string }>; /** Asks for a reason first (used by Reject). */ reason?: string }) {
   const [state, action] = useActionState(courseWorkflowAction, idle);
   return (
     <form action={action} className="space-y-2" onSubmit={(e) => { if (confirm && !window.confirm(confirm)) e.preventDefault(); }}>
@@ -17,6 +17,7 @@ export function CourseWorkflowButton({ courseId, op, label, variant = "dark", co
           {templates.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
         </Select>
       )}
+      {reason !== undefined && <Textarea name="reason" rows={3} placeholder={reason} aria-label="Reason" className="text-[13.5px]" />}
       <SubmitButton variant={variant} pendingText="Working…" className="h-10 text-[13.5px]">{label}</SubmitButton>
       {state.error && <FormAlert>{state.error}</FormAlert>}
       {state.ok && <FormAlert tone="success">Done.</FormAlert>}

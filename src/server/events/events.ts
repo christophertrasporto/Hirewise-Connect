@@ -31,6 +31,7 @@ export type DomainEventMap = {
   // Phase 3
   COURSE_SUBMITTED_FOR_APPROVAL: { courseId: string; title: string; coachUserId: string; priceCents: number };
   COURSE_PUBLISHED: { courseId: string; title: string; coachUserId: string };
+  COURSE_REJECTED: { courseId: string; title: string; coachUserId: string; reason: string };
   COURSE_ENROLLED: { courseId: string; title: string; agentProfileId: string; agentUserId: string; coachUserIds: string[]; paymentRequired: boolean; priceCents: number };
   COURSE_PAYMENT_RECORDED: { enrollmentId: string; courseTitle: string; agentUserId: string; agentEmail: string; waived: boolean };
   COURSE_COMPLETED: { courseId: string; title: string; agentProfileId: string; agentUserId: string; agentEmail: string; displayName: string; examScore: number | null; coachUserIds: string[]; coachReviewRequired: boolean };
