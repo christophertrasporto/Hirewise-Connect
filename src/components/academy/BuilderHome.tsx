@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Plus, Tags, Users, Wallet, Award, PlayCircle, LayoutList, BarChart3 } from "lucide-react";
+import { Plus, Tags, Users, Wallet, Award, PlayCircle, LayoutList, BarChart3, KeyRound } from "lucide-react";
 import type { Actor } from "@/server/auth/actor";
 import { can } from "@/server/policies/authorize";
 import type { listCoursesForCoach } from "@/server/services/academy.service";
@@ -22,6 +22,7 @@ export function BuilderHome({ actor, courses }: { actor: Actor; courses: Builder
     manages ? { href: "/staff/academy", label: pending ? `Approvals (${pending})` : "Approvals", icon: PlayCircle } : null,
     manages ? { href: "/courses/manage/categories", label: "Categories", icon: Tags } : null,
     can(actor, "course.payment.record") ? { href: "/staff/academy/payments", label: "Payments", icon: Wallet } : null,
+    can(actor, "course.payment.record") ? { href: "/staff/academy/access-codes", label: "Access codes", icon: KeyRound } : null,
     can(actor, "certification.review") ? { href: "/staff/academy/certifications", label: "Certifications", icon: Award } : null,
     manages ? { href: "/staff/academy/onboarding", label: "Onboarding", icon: LayoutList } : null,
   ].filter((l): l is { href: string; label: string; icon: typeof Users } => !!l);
