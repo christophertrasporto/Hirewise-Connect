@@ -24,6 +24,7 @@ import { applyPromoTx, consumePromoTx, promoForEnrollment } from "./promo.servic
 import { recordEarningForPaymentTx, reverseEarningForRefundTx } from "./wallet.service";
 import { parseMoneyToMinor } from "@/lib/coach-wallet";
 import { recordLessonVersion, changedFields } from "./lesson-version.service";
+import { UserMessageError } from "@/server/policies/user-message-error";
 import { newSlug } from "./slug.service";
 import { getSetting } from "./setting.service";
 import { categoryRepository } from "@/server/repositories/category.repository";
@@ -245,10 +246,10 @@ export async function publishCourse(db: PrismaClient, actor: Actor, courseId: st
 export async function rejectCourse(db: PrismaClient, actor: Actor, courseId: string, reason: string) {
   authorize(actor, "course.manage");
   const why = reason.trim();
-  if (why.length < 5) throw new Error("Tell the coach what to change (at least 5 characters).");
+  if (why.length < 5) throw new UserMessageError("Tell the coach what to change (at least 5 characters).");
   const c = await academyRepository.findCourse(db, courseId);
   if (!c) throw new NotFoundError();
-  if (c.status !== "PENDING_APPROVAL") throw new Error("Only a course waiting for approval can be sent back.");
+  if (c.status !== "PENDING_APPROVAL") throw new UserMessageError("Only a course waiting for approval can be sent back.");
   await db.$transaction(async (tx) => {
     await academyRepository.setCourseStatus(tx, c.id, "DRAFT");
     await publicAcademyRepository.setReviewNote(tx, c.id, why.slice(0, 1000));
@@ -264,8 +265,8 @@ export async function rejectCourse(db: PrismaClient, actor: Actor, courseId: str
 export async function publishOwnCourse(db: PrismaClient, actor: Actor, courseId: string) {
   const c = await loadEditableCourse(db, actor, courseId);
   if ((await getSetting(db, "academy")).requireApproval) throw new ForbiddenError("Courses need Hirewise approval before they go live");
-  if (c.status !== "DRAFT") throw new Error("Only a draft course can be published.");
-  if (publishedLessonCount(c) === 0) throw new Error("Add at least one published lesson in a published module before publishing.");
+  if (c.status !== "DRAFT") throw new UserMessageError("Only a draft course can be published.");
+  if (publishedLessonCount(c) === 0) throw new UserMessageError("Add at least one published lesson in a published module before publishing.");
   await db.$transaction(async (tx) => {
     await academyRepository.setCourseStatus(tx, c.id, "PUBLISHED", { publishedById: actor.userId, publishedAt: new Date() });
     if (c.reviewNote) await publicAcademyRepository.setReviewNote(tx, c.id, null);

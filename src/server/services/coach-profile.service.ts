@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { UserMessageError } from "@/server/policies/user-message-error";
 import type { Db, PrismaClient } from "@/server/db/types";
 import type { Actor } from "@/server/auth/actor";
 import { authorize } from "@/server/policies/authorize";
@@ -42,7 +43,7 @@ export async function saveOwnCoachProfile(db: PrismaClient, actor: Actor, raw: C
   if (!existing) {
     if (input.slug) {
       const problem = await slugError(db, "COACH", input.slug);
-      if (problem) throw new Error(problem);
+      if (problem) throw new UserMessageError(problem);
     }
     return db.$transaction(async (tx) => {
       const slug = input.slug || (await newSlug(tx, "COACH", input.displayName));
@@ -55,7 +56,7 @@ export async function saveOwnCoachProfile(db: PrismaClient, actor: Actor, raw: C
   const nextSlug = input.slug || existing.slug;
   if (nextSlug !== existing.slug) {
     const problem = await slugError(db, "COACH", nextSlug, existing.id);
-    if (problem) throw new Error(problem);
+    if (problem) throw new UserMessageError(problem);
   }
   return db.$transaction(async (tx) => {
     if (nextSlug !== existing.slug) await retireSlugTx(tx, "COACH", existing.id, existing.slug, nextSlug);
