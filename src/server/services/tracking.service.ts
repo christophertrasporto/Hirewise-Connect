@@ -1,4 +1,5 @@
 import type { PrismaClient } from "@/server/db/types";
+import { isQuizLesson } from "@/lib/lesson-questions";
 import type { Actor } from "@/server/auth/actor";
 import { authorize } from "@/server/policies/authorize";
 
@@ -42,7 +43,7 @@ export async function learnerTracking(db: PrismaClient, actor: Actor, f: Trackin
   const courses = await db.academyCourse.findMany({
     where: { ...(f.courseId ? { id: f.courseId } : {}), ...(scopeCoach ? { OR: [{ ownerCoachUserId: scopeCoach }, { coaches: { some: { coachUserId: scopeCoach } } }] } : {}) },
     orderBy: { title: "asc" },
-    select: { id: true, title: true, ownerCoachUserId: true, ownerCoach: { select: { email: true } }, modules: { where: { status: "PUBLISHED" }, orderBy: { order: "asc" }, select: { id: true, title: true, lessons: { where: { status: "PUBLISHED" }, orderBy: { order: "asc" }, select: { id: true, title: true, contentType: true, isRequired: true } } } } },
+    select: { id: true, title: true, ownerCoachUserId: true, ownerCoach: { select: { email: true } }, modules: { where: { status: "PUBLISHED" }, orderBy: { order: "asc" }, select: { id: true, title: true, lessons: { where: { status: "PUBLISHED" }, orderBy: { order: "asc" }, select: { id: true, title: true, contentType: true, isRequired: true, _count: { select: { questions: true } } } } } } },
   });
   const coaches = [...new Map(courses.map((c) => [c.ownerCoachUserId, { userId: c.ownerCoachUserId, label: c.ownerCoach.email.split("@")[0] }])).values()].sort((a, b) => a.label.localeCompare(b.label));
   const courseOptions = courses.map((c) => ({ id: c.id, title: c.title }));
@@ -75,7 +76,7 @@ export async function learnerTracking(db: PrismaClient, actor: Actor, f: Trackin
     const mySubs = submissions.filter((s) => s.agentProfileId === e.agentProfileId && lessons.some((l) => l.id === s.lessonId));
     const audio = lessons.filter((l) => l.contentType === "AUDIO");
     const listeningPercent = audio.length ? Math.round(audio.reduce((s, l) => s + (lp.get(l.id)?.mediaPercent ?? 0), 0) / audio.length) : null;
-    const quizzes = lessons.filter((l) => QUESTION_TYPES.has(l.contentType)).map((l) => {
+    const quizzes = lessons.filter((l) => QUESTION_TYPES.has(l.contentType) || isQuizLesson(l.contentType, l._count.questions)).map((l) => {
       const at = myAttempts.filter((a) => a.lessonId === l.id);
       const scored = at.filter((a) => a.scorePercent !== null).map((a) => a.scorePercent as number);
       return { lessonId: l.id, title: l.title, best: scored.length ? Math.max(...scored) : null, passed: at.some((a) => a.passed === true), attempts: at.length, pendingReview: at.some((a) => a.status === "PENDING_REVIEW") };

@@ -106,7 +106,7 @@ export async function recalculateCourseProgress(db: Db, courseId: string, agentP
   if (!allDone || enrollment.completion) return { requiredTotal: required.length, requiredDone, percent, completedNow: false };
 
   // Best quiz score across the course's question-bearing lessons feeds the certification rules.
-  const quizLessonIds = orderedLessons(course).filter((l) => l.contentType === "QUIZ" || l.contentType === "ASSESSMENT" || l.contentType === "AUDIO").map((l) => l.id);
+  const quizLessonIds = orderedLessons(course).filter((l) => l.contentType === "QUIZ" || l.contentType === "ASSESSMENT" || l.contentType === "AUDIO" || l.contentType === "VIDEO").map((l) => l.id);
   const best = quizLessonIds.length ? await db.quizAttempt.aggregate({ where: { agentProfileId, lessonId: { in: quizLessonIds }, scorePercent: { not: null } }, _max: { scorePercent: true } }) : null;
   const examScore = best?._max.scorePercent ?? null;
   const system = systemActor();

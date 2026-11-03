@@ -520,7 +520,8 @@ function normaliseLesson(input: LessonParsed): LessonWrite {
   const num = (x: number | "" | undefined) => (x === undefined || x === "" ? null : x);
   const t = input.contentType;
   const file = t === "AUDIO" || t === "DOCUMENT" || (t === "VIDEO" && !!input.storageKey);
-  const quiz = QUESTION_TYPES.includes(t);
+  // A video may carry an optional quiz, so it keeps the quiz settings too.
+  const quiz = QUESTION_TYPES.includes(t) || t === "VIDEO";
   return {
     title: input.title,
     contentType: t,

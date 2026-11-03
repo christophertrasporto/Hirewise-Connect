@@ -1,4 +1,5 @@
 import type { Prisma } from "@/server/db/types";
+import { isQuizLesson } from "@/lib/lesson-questions";
 import type { courseInclude } from "@/server/repositories/academy.repository";
 
 type CourseRecord = Prisma.AcademyCourseGetPayload<{ include: ReturnType<typeof courseInclude> }>;
@@ -45,7 +46,7 @@ export function toCourseAgentView(c: CourseRecord, unlocked = false) {
     passingScore: c.passingScore,
     certification: c.certificationTemplate ? { id: c.certificationTemplate.id, name: c.certificationTemplate.name } : null,
     coach: c.ownerCoach.email.split("@")[0],
-    quizCount: visibleModules(c).reduce((n, m) => n + m.lessons.filter((l) => l.contentType === "QUIZ" || l.contentType === "ASSESSMENT" || l.contentType === "AUDIO").length, 0),
+    quizCount: visibleModules(c).reduce((n, m) => n + m.lessons.filter((l) => isQuizLesson(l.contentType, l._count.questions)).length, 0),
     questionCount: visibleModules(c).reduce((n, m) => n + m.lessons.reduce((k, l) => k + l._count.questions, 0), 0),
     introVideoUrl: c.introVideoUrl,
     welcomeMessage: unlocked ? c.welcomeMessage : null,

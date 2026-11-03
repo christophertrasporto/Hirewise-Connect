@@ -34,7 +34,7 @@ export default async function LessonPage({ params, searchParams }: { params: Pro
     throw e;
   }
   const meta = LESSON_TYPE_META[lesson.contentType];
-  const hasQuestions = lesson.contentType === "QUIZ" || lesson.contentType === "ASSESSMENT" || lesson.contentType === "AUDIO";
+  const hasQuestions = lesson.contentType === "QUIZ" || lesson.contentType === "ASSESSMENT" || lesson.contentType === "AUDIO" || lesson.contentType === "VIDEO";
   const modules = course.modules.map((m) => ({ id: m.id, title: m.title }));
   const value = {
     id: lesson.id, title: lesson.title, contentType: lesson.contentType, description: lesson.description, body: lesson.body, url: lesson.url, fileName: lesson.fileName, contentMime: lesson.contentMime, sizeBytes: lesson.sizeBytes, durationSec: lesson.durationSec, hasFile: !!lesson.storageKey,

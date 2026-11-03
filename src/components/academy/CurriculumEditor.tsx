@@ -147,7 +147,7 @@ export function LessonForm({ courseId, modules, moduleId, lesson, onDone, sectio
   }, [state.ok]);
   const uploadKind = UPLOAD_KINDS[type] ?? null;
   const needsFile = type === "AUDIO" || type === "DOCUMENT";
-  const isQuiz = QUESTION_TYPES.includes(type);
+  const isQuiz = QUESTION_TYPES.includes(type) || type === "VIDEO";
   const isMedia = MEDIA_TYPES.includes(type);
   const uid = lesson?.id ?? `new-${moduleId}`;
   const showContent = section !== "settings";
@@ -310,7 +310,7 @@ export function LessonForm({ courseId, modules, moduleId, lesson, onDone, sectio
           )}
           {isQuiz && (
             <>
-              <p className="text-[13px] text-ink-500">{type === "AUDIO" ? "Quiz after listening. Questions are built on the lesson page." : "Questions are built on the lesson page."}</p>
+              <p className="text-[13px] text-ink-500">{type === "AUDIO" ? "Quiz after listening. Questions are built on the lesson page." : type === "VIDEO" ? "Optional quiz after watching. A video with no questions stays a plain video. Add questions on the lesson page; they open once the learner has watched the required share (straight away for a video link that cannot be measured)." : "Questions are built on the lesson page."}</p>
               <div className="grid gap-3 sm:grid-cols-3">
                 <Field label="Passing score (%)" htmlFor={`l-pass-${uid}`} error={fe.passingScore}><Input id={`l-pass-${uid}`} name="passingScore" type="number" min={1} max={100} defaultValue={lesson?.passingScore ?? 70} invalid={!!fe.passingScore} /></Field>
                 <Field label="Attempts (blank = unlimited)" htmlFor={`l-att-${uid}`} error={fe.maxAttempts}><Input id={`l-att-${uid}`} name="maxAttempts" type="number" min={1} max={100} defaultValue={lesson?.maxAttempts ?? ""} /></Field>
@@ -379,7 +379,7 @@ function LessonRow({ courseId, modules, module, lesson, index, count, dnd }: { c
   const meta = LESSON_TYPE_META[lesson.contentType];
   const Icon = meta.icon;
   if (editing) return <li className="py-3"><LessonForm courseId={courseId} modules={modules} moduleId={module.id} lesson={lesson} onDone={() => setEditing(false)} /></li>;
-  const needsQuestions = QUESTION_TYPES.includes(lesson.contentType);
+  const needsQuestions = QUESTION_TYPES.includes(lesson.contentType) || (lesson.contentType === "VIDEO" && lesson.questionCount > 0);
   const detail = [
     lesson.contentType === "TEXT" ? `${(lesson.body ?? "").split(/\s+/).filter(Boolean).length} words` : null,
     lesson.hasFile ? [lesson.fileName, fmtBytes(lesson.sizeBytes), fmtDuration(lesson.durationSec)].filter(Boolean).join(" · ") : null,

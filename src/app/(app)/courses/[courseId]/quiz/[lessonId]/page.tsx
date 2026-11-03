@@ -29,7 +29,7 @@ export default async function QuizPage({ params }: { params: Promise<{ courseId:
   return (
     <>
       <Link href={`/courses/${courseId}`} className="mb-4 inline-flex items-center gap-1.5 text-[13.5px] font-medium text-ink-500 hover:text-ink-900"><ArrowLeft className="h-4 w-4" /> {l.courseTitle}</Link>
-      <PageHeader eyebrow={l.contentType === "ASSESSMENT" ? "Assessment" : l.contentType === "AUDIO" ? "Audiobook quiz" : "Quiz"} title={l.title} description={l.description ?? `${l.questionCount} question${l.questionCount === 1 ? "" : "s"} · pass at ${l.passingScore}%${l.timeLimitMin ? ` · ${l.timeLimitMin} minutes` : ""} · ${l.maxAttempts ? `${l.maxAttempts} attempt${l.maxAttempts === 1 ? "" : "s"}` : "unlimited attempts"}`} />
+      <PageHeader eyebrow={l.contentType === "ASSESSMENT" ? "Assessment" : l.contentType === "AUDIO" ? "Audiobook quiz" : l.contentType === "VIDEO" ? "Video quiz" : "Quiz"} title={l.title} description={l.description ?? `${l.questionCount} question${l.questionCount === 1 ? "" : "s"} · pass at ${l.passingScore}%${l.timeLimitMin ? ` · ${l.timeLimitMin} minutes` : ""} · ${l.maxAttempts ? `${l.maxAttempts} attempt${l.maxAttempts === 1 ? "" : "s"}` : "unlimited attempts"}`} />
 
       {s.passed && <div className="mb-6"><Banner tone="success" title={`Passed${s.progress?.completedAt ? ` · ${fmtDate(s.progress.completedAt)}` : ""}`}>Your counting score is {s.countingScore ?? "—"}% ({l.scorePolicy === "LATEST" ? "latest attempt" : "highest attempt"}).{s.canStart ? " You can still retake it." : ""}</Banner></div>}
 

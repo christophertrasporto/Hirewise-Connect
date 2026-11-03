@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { youTubeId } from "@/lib/video-url";
 import type { PrismaClient, Prisma } from "@/server/db/types";
 import type { Actor } from "@/server/auth/actor";
 import { authorize, ForbiddenError, NotFoundError } from "@/server/policies/authorize";
@@ -17,7 +18,7 @@ import { recordLessonVersion } from "./lesson-version.service";
  * edits never rewrite a result. Learner projections never contain correct answers before submission.
  */
 export const QUESTION_TYPES = ["MULTIPLE_CHOICE", "MULTIPLE_SELECT", "TRUE_FALSE", "SHORT_ANSWER"] as const;
-export const QUESTION_LESSON_TYPES = ["QUIZ", "ASSESSMENT", "AUDIO"] as const;
+export const QUESTION_LESSON_TYPES = ["QUIZ", "ASSESSMENT", "AUDIO", "VIDEO"] as const;
 const optionalText = (max: number) => z.string().trim().max(max).optional().or(z.literal(""));
 
 export const questionSchema = z
@@ -233,10 +234,12 @@ export async function quizStateForLearner(db: PrismaClient, actor: Actor, lesson
   const attemptsLeft = lesson.maxAttempts === null ? null : Math.max(0, lesson.maxAttempts - finished.length);
   const lastSubmitted = finished[0]?.submittedAt ?? null;
   const waitUntil = lesson.retakeWaitMinutes && lastSubmitted ? new Date(lastSubmitted.getTime() + lesson.retakeWaitMinutes * 60_000) : null;
-  const audioGate = lesson.contentType === "AUDIO" && !progress?.mediaCompletedAt;
+  // Audio, and a video the player can measure (an upload or YouTube), must be played to the required share before the
+  // questions open. A video link whose playback cannot be measured opens them straight away.
+  const mediaGate = !progress?.mediaCompletedAt && (lesson.contentType === "AUDIO" || (lesson.contentType === "VIDEO" && (!!lesson.storageKey || !!youTubeId(lesson.url))));
   let blocked: string | null = null;
   if (published.length === 0) blocked = "The coach has not published any questions yet.";
-  else if (audioGate) blocked = `Finish listening to at least ${lesson.requiredPercent ?? 90}% of the audio to unlock the quiz.`;
+  else if (mediaGate) blocked = lesson.contentType === "VIDEO" ? `Watch at least ${lesson.requiredPercent ?? 90}% of the video to unlock the quiz.` : `Finish listening to at least ${lesson.requiredPercent ?? 90}% of the audio to unlock the quiz.`;
   else if (!open && attemptsLeft === 0) blocked = `You have used all ${lesson.maxAttempts} attempts. Ask your coach about a retake.`;
   else if (!open && waitUntil && waitUntil.getTime() > Date.now()) blocked = `You can retake this quiz after ${waitUntil.toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" })}.`;
   return {

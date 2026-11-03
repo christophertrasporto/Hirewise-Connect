@@ -90,7 +90,8 @@ function LessonBody({ lesson, courseId, progress, submission }: { lesson: Lesson
   const trackable = !!courseId;
   const done = progress?.status === "COMPLETED";
   const initial = { percent: progress?.mediaPercent ?? 0, positionSec: progress?.lastPositionSec ?? 0, mediaCompleted: !!progress?.mediaCompletedAt, status: progress?.status ?? "NOT_STARTED" };
-  const selfMarked = lesson.contentType === "TEXT" || lesson.contentType === "LINK" || lesson.contentType === "DOCUMENT" || (lesson.contentType === "VIDEO" && !lesson.hasFile && !yt);
+  const videoQuiz = lesson.contentType === "VIDEO" && (lesson.questionCount ?? 0) > 0;
+  const selfMarked = !videoQuiz && (lesson.contentType === "TEXT" || lesson.contentType === "LINK" || lesson.contentType === "DOCUMENT" || (lesson.contentType === "VIDEO" && !lesson.hasFile && !yt));
   return (
     <div className="mt-3 space-y-3">
       {lesson.description && <p className="text-[13.5px] text-ink-500">{lesson.description}</p>}
@@ -117,6 +118,11 @@ function LessonBody({ lesson, courseId, progress, submission }: { lesson: Lesson
       {lesson.contentType === "ASSIGNMENT" && !courseId && <p className="text-[12.5px] text-ink-400">Learners submit {lesson.submissionType === "TEXT" ? "a written answer" : lesson.submissionType === "URL" ? "a link" : lesson.submissionType === "DOCUMENT" ? "a file" : "a note, link, or file"} here{lesson.dueAt ? ` by ${new Date(lesson.dueAt).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" })}` : ""}.</p>}
       {selfMarked && courseId && !done && <MarkCompleteButton lessonId={lesson.id} courseId={courseId} label={lesson.contentType === "VIDEO" ? "Mark as watched" : lesson.contentType === "TEXT" ? "Mark as read" : "Mark as done"} />}
       {(lesson.contentType === "QUIZ" || lesson.contentType === "ASSESSMENT") && lesson.body && <p className="whitespace-pre-line text-[13.5px] leading-relaxed text-ink-600">{lesson.body}</p>}
+      {videoQuiz && quizHref && (
+        <Link href={quizHref} className="inline-flex h-10 items-center gap-1.5 rounded-full bg-ink-900 px-4 text-[13.5px] font-semibold text-white hover:bg-ink-800">
+          Open the quiz <ArrowRight className="h-4 w-4" />
+        </Link>
+      )}
       {QUIZ_LINK_TYPES.includes(lesson.contentType) && quizHref && (
         <Link href={quizHref} className="inline-flex h-10 items-center gap-1.5 rounded-full bg-ink-900 px-4 text-[13.5px] font-semibold text-white hover:bg-ink-800">
           {lesson.contentType === "ASSESSMENT" ? "Open the assessment" : "Open the quiz"} <ArrowRight className="h-4 w-4" />
@@ -162,7 +168,7 @@ export function LessonContent({ modules, courseId, progress = {}, submissions = 
                       <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full ring-1 ring-inset ${done ? "bg-brand-50 text-brand-600 ring-brand-200" : "bg-ink-50 text-ink-500 ring-ink-100"}`}>{done ? <CheckCircle2 className="h-4 w-4" /> : <I className="h-4 w-4" />}</span>
                       <span className="min-w-0 flex-1">
                         <span className="block text-[14.5px] font-semibold text-ink-900">{j + 1}. {l.title}</span>
-                        <span className="block text-[12.5px] text-ink-400">{LESSON_TYPE_META[l.contentType].label}{l.durationSec ? ` · ${fmtDuration(l.durationSec)}` : ""}{QUESTION_TYPES.includes(l.contentType) && l.questionCount !== undefined ? ` · ${l.questionCount} question${l.questionCount === 1 ? "" : "s"}` : ""}{l.isRequired === false ? " · optional" : ""}</span>
+                        <span className="block text-[12.5px] text-ink-400">{LESSON_TYPE_META[l.contentType].label}{l.durationSec ? ` · ${fmtDuration(l.durationSec)}` : ""}{(QUESTION_TYPES.includes(l.contentType) || (l.contentType === "VIDEO" && (l.questionCount ?? 0) > 0)) && l.questionCount !== undefined ? ` · ${l.questionCount} question${l.questionCount === 1 ? "" : "s"}` : ""}{l.isRequired === false ? " · optional" : ""}</span>
                       </span>
                       <StatusChip status={p?.status} />
                       {l.isRequired !== false && !done && <Lock className="h-3.5 w-3.5 text-ink-200" aria-hidden="true" />}

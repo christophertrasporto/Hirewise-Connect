@@ -32,7 +32,7 @@ export type CourseCard = {
   revoked: boolean;
 };
 
-const QUESTION_TYPES = new Set(["QUIZ", "ASSESSMENT", "AUDIO"]);
+const QUESTION_TYPES = new Set(["QUIZ", "ASSESSMENT", "AUDIO", "VIDEO"]);
 const TYPE_LABEL: Record<string, string> = { VIDEO: "Video", AUDIO: "Audiobook", LINK: "Link", DOCUMENT: "Document", TEXT: "Reading", QUIZ: "Quiz", ASSIGNMENT: "Assignment", ASSESSMENT: "Assessment" };
 
 function ownProfileId(actor: Actor) {
@@ -71,7 +71,13 @@ export async function myCourses(db: PrismaClient, actor: Actor): Promise<{ cards
       if (p.status === "PENDING_REVIEW") return "Quiz awaiting review";
       return "Quiz pending";
     }
-    if (l.contentType === "VIDEO") return p ? (p.mediaPercent ? `Watching, ${p.mediaPercent}%` : "In progress") : "Not started";
+    if (l.contentType === "VIDEO") {
+      // A video with a quiz: the quiz states only appear once there is a quiz status or the watching is finished but the lesson is not.
+      if (p?.status === "RETAKE_REQUIRED" || p?.status === "FAILED") return "Quiz: retake";
+      if (p?.status === "PENDING_REVIEW") return "Quiz awaiting review";
+      if (p?.mediaCompletedAt && p.status !== "COMPLETED") return "Quiz pending";
+      return p ? (p.mediaPercent ? `Watching, ${p.mediaPercent}%` : "In progress") : "Not started";
+    }
     if (l.contentType === "ASSIGNMENT") return sub === "SUBMITTED" ? "Awaiting review" : sub === "RETURNED" ? "Returned for changes" : "Not submitted";
     if (QUESTION_TYPES.has(l.contentType)) return p?.status === "RETAKE_REQUIRED" || p?.status === "FAILED" ? "Retake required" : p?.status === "PENDING_REVIEW" ? "Awaiting review" : p ? "In progress" : "Not started";
     return p ? "In progress" : "Not started";
@@ -91,7 +97,7 @@ export async function myCourses(db: PrismaClient, actor: Actor): Promise<{ cards
     if (paymentPending) actions.push({ label: `Pay ${priceLabel(e.priceCents, e.currency)} to unlock`, lessonId: null });
     for (const l of lessons) {
       const p = lp.get(l.id);
-      if (p && (p.status === "RETAKE_REQUIRED" || p.status === "FAILED") && QUESTION_TYPES.has(l.contentType)) actions.push({ label: `Retake the ${l.contentType === "AUDIO" ? "audiobook quiz" : TYPE_LABEL[l.contentType].toLowerCase()}: ${l.title}`, lessonId: l.id });
+      if (p && (p.status === "RETAKE_REQUIRED" || p.status === "FAILED") && QUESTION_TYPES.has(l.contentType)) actions.push({ label: `Retake the ${l.contentType === "AUDIO" ? "audiobook quiz" : l.contentType === "VIDEO" ? "video quiz" : TYPE_LABEL[l.contentType].toLowerCase()}: ${l.title}`, lessonId: l.id });
       if (l.contentType === "ASSIGNMENT" && latestSub.get(l.id) === "RETURNED") actions.push({ label: `Resubmit: ${l.title}`, lessonId: l.id });
     }
     const cert = certs.find((c) => c.courseId === e.courseId) ?? null;
