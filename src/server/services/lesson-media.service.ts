@@ -65,7 +65,7 @@ export function audioStatusOf(p: { progress: { status: string; mediaSeconds: num
 
 async function buildState(db: PrismaClient, lesson: MediaLesson, profileId: string) {
   const progress = await quizRepository.progress(db, lesson.id, profileId);
-  const questionCount = lesson.contentType === "AUDIO" ? (await quizRepository.listForLesson(db, lesson.id, "PUBLISHED")).length : 0;
+  const questionCount = lesson.contentType === "AUDIO" || lesson.contentType === "VIDEO" ? (await quizRepository.listForLesson(db, lesson.id, "PUBLISHED")).length : 0;
   const latestAttempt = questionCount ? ((await quizRepository.attemptsFor(db, lesson.id, profileId))[0] ?? null) : null;
   const requiredPercent = lesson.requiredPercent ?? DEFAULT_REQUIRED_PERCENT;
   return {
@@ -108,7 +108,7 @@ export async function recordMediaProgress(db: PrismaClient, actor: Actor, lesson
   const requiredPercent = lesson.requiredPercent ?? DEFAULT_REQUIRED_PERCENT;
   const { seconds: mediaSeconds, percent, reached } = creditPlayback({ existingSeconds: existing?.mediaSeconds ?? 0, deltaSec: input.playedDeltaSec, elapsedMs: input.elapsedMs, playbackRate: input.playbackRate, durationSec, requiredPercent });
   const nowAudioDone = !existing?.mediaCompletedAt && reached;
-  const questionCount = lesson.contentType === "AUDIO" ? (await quizRepository.listForLesson(db, lesson.id, "PUBLISHED")).length : 0;
+  const questionCount = lesson.contentType === "AUDIO" || lesson.contentType === "VIDEO" ? (await quizRepository.listForLesson(db, lesson.id, "PUBLISHED")).length : 0;
   const completesLesson = nowAudioDone && questionCount === 0 && !existing?.completedAt;
   await db.$transaction(async (tx) => {
     await quizRepository.upsertProgress(tx, lesson.id, profileId, {
@@ -162,6 +162,8 @@ export async function startLesson(db: PrismaClient, actor: Actor, lessonId: stri
 export async function markLessonComplete(db: PrismaClient, actor: Actor, lessonId: string) {
   const { profileId, lesson } = await learnerLesson(db, actor, lessonId);
   if (!isSelfMarked(lesson)) throw new Error("This lesson is completed by finishing its content, not by marking it.");
+  // A video that has questions is completed by passing them, whether or not the player can measure it.
+  if (lesson.contentType === "VIDEO" && (await quizRepository.listForLesson(db, lesson.id, "PUBLISHED")).length > 0) throw new Error("This lesson is completed by passing its quiz, not by marking it.");
   const existing = await quizRepository.progress(db, lesson.id, profileId);
   if (existing?.completedAt) return { completed: true, coursePercent: null as number | null, courseCompleted: false };
   return db.$transaction(async (tx) => {
