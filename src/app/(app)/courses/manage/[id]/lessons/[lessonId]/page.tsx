@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { canHoldQuestions } from "@/lib/lesson-questions";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
@@ -36,6 +37,7 @@ export default async function LessonPage({ params, searchParams }: { params: Pro
   const meta = LESSON_TYPE_META[lesson.contentType];
   const hasQuestions = lesson.contentType === "QUIZ" || lesson.contentType === "ASSESSMENT" || lesson.contentType === "AUDIO" || lesson.contentType === "VIDEO";
   const modules = course.modules.map((m) => ({ id: m.id, title: m.title }));
+  const questionLessons = course.modules.flatMap((m) => m.lessons.filter((l) => canHoldQuestions(l.contentType)).map((l) => ({ id: l.id, title: l.title, module: m.title })));
   const value = {
     id: lesson.id, title: lesson.title, contentType: lesson.contentType, description: lesson.description, body: lesson.body, url: lesson.url, fileName: lesson.fileName, contentMime: lesson.contentMime, sizeBytes: lesson.sizeBytes, durationSec: lesson.durationSec, hasFile: !!lesson.storageKey,
     isRequired: lesson.isRequired, status: lesson.status, isFreePreview: lesson.isFreePreview, requiredPercent: lesson.requiredPercent, passingScore: lesson.passingScore, maxAttempts: lesson.maxAttempts, timeLimitMin: lesson.timeLimitMin, randomizeCount: lesson.randomizeCount, shuffleAnswers: lesson.shuffleAnswers, showCorrectAnswers: lesson.showCorrectAnswers, showExplanations: lesson.showExplanations, retakeWaitMinutes: lesson.retakeWaitMinutes, scorePolicy: lesson.scorePolicy, reviewMode: lesson.reviewMode, dueAt: lesson.dueAt, points: lesson.points, submissionType: lesson.submissionType, questionCount: lesson.questions.length,
@@ -69,7 +71,7 @@ export default async function LessonPage({ params, searchParams }: { params: Pro
           {hasQuestions ? (
             <>
               <p className="mb-3 text-[13px] text-ink-500">Reuse questions from other lessons or the bank: <Link href={`/courses/manage/${course.id}/questions?location=ALL`} className="font-semibold text-brand-600 hover:text-brand-700">open the question bank</Link>.</p>
-              <QuestionBuilder courseId={course.id} lessonId={lesson.id} questions={lesson.questions.map((q) => ({ id: q.id, type: q.type, prompt: q.prompt, explanation: q.explanation, points: q.points, isRequired: q.isRequired, state: q.state === "SUGGESTED" ? "DRAFT" : q.state, keywords: q.keywords, topic: q.topic, difficulty: q.difficulty, version: q.version, choices: q.choices.map((c) => ({ id: c.id, text: c.text, isCorrect: c.isCorrect })) }))} />
+              <QuestionBuilder courseId={course.id} lessonId={lesson.id} lessons={questionLessons} questions={lesson.questions.map((q) => ({ id: q.id, type: q.type, prompt: q.prompt, explanation: q.explanation, points: q.points, isRequired: q.isRequired, state: q.state === "SUGGESTED" ? "DRAFT" : q.state, keywords: q.keywords, topic: q.topic, difficulty: q.difficulty, version: q.version, choices: q.choices.map((c) => ({ id: c.id, text: c.text, isCorrect: c.isCorrect })) }))} />
             </>
           ) : (
             <p className="text-[14px] text-ink-500">{meta.label} lessons have no questions. Change the lesson type to Quiz, Assessment, or Audio to add some.</p>
