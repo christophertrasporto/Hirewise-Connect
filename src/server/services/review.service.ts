@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { UserMessageError } from "@/server/policies/user-message-error";
 import type { Db, PrismaClient } from "@/server/db/types";
 import type { Actor } from "@/server/auth/actor";
 import { authorize, ForbiddenError, NotFoundError } from "@/server/policies/authorize";
@@ -47,7 +48,7 @@ export async function writeReview(db: PrismaClient, actor: Actor, courseId: stri
 export async function hideReview(db: PrismaClient, actor: Actor, reviewId: string, reason: string) {
   authorize(actor, "course.manage");
   const why = reason.trim();
-  if (why.length < 5) throw new Error("Give a reason of at least 5 characters.");
+  if (why.length < 5) throw new UserMessageError("Give a reason of at least 5 characters.");
   const r = await repo.findReview(db, reviewId);
   if (!r) throw new NotFoundError();
   await db.$transaction(async (tx) => {

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { UserMessageError } from "@/server/policies/user-message-error";
 import type { PrismaClient } from "@/server/db/types";
 import type { Actor } from "@/server/auth/actor";
 import { authorize } from "@/server/policies/authorize";
@@ -32,7 +33,7 @@ export async function savePublicDetails(db: PrismaClient, actor: Actor, courseId
   const nextSlug = input.slug || c.slug;
   if (nextSlug !== c.slug) {
     const problem = await slugError(db, "COURSE", nextSlug, c.id);
-    if (problem) throw new Error(problem);
+    if (problem) throw new UserMessageError(problem);
   }
   const canHideCount = actor.permissions.has("course.manage");
   await db.$transaction(async (tx) => {
@@ -67,10 +68,10 @@ export async function setCourseListing(db: PrismaClient, actor: Actor, courseId:
 export async function setCourseFeatured(db: PrismaClient, actor: Actor, courseId: string, rank: number | null) {
   authorize(actor, "course.manage");
   const c = await publicAcademyRepository.findCourseSlugById(db, courseId);
-  if (!c) throw new Error("Course not found.");
+  if (!c) throw new UserMessageError("Course not found.");
   if (rank !== null) {
-    if (!Number.isInteger(rank) || rank < 1 || rank > 999) throw new Error("Use a whole number from 1 to 999.");
-    if (c.status !== "PUBLISHED" || c.listing !== "LISTED") throw new Error("Only a published, listed course can be featured.");
+    if (!Number.isInteger(rank) || rank < 1 || rank > 999) throw new UserMessageError("Use a whole number from 1 to 999.");
+    if (c.status !== "PUBLISHED" || c.listing !== "LISTED") throw new UserMessageError("Only a published, listed course can be featured.");
   }
   await db.$transaction(async (tx) => {
     await publicAcademyRepository.setFeaturedRank(tx, c.id, rank);

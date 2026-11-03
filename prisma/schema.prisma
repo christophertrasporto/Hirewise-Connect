@@ -1450,6 +1450,7 @@ model AcademyCourse {
   /// Why the last approval request was sent back (cleared on resubmission).
   reviewNote                        String?
   reviews                           CourseReview[]
+  accessCodes                       AccessCode[]
   publishedAt                       DateTime?
   publishedById                     String?
   externalId                        String?                @unique
@@ -1807,6 +1808,7 @@ model CourseCoach {
 
 model CourseEnrollment {
   id                     String              @id @default(cuid())
+  accessCode             AccessCode?
   review                 CourseReview?
   courseId               String
   course                 AcademyCourse       @relation(fields: [courseId], references: [id], onDelete: Cascade)
@@ -3923,4 +3925,38 @@ model SlugRedirect {
 
   @@unique([kind, oldSlug])
   @@index([kind, targetId])
+}
+
+enum AccessCodeStatus {
+  UNUSED
+  REDEEMED
+  VOIDED
+}
+
+/// Offline-payment voucher: staff confirm a bank or GCash payment and issue a one-time code; redeeming it settles the
+/// enrolment through settleEnrollmentPaymentTx (earning, commission, audit) and opens the course. Used while Maya is unavailable.
+model AccessCode {
+  id               String            @id @default(cuid())
+  code             String            @unique
+  courseId         String
+  course           AcademyCourse     @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  /// When set, only the account with this email may redeem it (lower case).
+  buyerEmail       String?
+  /// The bank or GCash reference staff checked; recorded as the payment reference.
+  paymentReference String
+  note             String?
+  status           AccessCodeStatus  @default(UNUSED)
+  expiresAt        DateTime
+  createdById      String
+  createdAt        DateTime          @default(now())
+  redeemedById     String?
+  redeemedAt       DateTime?
+  enrollmentId     String?           @unique
+  enrollment       CourseEnrollment? @relation(fields: [enrollmentId], references: [id], onDelete: SetNull)
+  voidedById       String?
+  voidedAt         DateTime?
+  voidReason       String?
+
+  @@index([courseId, status])
+  @@index([status, expiresAt])
 }
