@@ -5,6 +5,7 @@ import { prisma } from "@/server/db/client";
 import { requireActor } from "@/server/auth/require-actor";
 import { toActionError, formString, type ActionResult } from "@/server/http/action-result";
 import { questionSchema, deleteQuestion } from "@/server/services/quiz.service";
+import { saveQuestionAction } from "./quiz-actions";
 import { saveBankQuestion, copyQuestionToLesson, copyQuestionToBank } from "@/server/services/question-bank.service";
 
 function revalidate(courseId: string, lessonId?: string) {
@@ -12,6 +13,14 @@ function revalidate(courseId: string, lessonId?: string) {
   revalidatePath(`/courses/manage/${courseId}`, "layout");
   if (lessonId) revalidatePath(`/courses/manage/${courseId}/lessons/${lessonId}`);
   revalidatePath(`/courses/${courseId}`, "layout");
+}
+
+/**
+ * The new-question form lets the coach pick which lesson the question is for: a lesson saves it on that lesson, "Question
+ * bank only" saves it in the bank with no lesson. Both go through the same services (and permission checks) as before.
+ */
+export async function saveQuestionForPickedLessonAction(prev: ActionResult, fd: FormData): Promise<ActionResult> {
+  return formString(fd, "lessonId") ? saveQuestionAction(prev, fd) : saveBankQuestionAction(prev, fd);
 }
 
 export async function saveBankQuestionAction(_prev: ActionResult, fd: FormData): Promise<ActionResult> {

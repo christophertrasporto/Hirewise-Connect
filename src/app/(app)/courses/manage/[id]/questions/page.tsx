@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { canHoldQuestions } from "@/lib/lesson-questions";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { prisma } from "@/server/db/client";
@@ -22,11 +23,13 @@ export default async function QuestionBankPage({ params, searchParams }: { param
     if (e instanceof ForbiddenError) return <Banner tone="warn" title="No access">Building questions needs the course.quiz.build permission.</Banner>;
     throw e;
   }
+  // Every lesson that can hold questions, not only the ones that already have some, so a question can be assigned to any of them.
+  const allLessons = course.modules.flatMap((m) => m.lessons.filter((l) => canHoldQuestions(l.contentType)).map((l) => ({ id: l.id, title: l.title, module: m.title })));
   return (
     <>
       <Link href={`/courses/manage/${course.id}/modules`} className="mb-4 inline-flex items-center gap-1.5 text-[13.5px] font-medium text-ink-500 hover:text-ink-900"><ArrowLeft className="h-4 w-4" /> Modules & Lessons</Link>
       <Card title="Question bank" description="Every question in this course, organised by lesson, topic, and difficulty. Reuse a question in another quiz, keep bank-only questions for later, or write new ones here. Coaches can still add questions directly on any lesson page.">
-        <QuestionBank courseId={course.id} items={bank.items} topics={bank.topics} lessons={bank.lessons.length ? bank.lessons : course.modules.flatMap((m) => m.lessons.filter((l) => l.contentType === "QUIZ" || l.contentType === "ASSESSMENT" || l.contentType === "AUDIO" || l.contentType === "VIDEO").map((l) => ({ id: l.id, title: l.title, module: m.title })))} filters={sp} total={bank.total} bankOnly={bank.bankOnly} />
+        <QuestionBank courseId={course.id} items={bank.items} topics={bank.topics} lessons={allLessons} filters={sp} total={bank.total} bankOnly={bank.bankOnly} />
       </Card>
     </>
   );

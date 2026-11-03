@@ -3,7 +3,7 @@
 import { useActionState, useEffect, useState, type ReactNode } from "react";
 import { ArrowDown, ArrowUp, CheckCircle2, Circle, Copy, Pencil, Plus, Trash2 } from "lucide-react";
 import { deleteQuestionAction, duplicateQuestionAction, moveQuestionAction, saveQuestionAction } from "@/app/(app)/quiz-actions";
-import { saveBankQuestionAction } from "@/app/(app)/bank-actions";
+import { saveBankQuestionAction, saveQuestionForPickedLessonAction } from "@/app/(app)/bank-actions";
 import { idle, type ActionResult } from "@/server/http/action-result";
 import { Checkbox, Field, FormAlert, Input, Select, SubmitButton, Textarea, inputBase, inputOk } from "@/components/ui/Form";
 import { cn } from "@/lib/cn";
@@ -29,8 +29,11 @@ function IconAction({ action, fields, label, confirm, children, danger }: { acti
 
 const blankChoices = (type: QuestionType): ChoiceValue[] => (type === "TRUE_FALSE" ? [{ text: "True", isCorrect: true }, { text: "False", isCorrect: false }] : type === "SHORT_ANSWER" ? [] : [{ text: "", isCorrect: true }, { text: "", isCorrect: false }, { text: "", isCorrect: false }, { text: "", isCorrect: false }]);
 
-export function QuestionForm({ courseId, lessonId, question, onDone, bank = false }: { courseId: string; lessonId: string; question?: QuestionValue; onDone?: () => void; /** Bank-only question (no lesson). */ bank?: boolean }) {
-  const [state, action] = useActionState(bank ? saveBankQuestionAction : saveQuestionAction, idle);
+export type LessonChoice = { id: string; title: string; module: string };
+
+export function QuestionForm({ courseId, lessonId, question, onDone, bank = false, lessons }: { courseId: string; lessonId: string; question?: QuestionValue; onDone?: () => void; /** Bank-only question (no lesson). */ bank?: boolean; /** When given, a new question shows a box on the right to choose which lesson it is for. */ lessons?: LessonChoice[] }) {
+  const pickLesson = !question && !!lessons && lessons.length > 0;
+  const [state, action] = useActionState(pickLesson ? saveQuestionForPickedLessonAction : bank ? saveBankQuestionAction : saveQuestionAction, idle);
   const [type, setType] = useState<QuestionType>(question?.type ?? "MULTIPLE_CHOICE");
   const [choices, setChoices] = useState<ChoiceValue[]>(question?.choices.length ? question.choices : blankChoices(question?.type ?? "MULTIPLE_CHOICE"));
   const fe = state.fieldErrors ?? {};
@@ -52,12 +55,14 @@ export function QuestionForm({ courseId, lessonId, question, onDone, bank = fals
   return (
     <form action={action} className="space-y-4 rounded-2xl border border-brand-100 bg-brand-50/40 p-4" noValidate>
       <input type="hidden" name="courseId" value={courseId} />
-      <input type="hidden" name="lessonId" value={lessonId} />
+      {!pickLesson && <input type="hidden" name="lessonId" value={lessonId} />}
       {question && <input type="hidden" name="id" value={question.id} />}
       <input type="hidden" name="type" value={type} />
       <input type="hidden" name="choices" value={JSON.stringify(choices.filter((c) => c.text.trim() !== "" || type === "TRUE_FALSE"))} />
       <input type="hidden" name="isRequired" value="off" />
 
+      <div className={pickLesson ? "grid gap-4 lg:grid-cols-[1fr_260px]" : undefined}>
+      <div className="space-y-4">
       <div className="grid gap-4 md:grid-cols-[260px_1fr]">
         <Field label="Question type" htmlFor={`q-type-${uid}`}>
           <Select id={`q-type-${uid}`} value={type} onChange={(e) => changeType(e.target.value as QuestionType)}>
@@ -122,6 +127,22 @@ export function QuestionForm({ courseId, lessonId, question, onDone, bank = fals
         </Field>
       </div>
       <Checkbox name="isRequired" defaultChecked={question?.isRequired ?? true} label="Required question" />
+      </div>
+      {pickLesson && (
+        <aside className="space-y-2 rounded-2xl border border-ink-100 bg-white p-4 lg:self-start">
+          <label htmlFor={`q-lesson-${uid}`} className="block text-[13px] font-semibold text-ink-800">Which lesson is this question for?</label>
+          <Select id={`q-lesson-${uid}`} name="lessonId" defaultValue={lessonId}>
+            <option value="">Question bank only (no lesson yet)</option>
+            {[...new Set(lessons!.map((l) => l.module))].map((m) => (
+              <optgroup key={m} label={m}>
+                {lessons!.filter((l) => l.module === m).map((l) => <option key={l.id} value={l.id}>{l.title}</option>)}
+              </optgroup>
+            ))}
+          </Select>
+          <p className="text-[12.5px] leading-relaxed text-ink-500">The question is added to that lesson&apos;s quiz. Choose the question bank to keep it unassigned and add it to lessons later.</p>
+        </aside>
+      )}
+      </div>
 
       {state.error && <FormAlert>{state.error}</FormAlert>}
       <div className="flex items-center gap-3">
@@ -163,14 +184,14 @@ function QuestionRow({ courseId, lessonId, q, index, count }: { courseId: string
 }
 
 /** Questions for one lesson. No limit: keep clicking "Add question". Edits start a new question version; attempts keep theirs. */
-export function QuestionBuilder({ courseId, lessonId, questions }: { courseId: string; lessonId: string; questions: QuestionValue[] }) {
+export function QuestionBuilder({ courseId, lessonId, questions, lessons }: { courseId: string; lessonId: string; questions: QuestionValue[]; lessons?: LessonChoice[] }) {
   const [adding, setAdding] = useState(questions.length === 0);
   const published = questions.filter((q) => q.state === "PUBLISHED").length;
   return (
     <div className="space-y-4">
       <p className="text-[13.5px] text-ink-500">{questions.length} question{questions.length === 1 ? "" : "s"} · {published} published · {questions.filter((q) => q.state === "PUBLISHED").reduce((s, q) => s + q.points, 0)} points</p>
       <ol className="divide-y divide-ink-100">{questions.map((q, i) => <QuestionRow key={q.id} courseId={courseId} lessonId={lessonId} q={q} index={i} count={questions.length} />)}</ol>
-      {adding ? <QuestionForm courseId={courseId} lessonId={lessonId} onDone={questions.length ? () => setAdding(false) : undefined} /> : <button type="button" onClick={() => setAdding(true)} className="inline-flex h-10 items-center gap-1.5 rounded-full bg-ink-900 px-4 text-[13.5px] font-semibold text-white hover:bg-ink-800"><Plus className="h-4 w-4" /> Add question</button>}
+      {adding ? <QuestionForm courseId={courseId} lessonId={lessonId} lessons={lessons} onDone={questions.length ? () => setAdding(false) : undefined} /> : <button type="button" onClick={() => setAdding(true)} className="inline-flex h-10 items-center gap-1.5 rounded-full bg-ink-900 px-4 text-[13.5px] font-semibold text-white hover:bg-ink-800"><Plus className="h-4 w-4" /> Add question</button>}
     </div>
   );
 }

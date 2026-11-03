@@ -102,7 +102,7 @@ export function QuestionBank({ courseId, items, topics, lessons, filters, total,
       </form>
       <p className="text-[13px] text-ink-500">{items.length} of {total} question{total === 1 ? "" : "s"} · {bankOnly} bank-only · {topics.length} topic{topics.length === 1 ? "" : "s"}</p>
       {items.length === 0 ? <p className="rounded-2xl bg-ink-50 px-4 py-6 text-center text-[13.5px] text-ink-500">No questions match. Add one below or build questions on a lesson page.</p> : <ol className="divide-y divide-ink-100">{items.map((q) => <BankRow key={q.id} courseId={courseId} q={q} lessons={lessons} />)}</ol>}
-      {adding ? <QuestionForm courseId={courseId} lessonId="" bank onDone={() => setAdding(false)} /> : <button type="button" onClick={() => setAdding(true)} className="inline-flex h-10 items-center gap-1.5 rounded-full bg-ink-900 px-4 text-[13.5px] font-semibold text-white hover:bg-ink-800"><Plus className="h-4 w-4" /> New bank question</button>}
+      {adding ? <QuestionForm courseId={courseId} lessonId="" bank lessons={lessons} onDone={() => setAdding(false)} /> : <button type="button" onClick={() => setAdding(true)} className="inline-flex h-10 items-center gap-1.5 rounded-full bg-ink-900 px-4 text-[13.5px] font-semibold text-white hover:bg-ink-800"><Plus className="h-4 w-4" /> New bank question</button>}
       <p className="text-[12.5px] text-ink-400"><Copy className="mr-1 inline h-3.5 w-3.5" />Adding a question to a lesson makes a copy with new ids, so edits in one place never change another lesson&apos;s quiz or any past attempt. Random draws (&quot;ask N of these&quot;) are set per lesson on its Settings tab.</p>
     </div>
   );
