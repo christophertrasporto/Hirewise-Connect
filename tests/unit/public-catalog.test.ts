@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { CATALOG_PAGE_SIZE, DEFAULT_CATALOG_QUERY, catalogHref, courseMinutes, durationLabel, isPreviewable, isUnfiltered, pageCount, parseCatalogQuery, sortCatalog, type CatalogSortable } from "@/lib/public-catalog";
+import { CATALOG_PAGE_SIZE, DEFAULT_CATALOG_QUERY, clipText, catalogHref, courseMinutes, durationLabel, isPreviewable, isUnfiltered, pageCount, parseCatalogQuery, sortCatalog, type CatalogSortable } from "@/lib/public-catalog";
 import { breadcrumbLd, courseLd, jsonLd, publicMetadata } from "@/lib/seo";
 import { absoluteUrl, siteUrl } from "@/lib/site-url";
 import { courseCta } from "@/lib/course-cta";
@@ -83,6 +83,19 @@ describe("sortCatalog", () => {
     const before = rows.map((r) => r.title);
     sortCatalog(rows, "price-high");
     expect(rows.map((r) => r.title)).toEqual(before);
+  });
+});
+
+describe("clipText", () => {
+  it("collapses whitespace without touching any letter", () => {
+    expect(clipText("  Tier-1   support\n fundamentals for US and Australian accounts ", 200)).toBe("Tier-1 support fundamentals for US and Australian accounts");
+  });
+
+  it("cuts long text to the limit with an ellipsis, and leaves short text alone", () => {
+    expect(clipText("short", 10)).toBe("short");
+    const cut = clipText("word ".repeat(100), 20);
+    expect(cut.length).toBeLessThanOrEqual(20);
+    expect(cut.endsWith("…")).toBe(true);
   });
 });
 

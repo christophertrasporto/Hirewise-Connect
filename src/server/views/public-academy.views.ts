@@ -1,5 +1,5 @@
 import type { CardRow } from "@/server/repositories/public-catalog.repository";
-import { courseMinutes, durationLabel, isPreviewable } from "@/lib/public-catalog";
+import { clipText, courseMinutes, durationLabel, isPreviewable } from "@/lib/public-catalog";
 import { priceLabel } from "@/server/views/academy.views";
 
 /**
@@ -42,11 +42,6 @@ export function coverUrlFor(c: { id: string; thumbnailKey: string | null; update
   return c.thumbnailKey ? `/api/academy/thumbnail/${c.id}?v=${c.updatedAt.getTime()}` : null;
 }
 
-function clip(text: string, max: number): string {
-  const t = text.replace(/\s+/g, " ").trim();
-  return t.length <= max ? t : `${t.slice(0, max - 1).trimEnd()}…`;
-}
-
 export function toSortableCard(c: CardRow, extra: { enrolled: number; rating: { count: number; average: number } | undefined; coaches: PublicCoachRef[] }): SortableCard {
   const lessons = c.modules.flatMap((m) => m.lessons);
   const seconds = lessons.reduce((n, l) => n + (l.durationSec ?? 0), 0);
@@ -57,7 +52,7 @@ export function toSortableCard(c: CardRow, extra: { enrolled: number; rating: { 
     slug: c.slug,
     href: `/academy/${c.slug}`,
     title: c.title,
-    summary: clip(c.pitch || c.description, 160),
+    summary: clipText(c.pitch || c.description, 160),
     category: c.categoryRef?.name ?? c.category,
     categorySlug: c.categoryRef?.slug ?? null,
     difficulty: c.difficulty,

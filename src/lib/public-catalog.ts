@@ -126,6 +126,12 @@ export function sortCatalog<T extends CatalogSortable>(rows: T[], sort: CatalogS
   return out;
 }
 
+/** Collapses whitespace and cuts to `max` characters with an ellipsis, for card summaries and the course intro. */
+export function clipText(text: string, max: number): string {
+  const t = text.replace(/\s+/g, " ").trim();
+  return t.length <= max ? t : `${t.slice(0, max - 1).trimEnd()}…`;
+}
+
 export function pageCount(total: number): number {
   return Math.max(1, Math.ceil(total / CATALOG_PAGE_SIZE));
 }

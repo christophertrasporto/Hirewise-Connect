@@ -13,7 +13,7 @@ type PanelCourse = { id: string; slug: string; title: string; priceCents: number
  * cached page renders the signed-out version for everyone; once the visitor is known, the button and note change to fit
  * (Buy, Complete your payment, Continue learning) and the Share button learns whether to attach their referral code.
  */
-export function CourseViewerPanel({ course }: { course: PanelCourse }) {
+export function CourseViewerPanel({ course, payNote }: { course: PanelCourse; /** How this course can be paid, built on the server from the gateways that are switched on. */ payNote: string }) {
   const viewer = useCourseViewer(course.id);
   const cta = courseCta(viewer?.state ?? "SIGNED_OUT", course);
   const path = `/academy/${course.slug}`;
@@ -53,7 +53,7 @@ export function CourseViewerPanel({ course }: { course: PanelCourse }) {
                 <Award className="mt-0.5 h-4 w-4 shrink-0 text-gold-600" aria-hidden="true" /> {course.certification}, added to your profile when you pass
               </li>
             )}
-            <li>Pay online with Maya, or by bank transfer or GCash</li>
+            <li>{payNote}</li>
           </ul>
           <ShareButton path={path} title={course.title} personal={!!viewer?.canShare} className="mt-5 border-t border-ink-100 pt-5" />
         </div>

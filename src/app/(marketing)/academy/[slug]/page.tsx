@@ -15,7 +15,10 @@ import { PreviewPlayer } from "@/components/academy-public/PreviewPlayer";
 import { ReviewBox } from "@/components/academy-public/ReviewBox";
 import { StarRating } from "@/components/academy-public/StarRating";
 import { cachedCoursePage } from "@/app/public-academy-cache";
+import { mayaAvailableFor } from "@/server/services/maya-payment.service";
+import { paypalAvailableFor } from "@/server/services/paypal-payment.service";
 import { renderMarkdown } from "@/lib/markdown";
+import { clipText } from "@/lib/public-catalog";
 import { breadcrumbLd, courseLd, publicMetadata } from "@/lib/seo";
 import type { PreviewLesson, PublicCoursePageView } from "@/server/views/public-academy.views";
 import type { LessonContentType } from "@/components/academy/lesson-meta";
@@ -26,11 +29,6 @@ export const revalidate = 300;
 type Props = { params: Promise<{ slug: string }> };
 
 const INTRO_MAX = 200;
-
-function clip(text: string, max: number): string {
-  const t = text.replace(/s+/g, " ").trim();
-  return t.length <= max ? t : `${t.slice(0, max - 1).trimEnd()}…`;
-}
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug } = await params;
@@ -45,6 +43,12 @@ function videoSource(l: PreviewLesson): { kind: "file" | "embed"; src: string } 
   if (l.hasFile) return { kind: "file", src: lessonFileUrl(l.id) };
   const embed = l.url ? embedUrl(l.url) : null;
   return embed ? { kind: "embed", src: `${embed}${embed.includes("?") ? "&" : "?"}autoplay=1` } : null;
+}
+
+/** How this course can be paid, from the gateways that are on and take its currency. The page is cached for minutes, so a switch shows up on the next refresh. */
+function payNoteFor(c: PublicCoursePageView): string {
+  const names = [mayaAvailableFor(c) && "Maya", paypalAvailableFor(c) && "PayPal"].filter(Boolean).join(" or ");
+  return names ? `Pay online with ${names}, or by bank transfer or GCash` : "Pay by bank transfer or GCash";
 }
 
 function Poster({ c }: { c: PublicCoursePageView }) {
@@ -103,7 +107,7 @@ export default async function PublicCoursePage({ params }: Props) {
   const heroSource = hero ? videoSource(hero) : null;
   const otherPreviews = c.previews.filter((p) => p.id !== (heroSource ? hero?.id : undefined));
   // With no pitch, the hero shows the start of the description and the About section carries the rest (only when there is more).
-  const intro = c.pitch || clip(c.description, INTRO_MAX);
+  const intro = c.pitch || clipText(c.description, INTRO_MAX);
   const showAbout = !!c.pitch || c.description.length > INTRO_MAX;
   const level = c.difficulty.charAt(0) + c.difficulty.slice(1).toLowerCase();
   const crumbs = [{ name: "VA Academy", path: "/academy" }, ...(c.categorySlug ? [{ name: c.category, path: `/academy/category/${c.categorySlug}` }] : []), { name: c.title, path: `/academy/${c.slug}` }];
@@ -183,7 +187,7 @@ export default async function PublicCoursePage({ params }: Props) {
             </div>
           </div>
 
-          <CourseViewerPanel course={{ id: c.id, slug: c.slug, title: c.title, priceCents: c.priceCents, priceLabel: c.priceLabel, lessonCount: c.lessonCount, previewCount: c.previewCount, certification: c.certification }} />
+          <CourseViewerPanel payNote={payNoteFor(c)} course={{ id: c.id, slug: c.slug, title: c.title, priceCents: c.priceCents, priceLabel: c.priceLabel, lessonCount: c.lessonCount, previewCount: c.previewCount, certification: c.certification }} />
         </div>
       </section>
 
