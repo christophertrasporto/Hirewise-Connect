@@ -28,6 +28,18 @@ export type ViewerState =
   /** Signed in as someone who cannot buy courses (clients, agencies, staff). */
   | "NOT_TALENT";
 
+/** How this visitor stands with a course: signed out, can buy, pending, owner, ended, or not a buyer at all. */
+export async function viewerStateFor(db: PrismaClient, actor: Actor | null, courseId: string): Promise<{ state: ViewerState; enrollmentId: string | null }> {
+  let state: ViewerState = actor ? "NOT_TALENT" : "SIGNED_OUT";
+  let enrollmentId: string | null = null;
+  if (actor?.role === "AGENT" && actor.agentProfileId) {
+    const e = await lessonAccessRepository.findEnrollment(db, courseId, actor.agentProfileId);
+    enrollmentId = e?.id ?? null;
+    state = !e ? "CAN_BUY" : entitledToCourse(e) ? "OWNER" : e.paymentStatus === "PENDING" ? "PENDING" : "ENDED";
+  }
+  return { state, enrollmentId };
+}
+
 export async function getPublicCourse(db: PrismaClient, actor: Actor | null, courseId: string) {
   const c = await academyRepository.findCourse(db, courseId);
   if (!c || c.status !== "PUBLISHED") throw new NotFoundError();
@@ -36,13 +48,7 @@ export async function getPublicCourse(db: PrismaClient, actor: Actor | null, cou
   const lessons = modules.flatMap((m) => m.lessons);
   const previewLessons = lessons.filter((l) => l.isFreePreview);
 
-  let state: ViewerState = actor ? "NOT_TALENT" : "SIGNED_OUT";
-  let enrollmentId: string | null = null;
-  if (actor?.role === "AGENT" && actor.agentProfileId) {
-    const e = await lessonAccessRepository.findEnrollment(db, c.id, actor.agentProfileId);
-    enrollmentId = e?.id ?? null;
-    state = !e ? "CAN_BUY" : entitledToCourse(e) ? "OWNER" : e.paymentStatus === "PENDING" ? "PENDING" : "ENDED";
-  }
+  const { state, enrollmentId } = await viewerStateFor(db, actor, c.id);
 
   return {
     id: c.id,

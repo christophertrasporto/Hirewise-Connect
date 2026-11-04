@@ -1,29 +1,27 @@
 import type { Metadata } from "next";
-import { ArrowRight, PhoneCall, CalendarClock, BadgeDollarSign, Headset, Laptop, Database, Target, MessageSquare, Users, Layers } from "lucide-react";
 import { PageHero } from "@/components/marketing/PageHero";
 import { CTASection } from "@/components/marketing/CTASection";
-import { Button } from "@/components/ui/Button";
 import { SectionHeading } from "@/components/ui/SectionHeading";
 import { Reveal } from "@/components/ui/Reveal";
-import { Badge } from "@/components/ui/Badge";
+import { ReferralCapture } from "@/components/marketing/ReferralCapture";
+import { CatalogBody } from "@/components/academy-public/CatalogBody";
+import { JsonLd } from "@/components/academy-public/JsonLd";
+import { cachedCatalog, cachedCategories } from "@/app/public-academy-cache";
+import { catalogHref, isUnfiltered, parseCatalogQuery } from "@/lib/public-catalog";
+import { catalogLd, publicMetadata } from "@/lib/seo";
 
-export const metadata: Metadata = {
-  title: "VA Academy",
-  description: "Courses built by Hirewise coaches. Certifications that flow straight into your Connect profile.",
-};
+type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 
-const catalog = [
-  { icon: PhoneCall, name: "Cold Calling", level: "Certification", desc: "Openers, objection handling, tonality, and live mock-call assessment." },
-  { icon: CalendarClock, name: "Appointment Setting", level: "Certification", desc: "Qualification frameworks, calendar discipline, and confirmation workflows." },
-  { icon: BadgeDollarSign, name: "Sales", level: "Certification", desc: "Discovery, pitch structure, closing, and CRM hygiene for remote sales roles." },
-  { icon: Headset, name: "Customer Service", level: "Certification", desc: "Tone, de-escalation, ticket handling, and quality scoring." },
-  { icon: Laptop, name: "Virtual Assistance", level: "Course", desc: "Inbox, calendar, research, and documentation for executive support." },
-  { icon: Database, name: "CRM", level: "Course", desc: "Pipeline management across common CRMs, data quality, and reporting." },
-  { icon: Target, name: "Lead Generation", level: "Course", desc: "List building, enrichment, outreach sequencing, and compliance basics." },
-  { icon: MessageSquare, name: "Communication", level: "Course", desc: "Written and spoken business communication for international clients." },
-  { icon: Users, name: "Leadership", level: "Course", desc: "Team lead fundamentals for agents stepping into supervisory roles." },
-  { icon: Layers, name: "Campaign-Specific Training", level: "Custom", desc: "Built for a client campaign. Certification scoped to that campaign." },
-];
+const TITLE = "VA Academy: courses by Hirewise coaches";
+const DESCRIPTION = "Browse courses built by Hirewise coaches. Watch free previews, learn at your pace, and add certifications to your Connect profile.";
+
+/** Only the plain catalog (and its pages) is indexed; searches and filtered views are for people, with the plain catalog as their canonical. */
+export async function generateMetadata({ searchParams }: { searchParams: SearchParams }): Promise<Metadata> {
+  const query = parseCatalogQuery(await searchParams);
+  const plain = isUnfiltered(query);
+  const meta = publicMetadata({ title: TITLE, description: DESCRIPTION, path: plain ? catalogHref("/academy", { page: query.page }) : "/academy", noindex: !plain });
+  return { ...meta, title: query.page > 1 && plain ? `${TITLE} (page ${query.page})` : TITLE };
+}
 
 const assessment = [
   { label: "Exam score", desc: "Knowledge check with a course passing score." },
@@ -34,9 +32,15 @@ const assessment = [
   { label: "Result label", desc: "Not Yet Qualified · Developing · Qualified · Advanced · Expert" },
 ];
 
-export default function AcademyPage() {
+export default async function AcademyPage({ searchParams }: { searchParams: SearchParams }) {
+  const query = parseCatalogQuery(await searchParams);
+  const plain = isUnfiltered(query);
+  const [data, categories] = await Promise.all([cachedCatalog(query, plain), cachedCategories()]);
+
   return (
     <>
+      <ReferralCapture />
+      <JsonLd data={catalogLd("VA Academy", "/academy", data.cards)} />
       <PageHero
         eyebrow="Hirewise VA Academy"
         title={
@@ -44,35 +48,12 @@ export default function AcademyPage() {
             Courses by coaches. <span className="font-serif font-normal italic text-brand-600">Certifications that count.</span>
           </>
         }
-        description="The Academy is where Hirewise talent is trained and assessed. Each course has a coach, a passing score, and a certification rule. When you pass, the certification is added to your Connect profile automatically."
-        actions={
-          <>
-            <Button href="/register?as=talent" size="lg">
-              Start your pathway <ArrowRight className="h-4 w-4" />
-            </Button>
-          </>
-        }
+        description="The Academy is where Hirewise talent is trained and assessed. Watch a free preview, pick a course, and when you pass, the certification is added to your Connect profile automatically."
       />
 
-      <section className="py-24 lg:py-32">
+      <section className="py-14 lg:py-20">
         <div className="container-x">
-          <SectionHeading eyebrow="Catalog" title="Current course areas" description="Coaches build and own their courses. Hirewise administrators define which courses lead to certification." />
-          <ul className="mt-14 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {catalog.map((c, i) => (
-              <Reveal as="li" key={c.name} delay={(i % 3) * 70}>
-                <div className="flex h-full flex-col rounded-3xl border border-ink-100 bg-white p-6 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-lift">
-                  <div className="flex items-start justify-between">
-                    <span className="inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-ink-900 text-white">
-                      <c.icon className="h-5 w-5" />
-                    </span>
-                    <Badge tone={c.level === "Certification" ? "gold" : c.level === "Custom" ? "ink" : "outline"}>{c.level}</Badge>
-                  </div>
-                  <h3 className="mt-5 text-[18px] font-bold">{c.name}</h3>
-                  <p className="mt-2 text-[14px] leading-relaxed text-ink-500">{c.desc}</p>
-                </div>
-              </Reveal>
-            ))}
-          </ul>
+          <CatalogBody basePath="/academy" query={query} data={data} categories={categories} />
         </div>
       </section>
 

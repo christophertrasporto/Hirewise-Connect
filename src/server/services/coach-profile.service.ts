@@ -5,6 +5,9 @@ import type { Actor } from "@/server/auth/actor";
 import { authorize } from "@/server/policies/authorize";
 import { publicAcademyRepository, type CoachLink } from "@/server/repositories/public-academy.repository";
 import { audit } from "@/server/audit/audit";
+import { rateLimit } from "@/server/auth/rate-limit";
+import { getStorage, newStorageKey } from "@/server/adapters/storage";
+import { COACH_PHOTO_MAX_BYTES, COACH_PHOTO_MIMES, coachPhotoKeyPrefix } from "@/lib/course-cover";
 import { newSlug, retireSlugTx, slugError } from "./slug.service";
 
 /**
@@ -23,7 +26,7 @@ export const coachProfileSchema = z.object({
 export type CoachProfileInput = z.input<typeof coachProfileSchema>;
 
 function view(p: NonNullable<Awaited<ReturnType<typeof publicAcademyRepository.findCoachProfileByUser>>>) {
-  return { id: p.id, slug: p.slug, displayName: p.displayName, headline: p.headline, bio: p.bio, links: (p.links as CoachLink[] | null) ?? [], isPublic: p.isPublic, hasPhoto: !!p.photoKey };
+  return { id: p.id, slug: p.slug, displayName: p.displayName, headline: p.headline, bio: p.bio, links: (p.links as CoachLink[] | null) ?? [], isPublic: p.isPublic, hasPhoto: !!p.photoKey, /** Served by the access-checked coach photo route; never the storage key. */ photoUrl: p.photoKey ? `/api/coach-photo/${p.slug}?v=${p.updatedAt.getTime()}` : null };
 }
 export type CoachProfileView = ReturnType<typeof view>;
 
@@ -64,6 +67,42 @@ export async function saveOwnCoachProfile(db: PrismaClient, actor: Actor, raw: C
     await audit(tx, { actor, action: "COACH_PROFILE_SAVED", entityType: "CoachProfile", entityId: p.id, previousValue: { slug: existing.slug, isPublic: existing.isPublic }, newValue: { slug: p.slug, isPublic: p.isPublic } });
     return view(p);
   });
+}
+
+export const coachPhotoRequestSchema = z.object({ contentType: z.string().min(1), sizeBytes: z.coerce.number().int().positive() });
+
+/** Step 1 of a coach photo upload: a presigned PUT scoped to the coach's own profile. Nothing is recorded until setCoachPhoto. */
+export async function createCoachPhotoUploadUrl(db: PrismaClient, actor: Actor, raw: z.input<typeof coachPhotoRequestSchema>) {
+  authorize(actor, "course.create_own");
+  const input = coachPhotoRequestSchema.parse(raw);
+  const profile = await publicAcademyRepository.findCoachProfileByUser(db, actor.userId);
+  if (!profile) throw new UserMessageError("Save your profile first, then add a photo.");
+  rateLimit(`coach-photo:${actor.userId}`, 30, 60 * 60_000);
+  const ext = (COACH_PHOTO_MIMES as Record<string, string>)[input.contentType];
+  if (!ext) throw new UserMessageError("Use a PNG, JPG, or WebP image.");
+  if (input.sizeBytes > COACH_PHOTO_MAX_BYTES) throw new UserMessageError(`The photo is too large. Maximum is ${Math.round(COACH_PHOTO_MAX_BYTES / 1024 / 1024)} MB.`);
+  const key = newStorageKey(coachPhotoKeyPrefix(profile.id).replace(/\/$/, ""), ext);
+  const upload = await getStorage().createUploadUrl(key, input.contentType);
+  return { key, ...upload };
+}
+
+/** Step 2: record the uploaded key as the coach photo, or clear it with null. The previous file is removed. Only the coach's own profile. */
+export async function setCoachPhoto(db: PrismaClient, actor: Actor, key: string | null): Promise<CoachProfileView> {
+  authorize(actor, "course.create_own");
+  const profile = await publicAcademyRepository.findCoachProfileByUser(db, actor.userId);
+  if (!profile) throw new UserMessageError("Save your profile first, then add a photo.");
+  if (key !== null) {
+    if (!key.startsWith(coachPhotoKeyPrefix(profile.id))) throw new UserMessageError("That file does not belong to your profile.");
+    if (!(await getStorage().exists(key))) throw new UserMessageError("Upload the photo before saving it.");
+  }
+  const previous = profile.photoKey;
+  const saved = await db.$transaction(async (tx) => {
+    const p = await publicAcademyRepository.updateCoachProfile(tx, profile.id, { photoKey: key });
+    await audit(tx, { actor, action: "COACH_PROFILE_SAVED", entityType: "CoachProfile", entityId: p.id, newValue: { hasPhoto: key !== null } });
+    return p;
+  });
+  if (previous && previous !== key) await getStorage().delete(previous).catch(() => undefined);
+  return view(saved);
 }
 
 export type CoachName = { name: string; /** Set only when the coach's public page exists and is on. */ slug: string | null };

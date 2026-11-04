@@ -346,12 +346,16 @@ describe("referral links on a course page", () => {
     expect((await db.referralClick.findFirstOrThrow({ orderBy: { createdAt: "desc" } })).landingUrl).toBe("/");
   });
 
-  it("the public page sends the ref code to the capture route", () => {
-    const page = readFileSync(join(__dirname, "..", "..", "src", "app", "(marketing)", "academy", "courses", "[courseId]", "page.tsx"), "utf8");
-    expect(page).toContain("ReferralCapture");
-    const component = readFileSync(join(__dirname, "..", "..", "src", "components", "marketing", "ReferralCapture.tsx"), "utf8");
+  it("every public Academy page sends the ref code to the capture route, then clears it from the address", () => {
+    const src = join(__dirname, "..", "..", "src");
+    for (const page of [["academy", "page.tsx"], ["academy", "[slug]", "page.tsx"], ["academy", "category", "[slug]", "page.tsx"], ["coaches", "[slug]", "page.tsx"]]) {
+      expect(readFileSync(join(src, "app", "(marketing)", ...page), "utf8"), page.join("/")).toContain("<ReferralCapture />");
+    }
+    const component = readFileSync(join(src, "components", "marketing", "ReferralCapture.tsx"), "utf8");
     expect(component).toContain("/api/referral/capture");
     expect(component).toContain('get("ref")');
+    expect(component).toContain('delete("ref")');
+    expect(component).toContain("replaceState");
   });
 });
 

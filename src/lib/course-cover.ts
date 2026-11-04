@@ -7,6 +7,13 @@ export type CoverMime = keyof typeof COVER_MIMES;
 /** Covers are marketing images of published courses, so their signed links live longer than private media links. */
 export const COVER_URL_TTL_SECONDS = 60 * 60;
 
+/** Coach photos for the public coach page: same image types as covers, a little larger. */
+export const COACH_PHOTO_MAX_BYTES = 5 * 1024 * 1024;
+export const COACH_PHOTO_MIMES = COVER_MIMES;
+export function coachPhotoKeyPrefix(profileId: string) {
+  return `coaches/${profileId}/photo/`;
+}
+
 export function coverKeyPrefix(courseId: string) {
   return `courses/${courseId}/cover/`;
 }
