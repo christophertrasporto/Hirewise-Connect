@@ -52,6 +52,16 @@ const schema = z.object({
   /** Optional override of the two published Maya webhook public keys (PEM; write newlines as \n). */
   MAYA_WEBHOOK_PUBLIC_KEY_1: z.string().optional(),
   MAYA_WEBHOOK_PUBLIC_KEY_2: z.string().optional(),
+  /** Course payments through PayPal Checkout (Orders v2). off hides the button; fake is a local stand-in and is refused in production. */
+  PAYPAL_MODE: z.enum(["off", "fake", "sandbox", "production"]).default("off"),
+  /** REST app Client ID: creates and captures orders. */
+  PAYPAL_CLIENT_ID: z.string().optional(),
+  /** REST app Secret: never sent to the browser. */
+  PAYPAL_CLIENT_SECRET: z.string().optional(),
+  /** The webhook ID PayPal shows after you register the webhook URL; used to verify webhook signatures. */
+  PAYPAL_WEBHOOK_ID: z.string().optional(),
+  /** true rejects a webhook whose signature does not verify; false (default) still confirms every payment by looking it up. */
+  PAYPAL_WEBHOOK_STRICT: z.enum(["true", "false"]).default("false"),
   MEETING_PROVIDER: z.enum(["none", "fake", "zoom"]).default("none"),
   ZOOM_ACCOUNT_ID: z.string().optional(),
   ZOOM_CLIENT_ID: z.string().optional(),
@@ -101,6 +111,12 @@ export function getEnv(): Env {
   }
   if (parsed.data.NODE_ENV === "production" && parsed.data.MAYA_MODE === "fake") {
     throw new Error("MAYA_MODE=fake is not allowed in production");
+  }
+  if ((parsed.data.PAYPAL_MODE === "sandbox" || parsed.data.PAYPAL_MODE === "production") && (!parsed.data.PAYPAL_CLIENT_ID || !parsed.data.PAYPAL_CLIENT_SECRET)) {
+    throw new Error("PAYPAL_MODE=sandbox or production requires PAYPAL_CLIENT_ID and PAYPAL_CLIENT_SECRET");
+  }
+  if (parsed.data.NODE_ENV === "production" && parsed.data.PAYPAL_MODE === "fake") {
+    throw new Error("PAYPAL_MODE=fake is not allowed in production");
   }
   if (parsed.data.MEETING_PROVIDER === "zoom" && (!parsed.data.ZOOM_ACCOUNT_ID || !parsed.data.ZOOM_CLIENT_ID || !parsed.data.ZOOM_CLIENT_SECRET)) {
     throw new Error("MEETING_PROVIDER=zoom requires ZOOM_ACCOUNT_ID, ZOOM_CLIENT_ID, ZOOM_CLIENT_SECRET");

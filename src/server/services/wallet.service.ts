@@ -52,7 +52,7 @@ async function rateFor(db: Db, coachUserId: string): Promise<number> {
  * A gateway sale starts PENDING_FEE until the real fee is reported; a bank or GCash payment recorded by staff has no
  * gateway fee (zero, or the amount staff enter) and goes straight on hold.
  */
-export async function recordEarningForPaymentTx(tx: Db, p: { enrollmentId: string; channel: "STAFF" | "MAYA"; gatewayFeeMinor?: number | null; paidAt: Date; now?: Date }) {
+export async function recordEarningForPaymentTx(tx: Db, p: { enrollmentId: string; channel: "STAFF" | "MAYA" | "PAYPAL"; gatewayFeeMinor?: number | null; paidAt: Date; now?: Date }) {
   if (await walletRepository.findByEnrollment(tx, p.enrollmentId)) return null;
   const e = await walletRepository.enrollmentForEarning(tx, p.enrollmentId);
   if (!e || !e.paidCents || e.paidCents <= 0 || e.currency !== WALLET_CURRENCY) return null;
@@ -66,7 +66,7 @@ export async function recordEarningForPaymentTx(tx: Db, p: { enrollmentId: strin
   const affiliate = (await referralRepository.findBySource(tx, "ENROLLMENT", e.id))?.commissionAmount ?? 0;
   const base = { coachUserId: coach.id, enrollmentId: e.id, courseId: e.courseId, courseTitle: e.course.title, buyerUserId: e.agentProfile.userId, buyerLabel: buyerLabel(e.agentProfile.displayName), saleAmount: e.paidCents, coachRateBps: rateBps, affiliateAmount: affiliate, currency: e.currency, channel: p.channel, paidAt: p.paidAt, availableAt };
 
-  if (p.channel === "MAYA" && p.gatewayFeeMinor == null) {
+  if (p.channel !== "STAFF" && p.gatewayFeeMinor == null) {
     const row = await walletRepository.createEarning(tx, { ...base, status: "PENDING_FEE" });
     await audit(tx, { actor: systemActor(), action: "WALLET_EARNING_CREATED", entityType: "CoachEarning", entityId: row.id, newValue: { coachUserId: coach.id, enrollmentId: e.id, saleAmount: e.paidCents, status: "PENDING_FEE", coachRateBps: rateBps } });
     await publishEvent(tx, "WALLET_EARNING_CREATED", { earningId: row.id, coachUserId: coach.id, courseTitle: e.course.title, status: "PENDING_FEE" });

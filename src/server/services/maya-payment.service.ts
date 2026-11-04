@@ -1,17 +1,17 @@
-import type { Db, PrismaClient } from "@/server/db/types";
+import type { PrismaClient } from "@/server/db/types";
 import type { Actor } from "@/server/auth/actor";
-import { systemActor } from "@/server/auth/actor";
 import { NotFoundError, ForbiddenError } from "@/server/policies/authorize";
 import { academyRepository } from "@/server/repositories/academy.repository";
 import { onlinePaymentRepository } from "@/server/repositories/online-payment.repository";
 import { audit } from "@/server/audit/audit";
-import { publishEvent } from "@/server/events/outbox";
 import { rateLimit } from "@/server/auth/rate-limit";
 import { getEnv } from "@/server/env";
 import { logger } from "@/server/logger";
 import { getMayaGateway, mayaEnabled, mayaWebhookKeys, type MayaPayment } from "@/server/adapters/maya";
 import { verifyMayaSignature } from "@/lib/maya-signature";
-import { settleEnrollmentPaymentTx } from "./academy.service";
+import { NOT_YET_FINAL, settleConfirmedPayment, type ReconcileResult } from "./online-payment.service";
+
+export type { ReconcileResult };
 
 /**
  * Online course payments through Maya Checkout. The browser, the redirect, and even the webhook body are only hints:
@@ -23,7 +23,6 @@ import { settleEnrollmentPaymentTx } from "./academy.service";
 const PROVIDER = "MAYA";
 const REUSE_WINDOW_MS = 50 * 60_000; // Maya checkouts expire after an hour
 const PAID_STATUSES = new Set(["PAYMENT_SUCCESS", "CAPTURED"]);
-const NOT_YET_FINAL = ["CREATED", "PENDING"] as const;
 
 /** Whether this course can be paid with Maya: Maya is on, the course costs money, and it is priced in PHP. */
 export function mayaAvailableFor(course: { currency: string; priceCents: number }): boolean {
@@ -46,7 +45,7 @@ export async function startMayaCheckout(db: PrismaClient, actor: Actor, enrollme
   if (!mayaAvailableFor({ currency: e.currency, priceCents: e.priceCents })) throw new Error("This course cannot be paid with Maya. Pay by bank transfer or GCash instead.");
   rateLimit(`maya-start:${actor.userId}`, 10, 60 * 60_000);
 
-  const open = await onlinePaymentRepository.findOpen(db, e.id, new Date(Date.now() - REUSE_WINDOW_MS));
+  const open = await onlinePaymentRepository.findOpen(db, e.id, new Date(Date.now() - REUSE_WINDOW_MS), PROVIDER);
   if (open?.redirectUrl) return { url: open.redirectUrl };
 
   const row = await onlinePaymentRepository.create(db, { provider: PROVIDER, enrollmentId: e.id, amountMinor: e.priceCents, currency: e.currency });
@@ -72,13 +71,6 @@ export async function startMayaCheckout(db: PrismaClient, actor: Actor, enrollme
   }
 }
 
-export type ReconcileResult = { status: "NOT_FOUND" | "PAID" | "PENDING" | "FAILED" | "EXPIRED" | "CANCELLED" | "MISMATCH" | "PROBLEM" };
-
-async function flagProblem(db: Db, row: { id: string; enrollment: { id: string; course: { title: string }; agentProfile: { user: { email: string } } } }, reason: string) {
-  await audit(db, { actor: systemActor(), action: "ONLINE_PAYMENT_PROBLEM", entityType: "OnlinePayment", entityId: row.id, newValue: { enrollmentId: row.enrollment.id }, reason });
-  await publishEvent(db, "ONLINE_PAYMENT_PROBLEM", { onlinePaymentId: row.id, enrollmentId: row.enrollment.id, courseTitle: row.enrollment.course.title, learnerEmail: row.enrollment.agentProfile.user.email, reason });
-}
-
 /**
  * Decides the true state of one payment attempt by asking Maya. Safe to call any number of times, from the webhook, the
  * return page, or the maintenance pass: a payment is settled once, and a payment that is already settled is left alone.
@@ -101,31 +93,8 @@ export async function reconcileOnlinePayment(db: PrismaClient, id: string, hint:
     return { status: "PENDING" };
   }
 
-  // Maya says it was paid. Trust it only if it is the amount, currency, and reference we asked for.
-  const matches = paid.amountMinor === row.amountMinor && paid.currency === row.currency && (paid.requestReferenceNumber ?? row.id) === row.id && row.amountMinor === row.enrollment.priceCents && row.currency === row.enrollment.currency;
-  if (!matches) {
-    const changed = await onlinePaymentRepository.transition(db, row.id, [...NOT_YET_FINAL, "FAILED", "EXPIRED", "CANCELLED"], { status: "MISMATCH", providerPaymentId: paid.id, failureReason: `Maya reported ${paid.amountMinor} ${paid.currency}, expected ${row.amountMinor} ${row.currency}` });
-    if (changed === 1) await flagProblem(db, row, `Maya reported a payment of ${paid.amountMinor ?? "?"} ${paid.currency ?? "?"} for ${row.amountMinor} ${row.currency}. Check it in Maya and handle it manually.`);
-    return { status: "MISMATCH" };
-  }
-
-  let problem: string | null = null;
-  const settled = await db.$transaction(async (tx) => {
-    const claimed = await onlinePaymentRepository.transition(tx, row.id, [...NOT_YET_FINAL, "FAILED", "EXPIRED", "CANCELLED"], { status: "PAID", providerPaymentId: paid.id, paidAt: new Date(), failureReason: null });
-    if (claimed !== 1) return false;
-    const e = await academyRepository.findEnrollmentById(tx, row.enrollmentId);
-    if (!e) return true;
-    if (e.paymentStatus !== "PENDING") {
-      // The money arrived but the enrolment was already settled another way (staff recorded a bank transfer, or it was refunded).
-      problem = `Paid online (${paid.id}) but the enrolment is already ${e.paymentStatus.toLowerCase()}. Refund the Maya payment if it is a duplicate.`;
-      return true;
-    }
-    await settleEnrollmentPaymentTx(tx, systemActor(), e, { paidCents: row.amountMinor, reference: `MAYA:${paid.id}`, waived: false, recordedById: null, channel: "MAYA" });
-    await audit(tx, { actor: systemActor(), action: "ONLINE_PAYMENT_CONFIRMED", entityType: "OnlinePayment", entityId: row.id, newValue: { provider: PROVIDER, providerPaymentId: paid.id, amountMinor: row.amountMinor, currency: row.currency, enrollmentId: row.enrollmentId } });
-    return true;
-  });
-  if (settled && problem) await flagProblem(db, row, problem);
-  return { status: settled && problem ? "PROBLEM" : "PAID" };
+  // Maya says it was paid: the shared settlement checks amount, currency, and reference, then settles once.
+  return settleConfirmedPayment(db, row, "MAYA", { providerPaymentId: paid.id, amountMinor: paid.amountMinor, currency: paid.currency, reference: paid.requestReferenceNumber, feeMinor: null });
 }
 
 /** A learner back from Maya (or just opening the course): confirm any open payment of theirs so the course unlocks at once. */
@@ -133,7 +102,7 @@ export async function reconcileMyCourse(db: PrismaClient, actor: Actor, courseId
   if (actor.role !== "AGENT" || !actor.agentProfileId || !mayaEnabled()) return null;
   const e = await academyRepository.findEnrollment(db, courseId, actor.agentProfileId);
   if (!e || e.paymentStatus !== "PENDING") return null;
-  const open = await onlinePaymentRepository.latestOpenForEnrollment(db, e.id);
+  const open = await onlinePaymentRepository.latestOpenForEnrollment(db, e.id, PROVIDER);
   if (!open) return null;
   try {
     return await reconcileOnlinePayment(db, open.id);
@@ -183,7 +152,7 @@ export async function handleMayaWebhook(db: PrismaClient, p: { rawBody: string; 
 /** Maintenance: payments still open after a couple of minutes (a lost or late webhook) are confirmed by lookup. */
 export async function reconcilePendingOnlinePayments(db: PrismaClient, now = new Date()): Promise<number> {
   if (!mayaEnabled()) return 0;
-  const rows = await onlinePaymentRepository.listToReconcile(db, new Date(now.getTime() - 2 * 60_000), new Date(now.getTime() - 24 * 3_600_000));
+  const rows = await onlinePaymentRepository.listToReconcile(db, new Date(now.getTime() - 2 * 60_000), new Date(now.getTime() - 24 * 3_600_000), 25, PROVIDER);
   let confirmed = 0;
   for (const r of rows) {
     try {
