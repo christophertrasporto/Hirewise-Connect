@@ -144,6 +144,9 @@
   :root[data-theme="dark"] .hover\:text-brand-800:hover { color: #8fe3c3; }
 }
 @media (hover: hover) {
+  :root[data-theme="dark"] .hover\:text-gold-400:hover { color: var(--color-gold-400); }
+}
+@media (hover: hover) {
   :root[data-theme="dark"] .hover\:text-ink-700:hover { color: #c9d3e3; }
 }
 @media (hover: hover) {
@@ -165,6 +168,7 @@
   :root[data-theme="dark"] .hover\:text-white:hover { color: #fff; }
 }
 :root[data-theme="dark"] .focus-visible\:ring-brand-400:focus-visible { --tw-ring-color: var(--color-brand-400); }
+:root[data-theme="dark"] .focus-visible\:ring-brand-500:focus-visible { --tw-ring-color: var(--color-brand-500); }
 :root[data-theme="dark"] .focus\:border-brand-500:focus { border-color: var(--color-brand-500); }
 :root[data-theme="dark"] .focus\:border-red-400:focus { border-color: var(--color-red-400); }
 :root[data-theme="dark"] .focus\:ring-brand-100:focus { --tw-ring-color: var(--color-brand-100); }

@@ -58,7 +58,7 @@ export const publicAcademyRepository = {
   createCoachProfile(db: Db, d: { userId: string; slug: string; displayName: string; headline: string | null; bio: string | null; links: CoachLink[]; isPublic: boolean }) {
     return db.coachProfile.create({ data: { ...d, links: d.links as unknown as Prisma.InputJsonValue } });
   },
-  updateCoachProfile(db: Db, id: string, d: { slug?: string; displayName?: string; headline?: string | null; bio?: string | null; links?: CoachLink[]; isPublic?: boolean }) {
+  updateCoachProfile(db: Db, id: string, d: { slug?: string; displayName?: string; headline?: string | null; bio?: string | null; links?: CoachLink[]; isPublic?: boolean; photoKey?: string | null }) {
     return db.coachProfile.update({ where: { id }, data: { ...d, links: d.links as unknown as Prisma.InputJsonValue | undefined } });
   },
   coachProfilesByUser(db: Db, userIds: string[]) {

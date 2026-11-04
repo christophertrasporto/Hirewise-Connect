@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Inter, Plus_Jakarta_Sans, Instrument_Serif } from "next/font/google";
 import { THEME_INIT_SCRIPT } from "@/lib/theme";
+import { siteUrl } from "@/lib/site-url";
 import "./globals.css";
 
 const inter = Inter({
@@ -31,7 +32,8 @@ export const metadata: Metadata = {
   },
   description:
     "Hirewise Connect is the agency-controlled talent marketplace of Hirewise Virtual Assistance Services. Discover certified, assessed virtual assistants. Hirewise handles pricing, interviews, contracts, deposits, and deployment.",
-  metadataBase: new URL("https://connect.hirewise.example"),
+  // The real domain from APP_URL, so canonical, sitemap and share-card addresses are absolute and correct.
+  metadataBase: new URL(siteUrl()),
   openGraph: {
     title: "Hirewise Connect",
     description: "Hire verified virtual assistants, not résumés.",

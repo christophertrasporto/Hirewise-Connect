@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { revalidatePublicAcademy } from "@/app/public-academy-cache";
 import { redirect } from "next/navigation";
 import { prisma } from "@/server/db/client";
 import { requireActor } from "@/server/auth/require-actor";
@@ -8,8 +9,8 @@ import { toActionError, formList, formString, type ActionResult } from "@/server
 import { rejectCourse, publishOwnCourse } from "@/server/services/academy.service";
 import { coverUploadRequestSchema, createCourseCoverUploadUrl, setCourseCover, courseSchema, courseSettingsSchema, createCourse, updateCourse, updateCourseSettings, setCourseCertificationTemplate, submitCourseForApproval, publishCourse, archiveCourse, restoreCourse, enrol, recordCoursePayment, addCoachToCourse, moduleSchema, lessonSchema, lessonUploadRequestSchema, saveModule, deleteModule, moveModule, duplicateModule, saveLesson, deleteLesson, moveLesson, reorderLessons, duplicateLesson, createLessonUploadUrl } from "@/server/services/academy.service";
 import { savePublicDetails, setCourseListing, setCourseFeatured } from "@/server/services/public-course.service";
-import { hideReview, unhideReview } from "@/server/services/review.service";
-import { saveOwnCoachProfile } from "@/server/services/coach-profile.service";
+import { hideReview, unhideReview, writeReview } from "@/server/services/review.service";
+import { saveOwnCoachProfile, createCoachPhotoUploadUrl, setCoachPhoto, coachPhotoRequestSchema } from "@/server/services/coach-profile.service";
 import { categorySchema, saveCategory } from "@/server/services/category.service";
 import { assessmentSchema, evaluationSchema, labelSchema, recordAssessment, recordEvaluation, saveLabel } from "@/server/services/assessment.service";
 import { templateSchema, saveTemplate, issueCertification, reviewCertification, revokeCertification } from "@/server/services/certification.service";
@@ -86,6 +87,7 @@ export async function saveCategoryAction(_prev: ActionResult, fd: FormData): Pro
     const actor = await requireActor();
     await saveCategory(prisma, actor, categorySchema.parse({ id: formString(fd, "id") || undefined, name: formString(fd, "name"), order: formString(fd, "order") || "0", isActive: fd.get("isActive") === "on" }));
     revalidatePath("/courses", "layout");
+    revalidatePublicAcademy();
     return { ok: true };
   } catch (e) {
     return toActionError(e);
@@ -133,6 +135,7 @@ export async function updateCourseAction(_prev: ActionResult, fd: FormData): Pro
 // ---------------------------------------------------------------------------
 
 function revalidateCourse(courseId: string) {
+  revalidatePublicAcademy();
   revalidatePath(`/courses/manage/${courseId}`, "layout");
   revalidatePath(`/courses/${courseId}`);
   revalidatePath("/courses");
@@ -279,6 +282,7 @@ export async function setCourseCoverAction(input: { courseId: string; key: strin
   try {
     const actor = await requireActor();
     const r = await setCourseCover(prisma, actor, input.courseId, input.key);
+    revalidatePublicAcademy();
     revalidatePath("/courses");
     revalidatePath(`/courses/${input.courseId}`);
     revalidatePath(`/courses/manage/${input.courseId}`, "layout");
@@ -365,6 +369,7 @@ export async function enrolAction(_prev: ActionResult, fd: FormData): Promise<Ac
     const actor = await requireActor();
     const courseId = formString(fd, "courseId");
     await enrol(prisma, actor, courseId, formString(fd, "promoCode"));
+    revalidatePublicAcademy();
     revalidatePath("/courses");
     revalidatePath(`/courses/${courseId}`);
     return { ok: true };
@@ -546,8 +551,43 @@ export async function reviewModerationAction(_prev: ActionResult, fd: FormData):
     const reviewId = formString(fd, "reviewId");
     if (formString(fd, "op") === "UNHIDE") await unhideReview(prisma, actor, reviewId);
     else await hideReview(prisma, actor, reviewId, formString(fd, "reason"));
+    revalidatePublicAcademy();
     revalidatePath(`/courses/manage/${formString(fd, "courseId")}`, "layout");
     return { ok: true };
+  } catch (e) {
+    return toActionError(e);
+  }
+}
+
+/** A learner who owns the course writes or edits their one review. */
+export async function writeReviewAction(_prev: ActionResult, fd: FormData): Promise<ActionResult> {
+  try {
+    const actor = await requireActor();
+    await writeReview(prisma, actor, formString(fd, "courseId"), { rating: formString(fd, "rating"), body: formString(fd, "body") });
+    revalidatePublicAcademy();
+    return { ok: true };
+  } catch (e) {
+    return toActionError(e);
+  }
+}
+
+/** Presigned PUT for the coach photo. The browser uploads, then setCoachPhotoAction records the key. */
+export async function requestCoachPhotoUploadAction(input: { contentType: string; sizeBytes: number }): Promise<ActionResult<{ key: string; url: string; method: "PUT"; headers: Record<string, string> }>> {
+  try {
+    const actor = await requireActor();
+    return { ok: true, data: await createCoachPhotoUploadUrl(prisma, actor, coachPhotoRequestSchema.parse(input)) };
+  } catch (e) {
+    return toActionError(e);
+  }
+}
+
+export async function setCoachPhotoAction(input: { key: string | null }): Promise<ActionResult<{ photoUrl: string | null }>> {
+  try {
+    const actor = await requireActor();
+    const p = await setCoachPhoto(prisma, actor, input.key);
+    revalidatePublicAcademy();
+    revalidatePath("/coach/profile");
+    return { ok: true, data: { photoUrl: p.photoUrl } };
   } catch (e) {
     return toActionError(e);
   }
@@ -567,6 +607,7 @@ export async function saveCoachProfileAction(_prev: ActionResult, fd: FormData):
       links,
       isPublic: fd.get("isPublic") === "on",
     });
+    revalidatePublicAcademy();
     revalidatePath("/coach/profile");
     return { ok: true };
   } catch (e) {
