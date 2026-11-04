@@ -15,11 +15,11 @@ export const onlinePaymentRepository = {
     return db.onlinePayment.findFirst({ where: { provider, OR: [{ checkoutId: id }, { providerPaymentId: id }] }, include });
   },
   /** A checkout started recently and not finished: reused so a double click does not create two. */
-  findOpen(db: Db, enrollmentId: string, since: Date) {
-    return db.onlinePayment.findFirst({ where: { enrollmentId, status: "PENDING", redirectUrl: { not: null }, createdAt: { gte: since } }, orderBy: { createdAt: "desc" }, include });
+  findOpen(db: Db, enrollmentId: string, since: Date, provider?: string) {
+    return db.onlinePayment.findFirst({ where: { enrollmentId, ...(provider ? { provider } : {}), status: "PENDING", redirectUrl: { not: null }, createdAt: { gte: since } }, orderBy: { createdAt: "desc" }, include });
   },
-  latestOpenForEnrollment(db: Db, enrollmentId: string) {
-    return db.onlinePayment.findFirst({ where: { enrollmentId, status: { in: ["CREATED", "PENDING"] } }, orderBy: { createdAt: "desc" }, include });
+  latestOpenForEnrollment(db: Db, enrollmentId: string, provider?: string) {
+    return db.onlinePayment.findFirst({ where: { enrollmentId, ...(provider ? { provider } : {}), status: { in: ["CREATED", "PENDING"] } }, orderBy: { createdAt: "desc" }, include });
   },
   update(db: Db, id: string, data: Prisma.OnlinePaymentUncheckedUpdateInput) {
     return db.onlinePayment.update({ where: { id }, data });
@@ -34,8 +34,8 @@ export const onlinePaymentRepository = {
     const r = await db.onlinePayment.updateMany({ where: { enrollmentId, status: { in: ["CREATED", "PENDING"] } }, data: { status: "CANCELLED", failureReason: reason } });
     return r.count;
   },
-  listToReconcile(db: Db, olderThan: Date, newerThan: Date, take = 25) {
-    return db.onlinePayment.findMany({ where: { status: { in: ["CREATED", "PENDING"] }, createdAt: { lte: olderThan, gte: newerThan } }, orderBy: { createdAt: "asc" }, take, select: { id: true } });
+  listToReconcile(db: Db, olderThan: Date, newerThan: Date, take = 25, provider?: string) {
+    return db.onlinePayment.findMany({ where: { ...(provider ? { provider } : {}), status: { in: ["CREATED", "PENDING"] }, createdAt: { lte: olderThan, gte: newerThan } }, orderBy: { createdAt: "asc" }, take, select: { id: true, provider: true } });
   },
   listForEnrollment(db: Db, enrollmentId: string) {
     return db.onlinePayment.findMany({ where: { enrollmentId }, orderBy: { createdAt: "desc" }, take: 20, select: { id: true, status: true, amountMinor: true, currency: true, createdAt: true, paidAt: true } });

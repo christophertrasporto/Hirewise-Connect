@@ -85,9 +85,11 @@ export async function runMaintenance(prisma: PrismaClient, now = new Date()): Pr
   // v2 phase 6a: every approved agent and active agency holds an email alias.
   const { allocateMissingAliases } = await import("@/server/services/alias.service");
   await allocateMissingAliases(prisma);
-  // Online course payments: a lost or late Maya webhook is made up for by looking open payments up.
+  // Online course payments: a lost or late Maya or PayPal webhook is made up for by looking open payments up.
   const { reconcilePendingOnlinePayments } = await import("@/server/services/maya-payment.service");
   await reconcilePendingOnlinePayments(prisma, now);
+  const { reconcilePendingPayPalPayments } = await import("@/server/services/paypal-payment.service");
+  await reconcilePendingPayPalPayments(prisma, now);
   // Promo codes: a use reserved on an enrolment that stayed unpaid is given back.
   const { releaseStaleReservations } = await import("@/server/services/promo.service");
   await releaseStaleReservations(prisma, now);

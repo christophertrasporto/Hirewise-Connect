@@ -760,7 +760,7 @@ type EnrollmentForPayment = NonNullable<Awaited<ReturnType<typeof academyReposit
  * verified online payment (Maya). Marks it once, then handles the credential source, the referral commission, the
  * audit entry, and the learner's notification, all inside the caller's transaction.
  */
-export async function settleEnrollmentPaymentTx(tx: Db, actor: Actor, e: EnrollmentForPayment, p: { paidCents: number | null; reference: string | null; waived: boolean; reason?: string; recordedById: string | null; channel: "STAFF" | "MAYA"; /** The fee the gateway reported, when known. Maya sales leave it out and wait for the real fee. */ gatewayFeeMinor?: number | null }) {
+export async function settleEnrollmentPaymentTx(tx: Db, actor: Actor, e: EnrollmentForPayment, p: { paidCents: number | null; reference: string | null; waived: boolean; reason?: string; recordedById: string | null; channel: "STAFF" | "MAYA" | "PAYPAL"; /** The fee the gateway reported, when known. A gateway sale without one waits for the real fee (Maya always does; PayPal reports it). */ gatewayFeeMinor?: number | null }) {
   const changed = await academyRepository.recordPaymentIfPending(tx, e.id, { paidCents: p.paidCents, paymentReference: p.reference, waived: p.waived, recordedById: p.recordedById });
   if (changed !== 1) throw new Error("This enrolment does not have a pending payment.");
   // Promo codes: a reserved use becomes consumed the moment the enrolment is paid or waived.
