@@ -22,6 +22,7 @@ import { recomputeVerification } from "./verification.service";
 import { scanMessage } from "@/lib/message-filter";
 import { flagRepository } from "@/server/repositories/flag.repository";
 import { attachReferrer } from "./referral.service";
+import { buyerLabel } from "@/lib/coach-wallet";
 
 /** Section 8.8: contact details typed into free-text profile fields raise a flag (the edit is still saved). */
 async function flagContactInfoInProfile(db: PrismaClient, actor: Actor, agentProfileId: string, fields: Array<string | null | undefined>) {
@@ -57,6 +58,19 @@ export const agentRegistrationSchema = z.object({
   yearsExperience: z.coerce.number().int().min(0).max(50),
 });
 export type AgentRegistrationInput = z.infer<typeof agentRegistrationSchema>;
+
+type ProfileField = "locationCity" | "locationCountry" | "timezone" | "primaryRole" | "yearsExperience";
+/** What registration needs. The profile details are optional so a short sign-up can leave them for the profile page. */
+export type AgentSignupInput = Omit<AgentRegistrationInput, ProfileField> & Partial<Pick<AgentRegistrationInput, ProfileField>>;
+
+/** The short sign-up used when someone comes to buy a course: name, email, password, and the terms. */
+export const quickAgentRegistrationSchema = z.object({
+  termsAccepted: z.boolean().default(false),
+  fullName: agentRegistrationSchema.shape.fullName,
+  email: emailSchema,
+  password: passwordSchema,
+});
+export type QuickAgentRegistrationInput = z.infer<typeof quickAgentRegistrationSchema>;
 
 export const personalSchema = z.object({
   displayName: z.string().trim().min(2).max(60),
@@ -106,11 +120,11 @@ export const experienceSchema = z.object({
 /** v2 phase 2: a registration that came from an agency invitation also creates the membership and takes one seat. */
 export type JoinViaInvite = { agencyId: string; source: "UNIQUE_LINK" | "EMAIL_INVITE"; emailInviteId: string | null; linkId: string | null; invitedEmail: string | null };
 
-export async function registerAgent(db: PrismaClient, input: AgentRegistrationInput, meta: RequestMeta, join?: JoinViaInvite, opts: { referralCode?: string | null } = {}) {
+export async function registerAgent(db: PrismaClient, input: AgentSignupInput, meta: RequestMeta, join?: JoinViaInvite, opts: { referralCode?: string | null } = {}) {
   rateLimit(`register:${meta.ipAddress ?? "unknown"}`, 10, 60 * 60_000);
   requireTermsAccepted(input.termsAccepted);
   // Identity phase 1: duplicate detection runs before anything is created; a match raises a flag and stops here.
-  await guardSignup(db, { kind: join ? "INVITE_JOIN" : "SIGNUP", email: input.email, phone: input.phone || null, fullName: input.fullName, data: { fullName: input.fullName, displayName: input.displayName, locationCity: input.locationCity, locationCountry: input.locationCountry, primaryRole: input.primaryRole, joinAgencyId: join?.agencyId ?? "" }, continuationToken: input.continuationToken || null, meta });
+  await guardSignup(db, { kind: join ? "INVITE_JOIN" : "SIGNUP", email: input.email, phone: input.phone || null, fullName: input.fullName, data: { fullName: input.fullName, displayName: input.displayName, locationCity: input.locationCity ?? "", locationCountry: input.locationCountry ?? "", primaryRole: input.primaryRole ?? "", joinAgencyId: join?.agencyId ?? "" }, continuationToken: input.continuationToken || null, meta });
   const passwordHash = await hashPassword(input.password);
   const role = await userRepository.roleIdByKey(db, "AGENT");
 
@@ -122,11 +136,11 @@ export async function registerAgent(db: PrismaClient, input: AgentRegistrationIn
       fullLegalName: input.fullName,
       personalEmail: input.email,
       phone: input.phone || null,
-      locationCity: input.locationCity,
-      locationCountry: input.locationCountry,
-      timezone: input.timezone,
-      primaryRole: input.primaryRole,
-      yearsExperience: input.yearsExperience,
+      locationCity: input.locationCity ?? null,
+      locationCountry: input.locationCountry ?? null,
+      timezone: input.timezone ?? null,
+      primaryRole: input.primaryRole ?? null,
+      yearsExperience: input.yearsExperience ?? null,
     });
     const actor: Actor = { userId: user.id, role: "AGENT", permissions: new Set(), agentProfileId: profile.id };
     const identityId = await ensureIdentity(tx, actor, { userId: user.id, email: input.email, phone: input.phone || null });
@@ -149,6 +163,16 @@ export async function registerAgent(db: PrismaClient, input: AgentRegistrationIn
   }
   const session = await createSession(db, { userId, mfaPassed: true, remember: true, ...meta });
   return { userId, agentProfileId, ...session };
+}
+
+/**
+ * Short sign-up for someone who came to buy a course: the same account, terms, duplicate check, referral attribution and
+ * email verification as the full form, but only the legal name is asked. The professional name starts as first name and
+ * last initial ("Maria S."), and city, timezone, role and experience are completed later on the profile page. The profile
+ * stays a DRAFT, so nothing about it is visible to clients until it is completed and approved.
+ */
+export async function registerAgentQuick(db: PrismaClient, input: QuickAgentRegistrationInput, meta: RequestMeta, opts: { referralCode?: string | null } = {}) {
+  return registerAgent(db, { termsAccepted: input.termsAccepted, fullName: input.fullName, displayName: buyerLabel(input.fullName), email: input.email, password: input.password }, meta, undefined, opts);
 }
 
 // ---------------------------------------------------------------------------
