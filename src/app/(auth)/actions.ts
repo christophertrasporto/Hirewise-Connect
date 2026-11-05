@@ -11,7 +11,7 @@ import { readSessionCookie, writeSessionCookie, clearSessionCookie, requestMeta 
 import { HOME_PATH } from "@/server/auth/require-actor";
 import { loginWithPassword, logout, requestMagicLink, requestPasswordReset, resetPassword } from "@/server/services/auth.service";
 import { registerClient, clientRegistrationSchema } from "@/server/services/client.service";
-import { registerAgent, agentRegistrationSchema } from "@/server/services/agent.service";
+import { registerAgent, registerAgentQuick, agentRegistrationSchema, quickAgentRegistrationSchema } from "@/server/services/agent.service";
 import { toActionError, formList, formString, type ActionResult } from "@/server/http/action-result";
 
 /** The first-party referral cookie set by /join?ref=CODE (last click wins), or null. */
@@ -131,6 +131,23 @@ export async function registerAgentAction(_prev: ActionResult, fd: FormData): Pr
     const inviteToken = formString(fd, "inviteToken");
     const referralCode = await referralCookie();
     const s = inviteToken ? await registerViaInvite(prisma, input, inviteToken, meta, { referralCode }) : await registerAgent(prisma, input, meta, undefined, { referralCode });
+    await writeSessionCookie(s.token, s.expiresAt);
+  } catch (e) {
+    return toActionError(e);
+  }
+  redirect(HOME_PATH);
+}
+
+/** The short sign-up for someone who came to buy a course: name, email, password, terms. The return cookie brings them back to checkout. */
+export async function registerAgentQuickAction(_prev: ActionResult, fd: FormData): Promise<ActionResult> {
+  try {
+    const input = quickAgentRegistrationSchema.parse({
+      fullName: formString(fd, "fullName"),
+      email: formString(fd, "email"),
+      password: formString(fd, "password"),
+      termsAccepted: fd.get("termsAccepted") === "on",
+    });
+    const s = await registerAgentQuick(prisma, input, await requestMeta(), { referralCode: await referralCookie() });
     await writeSessionCookie(s.token, s.expiresAt);
   } catch (e) {
     return toActionError(e);

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { NextRequest } from "next/server";
-import { RETURN_COOKIE, RETURN_COOKIE_MAX_AGE, safeReturnPath, startReturnHref } from "@/lib/return-to";
+import { RETURN_COOKIE, RETURN_COOKIE_MAX_AGE, isBuyReturnPath, safeReturnPath, startReturnHref } from "@/lib/return-to";
 import { GET as start } from "@/app/api/return/start/route";
 import { GET as cont } from "@/app/api/return/continue/route";
 
@@ -47,6 +47,18 @@ describe("which paths can be remembered", () => {
   it("builds the link the course page uses", () => {
     expect(startReturnHref(ID, "register")).toBe(`/api/return/start?to=%2Fcourses%2F${ID}&next=register`);
     expect(startReturnHref(ID, "login")).toBe(`/api/return/start?to=%2Fcourses%2F${ID}&next=login`);
+    expect(startReturnHref(ID, "register", "buy")).toBe(`/api/return/start?to=%2Fcourses%2F${ID}%2Fbuy&next=register`);
+  });
+
+  it("also accepts the checkout screen, exactly, and nothing beyond it", () => {
+    expect(safeReturnPath(`/courses/${ID}/buy`)).toBe(`/courses/${ID}/buy`);
+    expect(safeReturnPath(`/courses/${ID}/buy?promo=X#top`)).toBe(`/courses/${ID}/buy`);
+    expect(isBuyReturnPath(`/courses/${ID}/buy`)).toBe(true);
+    expect(isBuyReturnPath(`/courses/${ID}`)).toBe(false);
+    expect(isBuyReturnPath(null)).toBe(false);
+    for (const bad of [`/academy/courses/${ID}/buy`, `/courses/${ID}/buy/`, `/courses/${ID}/buy/extra`, `/courses/${ID}/pay`, `/courses/${ID}/buy/../../staff`, `//evil.example/courses/${ID}/buy`, `/courses/short/buy`, `/courses//buy`]) {
+      expect(safeReturnPath(bad), bad).toBeNull();
+    }
   });
 });
 
@@ -62,6 +74,15 @@ describe("Buy course, signed out (/api/return/start)", () => {
     expect(c.maxAge).toBe(RETURN_COOKIE_MAX_AGE);
     expect(c.path).toBe("/");
     expect(res.headers.get("cache-control")).toBe("no-store");
+  });
+
+  it("coming to buy: remembers the checkout screen and sends a new visitor to the short sign-up", async () => {
+    const res = await start(req(startReturnHref(ID, "register", "buy")));
+    expect(location(res)).toBe("/register/talent?quick=1");
+    expect(res.cookies.get(RETURN_COOKIE)!.value).toBe(`/courses/${ID}/buy`);
+    const login = await start(req(startReturnHref(ID, "login", "buy")));
+    expect(location(login)).toBe("/login");
+    expect(login.cookies.get(RETURN_COOKIE)!.value).toBe(`/courses/${ID}/buy`);
   });
 
   it("sends someone with an account to log in, with the same cookie", async () => {
@@ -88,6 +109,10 @@ describe("Buy course, signed out (/api/return/start)", () => {
 });
 
 describe("after every gate has passed (/api/return/continue)", () => {
+  it("goes to the remembered checkout screen", async () => {
+    expect(location(await cont(req("/api/return/continue", `/courses/${ID}/buy`)))).toBe(`/courses/${ID}/buy`);
+  });
+
   it("goes to the remembered course once and forgets it", async () => {
     const res = await cont(req("/api/return/continue", `/courses/${ID}`));
     expect(location(res)).toBe(`/courses/${ID}`);

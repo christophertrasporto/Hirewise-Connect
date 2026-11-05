@@ -1,6 +1,7 @@
 import type { PrismaClient } from "@/server/db/types";
 import type { Actor } from "@/server/auth/actor";
 import { NotFoundError, ForbiddenError } from "@/server/policies/authorize";
+import { UserMessageError } from "@/server/policies/user-message-error";
 import { academyRepository } from "@/server/repositories/academy.repository";
 import { onlinePaymentRepository } from "@/server/repositories/online-payment.repository";
 import { audit } from "@/server/audit/audit";
@@ -38,11 +39,11 @@ function appUrl() {
 /** Learner starts (or resumes) a Maya checkout for their own pending enrolment. Returns the Maya page to send them to. */
 export async function startMayaCheckout(db: PrismaClient, actor: Actor, enrollmentId: string): Promise<{ url: string }> {
   if (actor.role !== "AGENT" || !actor.agentProfileId) throw new ForbiddenError("Only talent pay for courses.");
-  if (!mayaEnabled()) throw new Error("Online payment is not available right now. Pay by bank transfer or GCash instead.");
+  if (!mayaEnabled()) throw new UserMessageError("Online payment is not available right now. Pay by bank transfer or GCash instead.");
   const e = await academyRepository.findEnrollmentById(db, enrollmentId);
   if (!e || e.agentProfileId !== actor.agentProfileId) throw new NotFoundError();
-  if (e.paymentStatus !== "PENDING") throw new Error("This course does not need a payment.");
-  if (!mayaAvailableFor({ currency: e.currency, priceCents: e.priceCents })) throw new Error("This course cannot be paid with Maya. Pay by bank transfer or GCash instead.");
+  if (e.paymentStatus !== "PENDING") throw new UserMessageError("This course does not need a payment.");
+  if (!mayaAvailableFor({ currency: e.currency, priceCents: e.priceCents })) throw new UserMessageError("This course cannot be paid with Maya. Pay by bank transfer or GCash instead.");
   rateLimit(`maya-start:${actor.userId}`, 10, 60 * 60_000);
 
   const open = await onlinePaymentRepository.findOpen(db, e.id, new Date(Date.now() - REUSE_WINDOW_MS), PROVIDER);
@@ -67,7 +68,7 @@ export async function startMayaCheckout(db: PrismaClient, actor: Actor, enrollme
   } catch (err) {
     logger.error({ err: err instanceof Error ? { name: err.name, message: err.message } : err, onlinePaymentId: row.id }, "maya checkout could not be created");
     await onlinePaymentRepository.update(db, row.id, { status: "FAILED", failureReason: "Could not create the checkout" });
-    throw new Error("Maya could not start the payment. Try again in a moment, or pay by bank transfer or GCash.");
+    throw new UserMessageError("Maya could not start the payment. Try again in a moment, or pay by bank transfer or GCash.");
   }
 }
 

@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { RETURN_COOKIE, RETURN_COOKIE_MAX_AGE, safeReturnPath } from "@/lib/return-to";
+import { RETURN_COOKIE, RETURN_COOKIE_MAX_AGE, isBuyReturnPath, safeReturnPath } from "@/lib/return-to";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -10,7 +10,8 @@ export const dynamic = "force-dynamic";
  */
 export async function GET(req: NextRequest) {
   const to = safeReturnPath(req.nextUrl.searchParams.get("to"));
-  const next = req.nextUrl.searchParams.get("next") === "login" ? "/login" : "/register?as=talent";
+  // Coming to buy: a new visitor gets the short sign-up (name, email, password, terms); otherwise the full talent form.
+  const next = req.nextUrl.searchParams.get("next") === "login" ? "/login" : isBuyReturnPath(to) ? "/register/talent?quick=1" : "/register?as=talent";
   const res = NextResponse.redirect(new URL(next, req.url));
   res.headers.set("Cache-Control", "no-store");
   if (to) res.cookies.set(RETURN_COOKIE, to, { httpOnly: true, sameSite: "lax", secure: process.env.NODE_ENV === "production", path: "/", maxAge: RETURN_COOKIE_MAX_AGE });
