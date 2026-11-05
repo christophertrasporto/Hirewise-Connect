@@ -61,7 +61,8 @@ export async function startPayPalCheckout(db: PrismaClient, actor: Actor, enroll
     return { url: order.redirectUrl };
   } catch (err) {
     logger.error({ err: err instanceof Error ? { name: err.name, message: err.message } : err, onlinePaymentId: row.id }, "paypal order could not be created");
-    await onlinePaymentRepository.update(db, row.id, { status: "FAILED", failureReason: "Could not create the order" });
+    // PayPal's own refusal (status and issue name, never a key) is kept on the attempt so staff can see why it failed.
+    await onlinePaymentRepository.update(db, row.id, { status: "FAILED", failureReason: `Could not create the order: ${err instanceof Error ? err.message : "unknown error"}`.slice(0, 400) });
     throw new UserMessageError("PayPal could not start the payment. Try again in a moment, or pay by bank transfer or GCash.");
   }
 }
