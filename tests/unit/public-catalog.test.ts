@@ -180,11 +180,12 @@ describe("site address and SEO", () => {
 
 describe("the main button", () => {
   const c = { id: "course_12345678", priceCents: 1000 };
-  it("sends a signed-out visitor to sign up with the course remembered, and talent to the course in the app", () => {
-    expect(courseCta("SIGNED_OUT", c)).toMatchObject({ label: "Buy course", href: "/api/return/start?to=%2Fcourses%2Fcourse_12345678&next=register", logIn: "/api/return/start?to=%2Fcourses%2Fcourse_12345678&next=login" });
+  it("sends a signed-out visitor to the short sign-up with checkout remembered, and talent to checkout", () => {
+    expect(courseCta("SIGNED_OUT", c)).toMatchObject({ label: "Buy course", href: "/api/return/start?to=%2Fcourses%2Fcourse_12345678%2Fbuy&next=register", logIn: "/api/return/start?to=%2Fcourses%2Fcourse_12345678%2Fbuy&next=login" });
     expect(courseCta("SIGNED_OUT", { ...c, priceCents: 0 }).label).toBe("Enrol for free");
-    expect(courseCta("CAN_BUY", c)).toMatchObject({ label: "Buy course", href: "/courses/course_12345678" });
-    expect(courseCta("PENDING", c).label).toBe("Complete your payment");
+    expect(courseCta("CAN_BUY", c)).toMatchObject({ label: "Buy course", href: "/courses/course_12345678/buy" });
+    expect(courseCta("PENDING", c)).toMatchObject({ label: "Complete your payment", href: "/courses/course_12345678/buy" });
+    expect(courseCta("OWNER", c).href).toBe("/courses/course_12345678");
     expect(courseCta("OWNER", c).label).toBe("Continue learning");
     expect(courseCta("ENDED", c).label).toBe("View course");
   });

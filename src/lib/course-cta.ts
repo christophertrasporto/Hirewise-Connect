@@ -13,13 +13,14 @@ export type CourseCta = { label: string; href: string; note: string | null; /** 
 export function courseCta(state: CourseViewerState, course: { id: string; priceCents: number }): CourseCta {
   const buy = course.priceCents === 0 ? "Enrol for free" : "Buy course";
   const appHref = `/courses/${course.id}`;
+  const buyHref = `${appHref}/buy`;
   switch (state) {
     case "SIGNED_OUT":
-      return { label: buy, href: startReturnHref(course.id, "register"), note: "Create a free talent account and you will come straight back here to buy this course. Already have an account?", logIn: startReturnHref(course.id, "login") };
+      return { label: buy, href: startReturnHref(course.id, "register", "buy"), note: "Create your account with just your name, email and a password, and you come straight back to check out. Already have an account?", logIn: startReturnHref(course.id, "login", "buy") };
     case "CAN_BUY":
-      return { label: buy, href: appHref, note: null, logIn: null };
+      return { label: buy, href: buyHref, note: null, logIn: null };
     case "PENDING":
-      return { label: "Complete your payment", href: appHref, note: "You are enrolled; the lessons unlock when your payment is confirmed.", logIn: null };
+      return { label: "Complete your payment", href: buyHref, note: "You are enrolled; the lessons unlock when your payment is confirmed.", logIn: null };
     case "OWNER":
       return { label: "Continue learning", href: appHref, note: "You own this course.", logIn: null };
     case "ENDED":
