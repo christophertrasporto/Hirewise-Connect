@@ -1,6 +1,6 @@
 import { clientLabelFrom } from "@/lib/client-redaction";
 import { beforeAll, afterAll, describe, expect, it } from "vitest";
-import { testDb, resetDb } from "../setup/db";
+import { testDb, resetDb, addWelcomeVideo } from "../setup/db";
 import { createCourse, saveModule, saveLesson, deleteLesson, updateCourseSettings, submitCourseForApproval, publishCourse, enrol, getEnrollmentForAgent } from "@/server/services/academy.service";
 import { saveQuestion, startAttempt, attemptForLearner, submitAttempt, quizStateForLearner } from "@/server/services/quiz.service";
 import { markLessonComplete, startLesson } from "@/server/services/lesson-media.service";
@@ -77,7 +77,9 @@ describe("sequential unlock", () => {
     ids.finalAssessment = await saveLesson(db, c, ids.course, { moduleId: ids.m2, title: "Final assessment", contentType: "ASSESSMENT", passingScore: 60, isRequired: false });
     await saveQuestion(db, c, ids.course, ids.finalAssessment, { prompt: "Pick A again", choices: [{ text: "A", isCorrect: true }, { text: "B", isCorrect: false }] });
     await updateCourseSettings(db, c, ids.course, settings({ sequentialUnlock: true }));
+    await addWelcomeVideo(db, ids.course);
     await submitCourseForApproval(db, c, ids.course);
+    await addWelcomeVideo(db, ids.course);
     await publishCourse(db, admin(), ids.course, { certificationTemplateId: ids.template });
     await enrol(db, agent(), ids.course);
 

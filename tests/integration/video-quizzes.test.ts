@@ -2,7 +2,7 @@ import { beforeAll, afterAll, describe, expect, it } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { testDb, resetDb } from "../setup/db";
+import { testDb, resetDb, addWelcomeVideo } from "../setup/db";
 import { createCourse, saveModule, saveLesson, createLessonUploadUrl, submitCourseForApproval, publishCourse, enrol, getEnrollmentForAgent } from "@/server/services/academy.service";
 import { saveQuestion, startAttempt, attemptForLearner, submitAttempt, quizStateForLearner } from "@/server/services/quiz.service";
 import { recordMediaProgress, mediaStateForLearner, markLessonComplete } from "@/server/services/lesson-media.service";
@@ -90,7 +90,9 @@ describe("questions on video lessons", () => {
     await twoQuestions(ids.vimeo);
     await expect(saveQuestion(db, await coach(), ids.course, ids.text, { prompt: "Not allowed here?", choices: [{ text: "A", isCorrect: true }, { text: "B", isCorrect: false }] })).rejects.toThrow(/do not have questions/);
     expect(await db.question.count({ where: { lessonId: ids.upload } })).toBe(2);
+    await addWelcomeVideo(db, ids.course);
     await submitCourseForApproval(db, await coach(), ids.course);
+    await addWelcomeVideo(db, ids.course);
     await publishCourse(db, admin(), ids.course, {});
     await enrol(db, agent(), ids.course);
   });

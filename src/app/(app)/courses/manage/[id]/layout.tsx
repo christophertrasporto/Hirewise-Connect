@@ -19,7 +19,7 @@ export default async function BuilderLayout({ children, params }: { children: Re
         actions={<div className="flex items-center gap-2"><StatusBadge status={course.status} />{course.certificationTemplate && <span className="rounded-full bg-gold-50 px-2.5 py-1 text-[11.5px] font-semibold text-gold-700 ring-1 ring-inset ring-gold-200">{course.certificationTemplate.name}</span>}</div>}
       />
       <BuilderTabs courseId={course.id} />
-      {courseWarnings(course).map((w) => <div key={w} className="mb-4"><Banner tone="warn" title="No free preview">{w}</Banner></div>)}
+      {courseWarnings(course).map((w) => <div key={w} className="mb-4"><Banner tone="warn" title="Welcome video">{w} <Link href={`/courses/manage/${course.id}/modules`} className="font-semibold underline">Open the curriculum</Link> and tick Free preview on the lesson.</Banner></div>)}
       {children}
     </>
   );

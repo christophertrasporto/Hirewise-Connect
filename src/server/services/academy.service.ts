@@ -32,6 +32,7 @@ import { assignmentRepository } from "@/server/repositories/assignment.repositor
 import { toSubmissionLearnerView as toSubmissionView, type SubmissionLearnerView } from "@/server/views/academy.views";
 import { coverUrlsFor, coverUrlFor } from "./course-cover";
 import { COVER_MAX_BYTES, COVER_MIMES, coverKeyPrefix } from "@/lib/course-cover";
+import { hasWelcomeVideo, welcomeVideoProblem } from "@/lib/welcome-video";
 
 const optionalText = (max: number) => z.string().trim().max(max).optional().or(z.literal(""));
 
@@ -107,6 +108,12 @@ export async function loadEditableCourse(db: PrismaClient, actor: Actor, courseI
 
 function publishedLessonCount(c: { modules: Array<{ status: string; lessons: Array<{ status: string }> }> }) {
   return c.modules.filter((m) => m.status === "PUBLISHED").reduce((n, m) => n + m.lessons.filter((l) => l.status === "PUBLISHED").length, 0);
+}
+
+/** A course goes live only with its welcome video (see src/lib/welcome-video.ts). Courses already live are not taken down. */
+function assertWelcomeVideo(c: { modules: Parameters<typeof welcomeVideoProblem>[0] }, Err: typeof UserMessageError) {
+  const problem = welcomeVideoProblem(c.modules);
+  if (problem) throw new Err(problem);
 }
 
 async function categoryOrThrow(db: PrismaClient, categoryId: string) {
@@ -219,6 +226,7 @@ export async function submitCourseForApproval(db: PrismaClient, actor: Actor, co
   const c = await loadEditableCourse(db, actor, courseId);
   if (c.status !== "DRAFT") throw new Error("Only draft courses can be submitted.");
   if (publishedLessonCount(c) === 0) throw new Error("Add at least one published lesson in a published module before submitting.");
+  assertWelcomeVideo(c, UserMessageError);
   await db.$transaction(async (tx) => {
     await academyRepository.setCourseStatus(tx, c.id, "PENDING_APPROVAL");
     if (c.reviewNote) await publicAcademyRepository.setReviewNote(tx, c.id, null);
@@ -233,6 +241,7 @@ export async function publishCourse(db: PrismaClient, actor: Actor, courseId: st
   const c = await academyRepository.findCourse(db, courseId);
   if (!c) throw new NotFoundError();
   if (publishedLessonCount(c) === 0) throw new Error("The course needs at least one published lesson before it can go live.");
+  assertWelcomeVideo(c, UserMessageError);
   await db.$transaction(async (tx) => {
     if (opts.certificationTemplateId !== undefined) await academyRepository.updateCourse(tx, c.id, { certificationTemplateId: opts.certificationTemplateId || null });
     await academyRepository.setCourseStatus(tx, c.id, "PUBLISHED", { publishedById: actor.userId, publishedAt: new Date() });
@@ -267,6 +276,7 @@ export async function publishOwnCourse(db: PrismaClient, actor: Actor, courseId:
   if ((await getSetting(db, "academy")).requireApproval) throw new ForbiddenError("Courses need Hirewise approval before they go live");
   if (c.status !== "DRAFT") throw new UserMessageError("Only a draft course can be published.");
   if (publishedLessonCount(c) === 0) throw new UserMessageError("Add at least one published lesson in a published module before publishing.");
+  assertWelcomeVideo(c, UserMessageError);
   await db.$transaction(async (tx) => {
     await academyRepository.setCourseStatus(tx, c.id, "PUBLISHED", { publishedById: actor.userId, publishedAt: new Date() });
     if (c.reviewNote) await publicAcademyRepository.setReviewNote(tx, c.id, null);
@@ -306,6 +316,7 @@ export async function restoreCourse(db: PrismaClient, actor: Actor, courseId: st
   if (!c) throw new NotFoundError();
   if (c.status !== "ARCHIVED") throw new Error("Only an archived course can be restored.");
   if (publishedLessonCount(c) === 0) throw new Error("The course needs at least one published lesson before it can go live again.");
+  assertWelcomeVideo(c, UserMessageError);
   await db.$transaction(async (tx) => {
     await academyRepository.setCourseStatus(tx, c.id, "PUBLISHED", { publishedById: actor.userId, publishedAt: c.publishedAt ?? new Date() });
     await audit(tx, { actor, action: "COURSE_RESTORED", entityType: "AcademyCourse", entityId: c.id, previousValue: { status: "ARCHIVED" }, newValue: { status: "PUBLISHED" } });
@@ -642,6 +653,10 @@ export function courseWarnings(c: { status: string; modules: Array<{ status: str
         ? "This published course has no free-preview lesson, so visitors have nothing to try before buying. Mark a published lesson as a free preview."
         : "No free-preview lesson yet. Mark a published lesson as a free preview before this course goes live, so visitors can try it before buying.",
     );
+  } else if (c.status !== "ARCHIVED" && warnings.length === 0) {
+    // A free preview exists but it is not an uploaded video: the course still needs its welcome (sales) video.
+    const problem = welcomeVideoProblem(c.modules);
+    if (problem) warnings.push(problem);
   }
   return warnings;
 }
@@ -867,5 +882,6 @@ export async function listTemplatesForAdmin(db: PrismaClient, actor: Actor) {
 
 export async function listAllCoursesForStaff(db: PrismaClient, actor: Actor) {
   authorize(actor, "course.manage");
-  return (await academyRepository.listCourses(db, {})).map(toCourseCoachView);
+  // `hasWelcome` lets staff chase live courses that predate the welcome-video rule (they stay live; only new publishing is blocked).
+  return (await academyRepository.listCourses(db, {})).map((c) => ({ ...toCourseCoachView(c), hasWelcome: hasWelcomeVideo(c.modules) }));
 }

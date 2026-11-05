@@ -2,7 +2,7 @@ import { beforeAll, afterAll, describe, expect, it } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { testDb, resetDb } from "../setup/db";
+import { testDb, resetDb, addWelcomeVideo } from "../setup/db";
 import { createCourse, saveModule, saveLesson, createLessonUploadUrl, submitCourseForApproval, publishCourse, enrol, getEnrollmentForAgent } from "@/server/services/academy.service";
 import { saveQuestion, startAttempt, attemptForLearner, submitAttempt, quizStateForLearner } from "@/server/services/quiz.service";
 import { recordMediaProgress, mediaStateForLearner, audioStatusOf } from "@/server/services/lesson-media.service";
@@ -69,7 +69,9 @@ describe("audiobook lesson: real-listening tracking and quiz gating", () => {
     await saveQuestion(db, await coach(), ids.course, ids.audiobook, { type: "TRUE_FALSE", prompt: "You should argue with the gatekeeper.", choices: [{ text: "True", isCorrect: false }, { text: "False", isCorrect: true }] });
     const stored = await db.courseLesson.findUniqueOrThrow({ where: { id: ids.audiobook } });
     expect([stored.contentType, stored.durationSec, stored.requiredPercent]).toEqual(["AUDIO", 1200, 90]);
+    await addWelcomeVideo(db, ids.course);
     await submitCourseForApproval(db, await coach(), ids.course);
+    await addWelcomeVideo(db, ids.course);
     await publishCourse(db, admin(), ids.course, {});
 
     await expect(mediaStateForLearner(db, agent(), ids.audiobook)).rejects.toBeInstanceOf(NotFoundError); // not enrolled

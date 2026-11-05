@@ -1,5 +1,5 @@
 import { beforeAll, afterAll, describe, expect, it } from "vitest";
-import { testDb, resetDb } from "../setup/db";
+import { testDb, resetDb, addWelcomeVideo } from "../setup/db";
 import { createCourse, saveModule, saveLesson, submitCourseForApproval, publishCourse, enrol } from "@/server/services/academy.service";
 import { saveQuestion, deleteQuestion, duplicateQuestion, startAttempt, attemptForLearner, quizStateForLearner } from "@/server/services/quiz.service";
 import { listQuestionBank, saveBankQuestion, copyQuestionToLesson, copyQuestionToBank } from "@/server/services/question-bank.service";
@@ -122,7 +122,9 @@ describe("question bank", () => {
   it("random draws take N of the lesson's published questions per attempt", async () => {
     const c = await coach();
     await saveQuestion(db, c, ids.course, ids.quizB, mc("Fourth in B"));
+    await addWelcomeVideo(db, ids.course);
     await submitCourseForApproval(db, c, ids.course);
+    await addWelcomeVideo(db, ids.course);
     await publishCourse(db, admin(), ids.course, {});
     await enrol(db, agent(), ids.course);
     const st = await quizStateForLearner(db, agent(), ids.quizB);
