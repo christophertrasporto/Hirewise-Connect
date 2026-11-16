@@ -83,7 +83,7 @@ export default async function CoursePage({ params, searchParams }: { params: Pro
           {enrollment && enrollment.attempts.length > 0 && (
             <Card title="Past exam attempts" description="Attempts from before the course moved to lesson quizzes.">
               <ul className="divide-y divide-ink-100 text-[14px]">
-                {enrollment.attempts.map((a) => <li key={a.id} className="flex items-center justify-between py-2.5"><span className="text-ink-600">{fmtDate(a.submittedAt)}</span><span className={a.passed ? "font-semibold text-brand-700" : "font-semibold text-ink-700"}>{a.scorePercent ?? "—"}% · {a.passed ? "Passed" : "Not passed"}</span></li>)}
+                {enrollment.attempts.map((a) => <li key={a.id} className="flex items-center justify-between py-2.5"><span className="text-ink-600">{fmtDate(a.submittedAt)}</span><span className={a.passed ? "font-semibold text-success-700" : "font-semibold text-ink-700"}>{a.scorePercent ?? "—"}% · {a.passed ? "Passed" : "Not passed"}</span></li>)}
               </ul>
             </Card>
           )}

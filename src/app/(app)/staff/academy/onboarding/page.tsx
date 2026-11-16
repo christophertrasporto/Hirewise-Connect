@@ -59,7 +59,7 @@ export default async function OnboardingAdminPage({ searchParams }: { searchPara
                       <p className="text-[12px] text-ink-400">{r.email}</p>
                     </td>
                     <td className="px-2 py-2.5 text-ink-600">{fmtDate(r.createdAt)}</td>
-                    <td className="px-2 py-2.5">{r.emailVerified ? <span className="inline-flex items-center gap-1 text-brand-700"><CheckCircle2 className="h-4 w-4" /> Verified</span> : <span className="inline-flex items-center gap-1 text-gold-700"><Circle className="h-4 w-4" /> Not verified</span>}</td>
+                    <td className="px-2 py-2.5">{r.emailVerified ? <span className="inline-flex items-center gap-1 text-success-700"><CheckCircle2 className="h-4 w-4" /> Verified</span> : <span className="inline-flex items-center gap-1 text-gold-700"><Circle className="h-4 w-4" /> Not verified</span>}</td>
                     <td className="px-2 py-2.5 text-ink-600">{r.profileDone ? "Complete" : "Incomplete"}{r.profileStatus ? <span className="text-ink-400"> · {r.profileStatus.toLowerCase().replace(/_/g, " ")}</span> : null}</td>
                     <td className="px-2 py-2.5">
                       {!r.videoRequired ? <span className="text-ink-400">Not required</span> : (
@@ -70,7 +70,7 @@ export default async function OnboardingAdminPage({ searchParams }: { searchPara
                       )}
                     </td>
                     <td className="px-2 py-2.5 text-ink-600">{r.videoCompletedAt ? fmtDate(r.videoCompletedAt) : r.lastWatchedAt ? <span className="text-ink-400">last watched {fmtDate(r.lastWatchedAt)}</span> : "—"}</td>
-                    <td className="px-2 py-2.5"><span className={`rounded-full px-2.5 py-1 text-[11.5px] font-semibold ring-1 ring-inset ${r.status === "ONBOARDING_COMPLETED" ? "bg-brand-50 text-brand-700 ring-brand-200" : r.status === "EMAIL_NOT_VERIFIED" ? "bg-red-50 text-red-700 ring-red-200" : "bg-gold-50 text-gold-700 ring-gold-200"}`}>{r.statusLabel}</span></td>
+                    <td className="px-2 py-2.5"><span className={`rounded-full px-2.5 py-1 text-[11.5px] font-semibold ring-1 ring-inset ${r.status === "ONBOARDING_COMPLETED" ? "bg-success-50 text-success-700 ring-success-200" : r.status === "EMAIL_NOT_VERIFIED" ? "bg-red-50 text-red-700 ring-red-200" : "bg-gold-50 text-gold-700 ring-gold-200"}`}>{r.statusLabel}</span></td>
                   </tr>
                 ))}
               </tbody>

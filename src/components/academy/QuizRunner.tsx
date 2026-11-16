@@ -37,7 +37,7 @@ export function QuizRunner({ attemptId, questions, expiresAt, courseId, lessonId
     return (
       <div className="rounded-3xl border border-ink-100 bg-white p-8 text-center shadow-soft">
         <p className="text-[12px] font-semibold uppercase tracking-[0.16em] text-ink-400">{r.pendingReview ? "Submitted for review" : "Your result"}</p>
-        <p className={cn("mt-2 font-display text-[4rem] font-extrabold leading-none", r.passed ? "text-brand-600" : "text-ink-900")}>{r.scorePercent}%</p>
+        <p className={cn("mt-2 font-display text-[4rem] font-extrabold leading-none", r.passed ? "text-success-600" : "text-ink-900")}>{r.scorePercent}%</p>
         <p className="mt-3 text-[16px] font-semibold text-ink-800">
           {r.expired ? "Time ran out before you submitted." : r.pendingReview ? "Your coach will review the written answers and confirm your score." : r.passed ? "You passed. Well done." : `Not yet. You need ${passingScore}% to pass.`}
         </p>
@@ -108,7 +108,7 @@ export function AttemptReview({ questions }: { questions: ReviewQuestion[] }) {
                 <p className="text-[12px] font-semibold uppercase tracking-[0.12em] text-ink-400">Question {i + 1} · {q.points} pt{q.points === 1 ? "" : "s"}</p>
                 <p className="mt-1.5 text-[16px] font-semibold leading-relaxed text-ink-900">{q.prompt}</p>
               </div>
-              {q.correct === true && <CheckCircle2 className="h-6 w-6 shrink-0 text-brand-500" />}
+              {q.correct === true && <CheckCircle2 className="h-6 w-6 shrink-0 text-success-500" />}
               {q.correct === false && <XCircle className="h-6 w-6 shrink-0 text-red-500" />}
             </div>
             {q.type === "SHORT_ANSWER" ? (
@@ -123,7 +123,7 @@ export function AttemptReview({ questions }: { questions: ReviewQuestion[] }) {
                       <span className="font-semibold text-ink-400">{String.fromCharCode(65 + k)}</span>
                       <span className="flex-1">{c.text}</span>
                       {isChosen && <span className="text-[11.5px] font-semibold uppercase tracking-[0.08em] text-ink-500">your answer</span>}
-                      {isCorrect && <CheckCircle2 className="h-4 w-4 text-brand-600" />}
+                      {isCorrect && <CheckCircle2 className="h-4 w-4 text-success-600" />}
                     </div>
                   );
                 })}

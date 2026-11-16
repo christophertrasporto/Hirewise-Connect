@@ -70,7 +70,7 @@ export function Uploader({ kind, accept, label, hint, extra, onDone }: Props) {
     <div>
       <label className={cn("flex cursor-pointer flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed px-6 py-8 text-center transition", busy ? "border-ink-200 bg-ink-50" : "border-ink-200 hover:border-brand-400 hover:bg-brand-50/40")}>
         <input ref={input} type="file" accept={accept} className="sr-only" disabled={busy} onChange={(e) => e.target.files?.[0] && handle(e.target.files[0])} />
-        {busy ? <Loader2 className="h-6 w-6 animate-spin text-brand-600" /> : state.phase === "done" ? <CheckCircle2 className="h-6 w-6 text-brand-600" /> : <UploadCloud className="h-6 w-6 text-ink-400" />}
+        {busy ? <Loader2 className="h-6 w-6 animate-spin text-success-600" /> : state.phase === "done" ? <CheckCircle2 className="h-6 w-6 text-success-600" /> : <UploadCloud className="h-6 w-6 text-ink-400" />}
         <span className="text-[14.5px] font-semibold text-ink-800">{busy ? (state.phase === "uploading" ? `Uploading… ${state.progress ?? 0}%` : "Saving…") : state.phase === "done" ? "Uploaded" : label}</span>
         {hint && !busy && <span className="text-[12.5px] text-ink-400">{hint}</span>}
       </label>

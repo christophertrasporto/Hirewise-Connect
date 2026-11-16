@@ -65,7 +65,7 @@ export function AssignmentPanel(p: Props) {
       {s && (
         <div className={`rounded-2xl border p-4 ${s.status === "GRADED" ? "border-brand-200 bg-brand-50/50" : s.status === "RETURNED" ? "border-gold-200 bg-gold-50/50" : "border-ink-100 bg-ink-50/60"}`}>
           <p className="flex flex-wrap items-center gap-2 text-[13.5px] font-semibold text-ink-900">
-            {s.status === "GRADED" ? <><CheckCircle2 className="h-4 w-4 text-brand-600" /> Graded{s.grade !== null ? ` · ${s.grade}${p.points ? ` / ${p.points}` : ""} points` : ""}</> : s.status === "RETURNED" ? <><RotateCcw className="h-4 w-4 text-gold-600" /> Returned for changes</> : <><Clock className="h-4 w-4 text-ink-400" /> Submitted · awaiting your coach&apos;s review</>}
+            {s.status === "GRADED" ? <><CheckCircle2 className="h-4 w-4 text-success-600" /> Graded{s.grade !== null ? ` · ${s.grade}${p.points ? ` / ${p.points}` : ""} points` : ""}</> : s.status === "RETURNED" ? <><RotateCcw className="h-4 w-4 text-gold-600" /> Returned for changes</> : <><Clock className="h-4 w-4 text-ink-400" /> Submitted · awaiting your coach&apos;s review</>}
             <span className="font-normal text-ink-400">· {fmt(s.submittedAt)}</span>
           </p>
           {s.feedback && <p className="mt-2 whitespace-pre-line text-[14px] text-ink-700"><span className="font-semibold text-ink-800">Coach feedback:</span> {s.feedback}</p>}
@@ -116,7 +116,7 @@ export function AssignmentPanel(p: Props) {
           </div>
         </form>
       )}
-      {!s && p.lessonStatus === "COMPLETED" && <p className="text-[13px] font-semibold text-brand-700">Completed.</p>}
+      {!s && p.lessonStatus === "COMPLETED" && <p className="text-[13px] font-semibold text-success-700">Completed.</p>}
     </div>
   );
 }

@@ -18,7 +18,7 @@ import {
  * when `src/app/dark-theme.css` is out of date or a class cannot be handled.
  */
 
-const FAMILIES = "ink|brand|gold|red|orange|white|black|transparent";
+const FAMILIES = "ink|brand|success|gold|red|orange|white|black|transparent";
 const SHADES = "50|100|200|300|400|500|600|700|800|900|950";
 const UTILS = "bg|text|border|border-[trblxy]|divide|ring|placeholder|from|to|via|fill|stroke|outline|decoration|accent|caret|shadow";
 const CLASS_RE = new RegExp(`(?<![\\w-])((?:[a-z0-9\\-\\[\\]:&>_*()]+:)?)(${UTILS})-((?:${FAMILIES})(?:-(?:${SHADES}))?)(\\/\\d+)?(?![\\w-])`, "g");
@@ -115,7 +115,7 @@ export function generateDarkThemeCss(srcDir: string): string {
   const classes = collectColourClasses(srcDir);
   const problems: string[] = [];
   const rules: Rule[] = [];
-  const mappedColours = new Set(["ink", "brand", "gold", "red", "orange", "white"]);
+  const mappedColours = new Set(["ink", "brand", "success", "gold", "red", "orange", "white"]);
 
   for (const c of classes) {
     const family = c.colour.split("-")[0];

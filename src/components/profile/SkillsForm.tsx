@@ -36,9 +36,9 @@ export function SkillsForm({ tags, software, mine, selectedSoftware }: { tags: T
   return (
     <div className="space-y-5">
       <div className="grid gap-5 lg:grid-cols-2">
-        <Card title={<span className="inline-flex items-center gap-2"><BadgeCheck className="h-4 w-4 text-brand-600" /> Verified by Hirewise</span>} description="Earned through Hirewise courses, assessments, or pathways. You cannot set these yourself; they are computed from what you have completed.">
+        <Card title={<span className="inline-flex items-center gap-2"><BadgeCheck className="h-4 w-4 text-success-600" /> Verified by Hirewise</span>} description="Earned through Hirewise courses, assessments, or pathways. You cannot set these yourself; they are computed from what you have completed.">
           {verified.length === 0 ? <p className="text-[13.5px] text-ink-400">No verified skills yet. Complete the mapped course for a tag below to earn the badge.</p> : (
-            <div className="flex flex-wrap gap-1.5">{verified.map((m) => <span key={m.skillId} className="inline-flex items-center gap-1 rounded-full bg-brand-50 px-2.5 py-1 text-[12.5px] font-semibold text-brand-700 ring-1 ring-inset ring-brand-200"><BadgeCheck className="h-3.5 w-3.5" /> {m.hashtag}</span>)}</div>
+            <div className="flex flex-wrap gap-1.5">{verified.map((m) => <span key={m.skillId} className="inline-flex items-center gap-1 rounded-full bg-success-50 px-2.5 py-1 text-[12.5px] font-semibold text-success-700 ring-1 ring-inset ring-success-200"><BadgeCheck className="h-3.5 w-3.5" /> {m.hashtag}</span>)}</div>
           )}
         </Card>
         <Card title={<span className="inline-flex items-center gap-2"><Hash className="h-4 w-4 text-ink-500" /> Your skill tags</span>} description="Self-declared. Searchable by clients, but not proof of anything until verified.">
@@ -72,7 +72,7 @@ export function SkillsForm({ tags, software, mine, selectedSoftware }: { tags: T
                       <label key={t.id} className={cn("inline-flex cursor-pointer items-center gap-1.5 rounded-full px-3 py-1.5 text-[13px] font-medium ring-1 ring-inset", on ? "bg-ink-900 text-white ring-ink-900" : "bg-white text-ink-700 ring-ink-200 hover:bg-ink-50")}>
                         <input type="checkbox" name="skills" value={t.id} checked={on} onChange={() => setSelected((s) => { const n = new Set(s); if (n.has(t.id)) n.delete(t.id); else n.add(t.id); return n; })} className="sr-only" />
                         {t.hashtag}
-                        {t.verifiable && <BadgeCheck className={cn("h-3.5 w-3.5", on ? "text-brand-300" : "text-brand-600")} aria-label="Can be verified through Hirewise training" />}
+                        {t.verifiable && <BadgeCheck className={cn("h-3.5 w-3.5", on ? "text-success-300" : "text-success-600")} aria-label="Can be verified through Hirewise training" />}
                       </label>
                     );
                   })}
@@ -80,7 +80,7 @@ export function SkillsForm({ tags, software, mine, selectedSoftware }: { tags: T
               </div>
             ))}
           </div>
-          <p className="mt-4 text-[12px] text-ink-400">Legend: <BadgeCheck className="inline h-3.5 w-3.5 text-brand-600" /> can be verified by completing Hirewise training. Verified badges are platform-generated and never self-assigned.</p>
+          <p className="mt-4 text-[12px] text-ink-400">Legend: <BadgeCheck className="inline h-3.5 w-3.5 text-success-600" /> can be verified by completing Hirewise training. Verified badges are platform-generated and never self-assigned.</p>
           {state.fieldErrors?.skills && <p className="mt-2 text-[12.5px] font-medium text-red-600">{state.fieldErrors.skills}</p>}
         </Card>
 

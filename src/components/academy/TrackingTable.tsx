@@ -51,7 +51,7 @@ export function TrackingTable({ rows, showCourse = true }: { rows: TrackingRow[]
                 <span className="block text-[11.5px] text-ink-400">{r.learner.primaryRole ?? "Talent"} · enrolled {fmtDate(r.enrolledAt)}</span>
               </td>
               {showCourse && <td className="px-2 py-2.5"><Link href={`/courses/manage/${r.course.id}/progress`} className="font-medium text-ink-800 hover:text-brand-700">{r.course.title}</Link><span className="block text-[11.5px] text-ink-400">coach {r.course.coach}</span></td>}
-              <td className="px-2 py-2.5"><span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold uppercase tracking-[0.08em] ring-1 ring-inset ${r.status === "COMPLETED" ? "bg-brand-50 text-brand-700 ring-brand-200" : r.status === "FAILED" ? "bg-red-50 text-red-700 ring-red-200" : r.status === "IN_PROGRESS" ? "bg-ink-50 text-ink-700 ring-ink-200" : "bg-white text-ink-400 ring-ink-200"}`}>{STATUS_LABEL[r.status]}</span>{r.paymentPending && <span className="block text-[11.5px] text-gold-700">payment pending</span>}</td>
+              <td className="px-2 py-2.5"><span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold uppercase tracking-[0.08em] ring-1 ring-inset ${r.status === "COMPLETED" ? "bg-success-50 text-success-700 ring-success-200" : r.status === "FAILED" ? "bg-red-50 text-red-700 ring-red-200" : r.status === "IN_PROGRESS" ? "bg-ink-50 text-ink-700 ring-ink-200" : "bg-white text-ink-400 ring-ink-200"}`}>{STATUS_LABEL[r.status]}</span>{r.paymentPending && <span className="block text-[11.5px] text-gold-700">payment pending</span>}</td>
               <td className="px-2 py-2.5 min-w-[120px]">
                 <span className="font-semibold text-ink-900">{r.percent}%</span><span className="text-ink-400"> · {r.requiredDone}/{r.requiredTotal}</span>
                 <div className="mt-1 h-1.5 w-24 overflow-hidden rounded-full bg-ink-100"><div className="h-full rounded-full bg-brand-500" style={{ width: `${r.percent}%` }} /></div>
@@ -61,7 +61,7 @@ export function TrackingTable({ rows, showCourse = true }: { rows: TrackingRow[]
               <td className="px-2 py-2.5">
                 {r.quizzes.length === 0 ? <span className="text-ink-300">—</span> : (
                   <ul className="space-y-0.5">
-                    {r.quizzes.map((q) => <li key={q.lessonId} className="whitespace-nowrap"><span className={q.passed ? "font-semibold text-brand-700" : q.pendingReview ? "font-semibold text-gold-700" : q.best !== null ? "font-semibold text-ink-700" : "text-ink-300"}>{q.pendingReview ? "review" : q.best !== null ? `${q.best}%` : "—"}</span><span className="text-ink-400"> · {q.attempts} att.</span><span className="block max-w-[160px] truncate text-[11px] text-ink-400" title={q.title}>{q.title}</span></li>)}
+                    {r.quizzes.map((q) => <li key={q.lessonId} className="whitespace-nowrap"><span className={q.passed ? "font-semibold text-success-700" : q.pendingReview ? "font-semibold text-gold-700" : q.best !== null ? "font-semibold text-ink-700" : "text-ink-300"}>{q.pendingReview ? "review" : q.best !== null ? `${q.best}%` : "—"}</span><span className="text-ink-400"> · {q.attempts} att.</span><span className="block max-w-[160px] truncate text-[11px] text-ink-400" title={q.title}>{q.title}</span></li>)}
                   </ul>
                 )}
               </td>

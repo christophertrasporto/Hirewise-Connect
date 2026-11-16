@@ -10,27 +10,43 @@
   --font-display: var(--font-jakarta), var(--font-inter), ui-sans-serif, system-ui, sans-serif;
   --font-serif: var(--font-instrument), "Times New Roman", Georgia, serif;
 
-  --color-ink-950: #060d1a;
-  --color-ink-900: #0a1628;
-  --color-ink-800: #12213a;
-  --color-ink-700: #1c2e4a;
-  --color-ink-600: #2e4262;
-  --color-ink-500: #4b5e7e;
+  --color-ink-950: #060e2b;
+  --color-ink-900: #0b1f4d;
+  --color-ink-800: #132a5c;
+  --color-ink-700: #1d3a72;
+  --color-ink-600: #2e4a7c;
+  --color-ink-500: #4b5f86;
   --color-ink-400: #7a8aa5;
   --color-ink-300: #a9b4c7;
   --color-ink-200: #d3dae6;
   --color-ink-100: #e9edf3;
   --color-ink-50: #f5f7fa;
 
-  --color-brand-50: #e8faf3;
-  --color-brand-100: #c6f2e0;
-  --color-brand-200: #8fe3c3;
-  --color-brand-300: #4fd1a4;
-  --color-brand-400: #21bc8a;
-  --color-brand-500: #0ea47a;
-  --color-brand-600: #0b8663;
-  --color-brand-700: #096b50;
-  --color-brand-800: #07513d;
+  /* Brand blue, from the Hirewise course artwork: royal blue on white and dark navy. */
+  --color-brand-50: #eef5ff;
+  --color-brand-100: #d6e6ff;
+  --color-brand-200: #a9cbff;
+  --color-brand-300: #6aa6ff;
+  --color-brand-400: #3b87f6;
+  --color-brand-500: #1b6ff0;
+  --color-brand-600: #1257d6;
+  --color-brand-700: #0e44b0;
+  --color-brand-800: #0b3488;
+
+  /* Bright sky accent (the lit-up letters in the artwork). Used in gradients and the logo, not as a class. */
+  --color-sky-400: #3db4ff;
+  --color-sky-500: #1aa3ff;
+
+  /* Success states (paid, approved, completed, available) stay green so they never read as a brand colour. */
+  --color-success-50: #e8faf3;
+  --color-success-100: #c6f2e0;
+  --color-success-200: #8fe3c3;
+  --color-success-300: #4fd1a4;
+  --color-success-400: #21bc8a;
+  --color-success-500: #0ea47a;
+  --color-success-600: #0b8663;
+  --color-success-700: #096b50;
+  --color-success-800: #07513d;
 
   --color-gold-50: #fdf8ea;
   --color-gold-100: #fbf0d2;
@@ -43,7 +59,7 @@
 
   --shadow-soft: 0 1px 2px rgb(10 22 40 / 0.04), 0 8px 24px -8px rgb(10 22 40 / 0.12);
   --shadow-lift: 0 2px 4px rgb(10 22 40 / 0.05), 0 24px 48px -16px rgb(10 22 40 / 0.22);
-  --shadow-glow: 0 0 0 1px rgb(14 164 122 / 0.25), 0 12px 40px -8px rgb(14 164 122 / 0.35);
+  --shadow-glow: 0 0 0 1px rgb(27 111 240 / 0.25), 0 12px 40px -8px rgb(27 111 240 / 0.35);
 
   /* Academy surfaces (course catalog and builder). Semantic tokens so other areas can adopt them later. */
   --color-surface: #f6f8fb;
@@ -119,29 +135,29 @@
   :root {
     color-scheme: light;
     --page-bg: #ffffff;
-    --app-base: #f3f6fa;
-    --staff-base: #edf1f6;
-    --band-base: #f4f7fb;
-    --hero-top: #f2fbf7;
-    --panel-line: rgb(10 22 40 / 0.08);
-    --hairline: rgb(10 22 40 / 0.045);
+    --app-base: #f1f6ff;
+    --staff-base: #e9f0fb;
+    --band-base: #f2f7ff;
+    --hero-top: #eaf3ff;
+    --panel-line: rgb(11 31 77 / 0.09);
+    --hairline: rgb(11 31 77 / 0.05);
     --glass-bg: rgb(255 255 255 / 0.72);
-    --glow-brand: rgb(14 164 122 / 0.1);
-    --glow-brand-strong: rgb(14 164 122 / 0.18);
+    --glow-brand: rgb(27 111 240 / 0.1);
+    --glow-brand-strong: rgb(27 111 240 / 0.18);
     --glow-gold: rgb(232 180 76 / 0.12);
     --on-page-text: #12213a;
   }
   :root[data-theme="dark"] {
-    --page-bg: #070e1b;
-    --app-base: #070e1b;
-    --staff-base: #080f1b;
-    --band-base: #0a1424;
-    --hero-top: #0a1a22;
+    --page-bg: #060e24;
+    --app-base: #060e24;
+    --staff-base: #070f26;
+    --band-base: #091630;
+    --hero-top: #0a1a3a;
     --panel-line: rgb(255 255 255 / 0.08);
     --hairline: rgb(255 255 255 / 0.05);
-    --glass-bg: rgb(7 14 27 / 0.72);
-    --glow-brand: rgb(14 164 122 / 0.16);
-    --glow-brand-strong: rgb(14 164 122 / 0.26);
+    --glass-bg: rgb(6 14 36 / 0.72);
+    --glow-brand: rgb(27 111 240 / 0.18);
+    --glow-brand-strong: rgb(27 111 240 / 0.28);
     --glow-gold: rgb(232 180 76 / 0.09);
     --on-page-text: #dde4ef;
   }
@@ -162,7 +178,7 @@
     color: #f1f5fb;
   }
   :root[data-theme="dark"] ::selection {
-    background: rgb(14 164 122 / 0.4);
+    background: rgb(27 111 240 / 0.45);
     color: #fff;
   }
   ::selection {
@@ -233,8 +249,8 @@
 @utility bg-navy {
   background-color: var(--color-ink-900);
   background-image:
-    radial-gradient(60% 70% at 92% 0%, rgb(14 164 122 / 0.26), transparent 65%),
-    radial-gradient(45% 55% at 4% 100%, rgb(232 180 76 / 0.13), transparent 65%),
+    radial-gradient(60% 70% at 92% 0%, rgb(26 163 255 / 0.28), transparent 65%),
+    radial-gradient(45% 55% at 4% 100%, rgb(27 111 240 / 0.18), transparent 65%),
     linear-gradient(165deg, var(--color-ink-800), var(--color-ink-950));
   box-shadow:
     inset 0 1px 0 rgb(255 255 255 / 0.06),
@@ -251,7 +267,7 @@
 /* Generated course cover: Hirewise navy with a brand glow and a faint grid. */
 @utility cover-navy {
   background-image:
-    radial-gradient(120% 90% at 100% 0%, rgb(14 164 122 / 0.3), transparent 55%),
+    radial-gradient(120% 90% at 100% 0%, rgb(26 163 255 / 0.32), transparent 55%),
     linear-gradient(135deg, var(--color-ink-800), var(--color-ink-950));
 }
 @utility cover-grid {
@@ -268,7 +284,7 @@
 }
 
 @utility text-gradient-brand {
-  background: linear-gradient(120deg, var(--color-brand-300), var(--color-brand-500) 45%, var(--color-gold-500));
+  background: linear-gradient(120deg, var(--color-sky-400), var(--color-brand-500) 55%, var(--color-ink-800));
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;

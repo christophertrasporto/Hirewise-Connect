@@ -19,7 +19,7 @@ export function coverKeyPrefix(courseId: string) {
 }
 
 /** Accent colors for generated covers, drawn from the Hirewise palette and a few cool neighbors. */
-const ACCENTS = ["#0ea47a", "#e8b44c", "#38bdf8", "#a78bfa", "#fb7185", "#2dd4bf"] as const;
+const ACCENTS = ["#1b6ff0", "#e8b44c", "#38bdf8", "#a78bfa", "#fb7185", "#2dd4bf"] as const;
 
 /** Stable accent per category so a category always looks the same across the catalog. */
 export function coverAccent(category: string): string {

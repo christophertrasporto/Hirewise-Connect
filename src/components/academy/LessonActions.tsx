@@ -14,7 +14,7 @@ export function MarkCompleteButton({ lessonId, courseId, label = "Mark as done" 
   useEffect(() => {
     if (state.ok) router.refresh();
   }, [state.ok, router]);
-  if (state.ok) return <p className="inline-flex items-center gap-1.5 text-[13.5px] font-semibold text-brand-700"><CheckCircle2 className="h-4 w-4" /> Done{state.data?.courseCompleted ? " · that completes the course" : state.data?.coursePercent !== null && state.data?.coursePercent !== undefined ? ` · course ${state.data.coursePercent}%` : ""}</p>;
+  if (state.ok) return <p className="inline-flex items-center gap-1.5 text-[13.5px] font-semibold text-success-700"><CheckCircle2 className="h-4 w-4" /> Done{state.data?.courseCompleted ? " · that completes the course" : state.data?.coursePercent !== null && state.data?.coursePercent !== undefined ? ` · course ${state.data.coursePercent}%` : ""}</p>;
   return (
     <form action={action} className="flex flex-wrap items-center gap-3">
       <input type="hidden" name="lessonId" value={lessonId} />

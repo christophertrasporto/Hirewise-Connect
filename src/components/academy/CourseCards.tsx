@@ -9,7 +9,7 @@ const STATUS: Record<CourseCard["status"], { label: string; cls: string }> = {
   IN_PROGRESS: { label: "In progress", cls: "bg-ink-50 text-ink-700 ring-ink-200" },
   NOT_STARTED: { label: "Not started", cls: "bg-white text-ink-500 ring-ink-200" },
   LOCKED: { label: "Payment pending", cls: "bg-gold-50 text-gold-700 ring-gold-200" },
-  COMPLETED: { label: "Completed", cls: "bg-brand-50 text-brand-700 ring-brand-200" },
+  COMPLETED: { label: "Completed", cls: "bg-success-50 text-success-700 ring-success-200" },
 };
 
 const ACTION: Record<CourseCard["status"], string> = { IN_PROGRESS: "Continue", NOT_STARTED: "Start now", LOCKED: "View", COMPLETED: "Review" };
@@ -68,10 +68,10 @@ export function CourseCards({ cards, compact = false }: { cards: CourseCard[]; c
                 <p className="text-[11.5px] font-semibold tracking-[0.12em] text-brand-600 uppercase">{c.category}</p>
                 <h3 className="mt-0.5 text-[15px] font-bold text-ink-900 group-hover:text-brand-700">{c.title}</h3>
               </div>
-              {c.status === "COMPLETED" ? <CheckCircle2 className="h-6 w-6 shrink-0 text-brand-500" /> : c.status === "LOCKED" ? <Lock className="h-5 w-5 shrink-0 text-gold-500" /> : <BookOpen className="h-5 w-5 shrink-0 text-ink-300" />}
+              {c.status === "COMPLETED" ? <CheckCircle2 className="h-6 w-6 shrink-0 text-success-500" /> : c.status === "LOCKED" ? <Lock className="h-5 w-5 shrink-0 text-gold-500" /> : <BookOpen className="h-5 w-5 shrink-0 text-ink-300" />}
             </div>
             <div className="mt-3 flex items-center gap-3">
-              <div className="h-2 flex-1 overflow-hidden rounded-full bg-ink-100"><div className={cn("h-full rounded-full", c.status === "COMPLETED" ? "bg-brand-500" : "bg-gradient-to-r from-brand-400 to-brand-600")} style={{ width: `${c.percent}%` }} /></div>
+              <div className="h-2 flex-1 overflow-hidden rounded-full bg-ink-100"><div className={cn("h-full rounded-full", c.status === "COMPLETED" ? "bg-success-500" : "bg-gradient-to-r from-brand-400 to-brand-600")} style={{ width: `${c.percent}%` }} /></div>
               <span className="text-[13px] font-semibold text-ink-800 tabular-nums">{c.percent}%</span>
             </div>
             <div className="mt-2.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[12.5px] text-ink-500">

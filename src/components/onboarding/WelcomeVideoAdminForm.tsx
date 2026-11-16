@@ -71,7 +71,7 @@ export function WelcomeVideoAdminForm({ values }: { values: WelcomeVideoFormValu
           <input ref={input} type="file" accept="video/mp4,video/webm,video/quicktime" className="sr-only" disabled={busy} onChange={(e) => e.target.files?.[0] && upload(e.target.files[0])} />
           {busy ? <Loader2 className="h-5 w-5 animate-spin text-brand-600" /> : <UploadCloud className="h-5 w-5 text-ink-400" />}
           <span className="min-w-0 flex-1 text-[13.5px]">
-            {busy ? <span className="font-semibold text-ink-800">Uploading… {file.progress ?? 0}%</span> : file.phase === "done" ? <span className="font-semibold text-ink-800">{file.fileName ?? "Uploaded video"} {file.durationSec ? <span className="font-normal text-ink-400">· {Math.round(file.durationSec / 60)} min</span> : null} · <span className="text-brand-700">replace</span></span> : <span className="font-semibold text-ink-700">Upload MP4, WebM, or MOV (up to 1 GB)</span>}
+            {busy ? <span className="font-semibold text-ink-800">Uploading… {file.progress ?? 0}%</span> : file.phase === "done" ? <span className="font-semibold text-ink-800">{file.fileName ?? "Uploaded video"} {file.durationSec ? <span className="font-normal text-ink-400">· {Math.round(file.durationSec / 60)} min</span> : null} · <span className="text-success-700">replace</span></span> : <span className="font-semibold text-ink-700">Upload MP4, WebM, or MOV (up to 1 GB)</span>}
           </span>
           {file.phase === "done" && !busy && <button type="button" onClick={(e) => { e.preventDefault(); setFile({ phase: "idle" }); }} aria-label="Remove file" className="rounded-full p-1.5 text-ink-400 hover:bg-ink-50 hover:text-ink-800"><X className="h-4 w-4" /></button>}
         </label>

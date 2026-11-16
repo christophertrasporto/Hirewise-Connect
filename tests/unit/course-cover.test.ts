@@ -3,7 +3,7 @@ import { coverAccent, coverKeyPrefix, difficultyLabel, COVER_MAX_BYTES, COVER_MI
 
 describe("course cover helpers", () => {
   it("picks a stable accent per category from the palette", () => {
-    const palette = new Set(["#0ea47a", "#e8b44c", "#38bdf8", "#a78bfa", "#fb7185", "#2dd4bf"]);
+    const palette = new Set(["#1b6ff0", "#e8b44c", "#38bdf8", "#a78bfa", "#fb7185", "#2dd4bf"]);
     for (const c of ["Sales", "Customer Service", "Virtual Assistance", "Finance", "", "Ünïcode"]) {
       expect(palette.has(coverAccent(c))).toBe(true);
       expect(coverAccent(c)).toBe(coverAccent(c));

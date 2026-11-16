@@ -45,9 +45,9 @@ export function StatTile({ label, value, hint, href }: { label: string; value: R
 }
 
 const toneByStatus: Record<string, string> = {
-  APPROVED: "bg-brand-50 text-brand-700 ring-brand-200",
-  ACTIVE: "bg-brand-50 text-brand-700 ring-brand-200",
-  AVAILABLE: "bg-brand-50 text-brand-700 ring-brand-200",
+  APPROVED: "bg-success-50 text-success-700 ring-success-200",
+  ACTIVE: "bg-success-50 text-success-700 ring-success-200",
+  AVAILABLE: "bg-success-50 text-success-700 ring-success-200",
   SUBMITTED: "bg-gold-50 text-gold-700 ring-gold-200",
   UNDER_REVIEW: "bg-gold-50 text-gold-700 ring-gold-200",
   PENDING_REVIEW: "bg-gold-50 text-gold-700 ring-gold-200",
@@ -77,7 +77,7 @@ export function Banner({ tone = "info", title, children }: { tone?: "info" | "wa
   const cls = {
     info: "border-ink-200 bg-ink-50 text-ink-700",
     warn: "border-gold-200 bg-gold-50 text-gold-700",
-    success: "border-brand-200 bg-brand-50 text-brand-700",
+    success: "border-success-200 bg-success-50 text-success-700",
     danger: "border-red-200 bg-red-50 text-red-700",
   }[tone];
   return (

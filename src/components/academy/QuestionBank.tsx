@@ -66,7 +66,7 @@ function BankRow({ courseId, q, lessons }: { courseId: string; q: BankItem; less
             <p className="mt-1 text-[13px] text-ink-500">{q.keywords.length ? `Keywords: ${q.keywords.join(", ")}` : "Reviewed by the coach"}</p>
           ) : (
             <ul className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-[13px]">
-              {q.choices.map((c, i) => <li key={c.id ?? i} className={cn("inline-flex items-center gap-1", c.isCorrect ? "font-semibold text-brand-700" : "text-ink-500")}>{c.isCorrect ? <CheckCircle2 className="h-3.5 w-3.5" /> : <Circle className="h-3.5 w-3.5" />} {c.text}</li>)}
+              {q.choices.map((c, i) => <li key={c.id ?? i} className={cn("inline-flex items-center gap-1", c.isCorrect ? "font-semibold text-success-700" : "text-ink-500")}>{c.isCorrect ? <CheckCircle2 className="h-3.5 w-3.5" /> : <Circle className="h-3.5 w-3.5" />} {c.text}</li>)}
             </ul>
           )}
         </div>

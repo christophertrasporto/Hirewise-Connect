@@ -9,7 +9,7 @@ import { PromoForm, PromoStatusButtons } from "@/components/academy/PromoStaff";
 export const metadata: Metadata = { title: "Academy · Promo codes" };
 
 const EFFECTIVE_TONE: Record<string, string> = {
-  ACTIVE: "bg-brand-50 text-brand-700",
+  ACTIVE: "bg-success-50 text-success-700",
   SCHEDULED: "bg-gold-50 text-gold-700",
   EXPIRED: "bg-ink-100 text-ink-600",
   FULLY_USED: "bg-ink-100 text-ink-600",

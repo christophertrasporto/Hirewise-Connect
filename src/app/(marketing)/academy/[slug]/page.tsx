@@ -201,7 +201,7 @@ export default async function PublicCoursePage({ params }: Props) {
               <ul className="mt-5 grid gap-3 rounded-3xl border border-ink-100 bg-white p-6 sm:grid-cols-2">
                 {c.learningPoints.map((p) => (
                   <li key={p} className="flex items-start gap-2.5 text-[14.5px] text-ink-700">
-                    <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-brand-600" aria-hidden="true" /> {p}
+                    <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-success-600" aria-hidden="true" /> {p}
                   </li>
                 ))}
               </ul>
@@ -346,7 +346,7 @@ export default async function PublicCoursePage({ params }: Props) {
 
           <section aria-labelledby="refund-heading" className="rounded-3xl border border-ink-100 bg-ink-50/60 p-6">
             <h2 id="refund-heading" className="inline-flex items-center gap-2 text-[1.2rem] font-bold">
-              <ShieldCheck className="h-5 w-5 text-brand-600" aria-hidden="true" /> Refunds
+              <ShieldCheck className="h-5 w-5 text-success-600" aria-hidden="true" /> Refunds
             </h2>
             <p className="mt-2 text-[14.5px] leading-relaxed text-ink-600">
               Course payments and refunds follow the Hirewise Connect{" "}

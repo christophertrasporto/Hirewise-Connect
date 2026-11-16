@@ -40,7 +40,7 @@ export function Hero() {
 
           <ul className="mt-9 grid gap-3 text-[13.5px] text-ink-600 sm:grid-cols-3">
             <li className="flex items-center gap-2">
-              <BadgeCheck className="h-4 w-4 shrink-0 text-brand-600" /> Hirewise-verified profiles only
+              <BadgeCheck className="h-4 w-4 shrink-0 text-success-600" /> Hirewise-verified profiles only
             </li>
             <li className="flex items-center gap-2">
               <Lock className="h-4 w-4 shrink-0 text-brand-600" /> One price, set by Hirewise

@@ -80,7 +80,7 @@ export function SubmitButton({ children, pendingText, variant = "dark", classNam
 export function FormAlert({ tone = "error", children }: { tone?: "error" | "success" | "info"; children: ReactNode }) {
   const map = {
     error: { cls: "border-red-200 bg-red-50 text-red-700", Icon: AlertCircle },
-    success: { cls: "border-brand-200 bg-brand-50 text-brand-700", Icon: CheckCircle2 },
+    success: { cls: "border-success-200 bg-success-50 text-success-700", Icon: CheckCircle2 },
     info: { cls: "border-gold-200 bg-gold-50 text-gold-700", Icon: Info },
   }[tone];
   return (

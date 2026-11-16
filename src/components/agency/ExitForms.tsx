@@ -17,7 +17,7 @@ export function RemoveAgentForm({ membershipId, displayName }: { membershipId: s
   const [open, setOpen] = useState(false);
   const [state, action] = useActionState(requestRemovalAction, idle);
   const fe = state.fieldErrors ?? {};
-  if (state.ok && state.data) return <span className="text-[12.5px] font-semibold text-brand-700">{state.data.status === "COMPLETED" ? "Removed" : state.data.status === "PENDING_ADMIN" ? "Sent to Hirewise for review" : "Removal scheduled"}</span>;
+  if (state.ok && state.data) return <span className="text-[12.5px] font-semibold text-success-700">{state.data.status === "COMPLETED" ? "Removed" : state.data.status === "PENDING_ADMIN" ? "Sent to Hirewise for review" : "Removal scheduled"}</span>;
   if (!open) return <button type="button" onClick={() => setOpen(true)} className="text-[12.5px] font-semibold text-red-600 hover:text-red-700">Remove agent</button>;
   return (
     <form action={action} className="mt-3 w-full space-y-3 rounded-2xl border border-red-100 bg-red-50/40 p-4" noValidate>

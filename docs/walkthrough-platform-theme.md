@@ -21,7 +21,7 @@ Motion is one keyframe, `drift` (28 s, alternating, a few percent of movement). 
 - The switch (`ThemeToggle`) is in the marketing header, the app header, the gate header, and both auth layouts. It offers Light, Dark, and "Use my device setting". The choice lives in the `hw_theme` cookie (one year, not secret, readable by script); "device setting" clears the cookie and follows the operating system live.
 - `<html data-theme="dark" | "light">` is set by a tiny inline script in `<head>` before first paint (`THEME_INIT_SCRIPT` in `src/lib/theme.ts`). The root layout never reads the cookie on the server, so marketing pages stay static.
 - Colours are not remapped by inverting the `ink` scale, because the same token is text on one surface and a dark panel on another. Instead `scripts/gen-dark-theme.ts` scans `src` for the colour classes in use (including `hover:`, `focus:`, `group-hover:`, `placeholder:`, `disabled:`, `open:`, `has-[:checked]:`) and writes `src/app/dark-theme.css` from the palette in `src/lib/dark-theme-palette.ts`. No page was edited to support dark mode.
-- Panels that are already dark in the light theme keep their light-on-dark text. Filled controls (`bg-ink-900 text-white` buttons and chips on `a`, `button`, `span`, `label`, `input`) become brand green in dark, and solid `bg-brand-500` and `bg-brand-600` fills darken one step so white text clears 4.5:1.
+- Panels that are already dark in the light theme keep their light-on-dark text. Filled controls (`bg-ink-900 text-white` buttons and chips on `a`, `button`, `span`, `label`, `input`) become brand blue in dark, and solid `bg-brand-500` and `bg-brand-600` fills darken one step so white text clears 4.5:1.
 - `dark:` utilities are available too (`@custom-variant dark` follows the same attribute).
 
 ## After adding colour classes
@@ -47,3 +47,7 @@ Known and not caused by this change (light theme, unchanged): muted captions in 
 ## Not done
 
 Per-user custom colours, a theme editor, a new logo or palette, and print styles stay out of scope. Email templates keep their own inline light styling.
+
+## Blue theme (2026-11)
+
+The brand colour changed from green to the blue, white and dark navy of the Hirewise course artwork. The `brand-*` scale in `globals.css` is now royal blue (`brand-500` is `#1b6ff0`), the `ink-*` darks are a deeper navy, `--color-sky-*` is the bright accent used in gradients, and the logo arrow and the word "Connect" are `LOGO_ACCENT` (`#1677F2`) in `Logo.tsx`. The old green lives on as a separate `success-*` scale that is used only for success states (completed, approved, paid, available, verified ticks); use `success-*` for those and `brand-*` for everything else. The dark theme maps both scales in `src/lib/dark-theme-palette.ts`, and the contrast test covers both. `public/brand/hirewise-connect-logo-blue.png` is the supplied logo artwork recoloured to the brand blue (used in emails); `hirewise-connect-logo-dark.png` is the original green file and is kept only as the source.

@@ -66,7 +66,7 @@ describe("dark theme stylesheet", () => {
     expect(committed).toBe(generateDarkThemeCss(join(root, "src")));
   });
 
-  it("covers hover and focus states and turns filled controls brand green", () => {
+  it("covers hover and focus states and turns filled controls brand blue", () => {
     const css = readFileSync(join(root, "src", "app", "dark-theme.css"), "utf8");
     expect(css).toContain(":hover");
     expect(css).toMatch(/button\.bg-ink-900/);
@@ -112,6 +112,10 @@ describe("dark theme contrast (WCAG AA, 4.5:1)", () => {
       ["brand-700", "brand-50"],
       ["brand-700", "brand-100"],
       ["brand-800", "brand-100"],
+      ["success-600", "success-50"],
+      ["success-700", "success-50"],
+      ["success-700", "success-100"],
+      ["success-800", "success-100"],
       ["gold-700", "gold-50"],
       ["gold-800", "gold-100"],
       ["red-600", "red-50"],
@@ -126,7 +130,7 @@ describe("dark theme contrast (WCAG AA, 4.5:1)", () => {
   });
 
   it("white text on filled controls and brand fills clears AA", () => {
-    for (const [name, fill] of [["cta", DARK_CTA_BG], ["cta hover", DARK_CTA_BG_HOVER], ["bg-brand-500", DARK_BG["brand-500"]], ["bg-brand-600", DARK_BG["brand-600"]]] as const) {
+    for (const [name, fill] of [["cta", DARK_CTA_BG], ["cta hover", DARK_CTA_BG_HOVER], ["bg-brand-500", DARK_BG["brand-500"]], ["bg-brand-600", DARK_BG["brand-600"]], ["bg-success-500", DARK_BG["success-500"]], ["bg-success-600", DARK_BG["success-600"]]] as const) {
       expect(contrast(WHITE, parse(fill).rgb), name).toBeGreaterThanOrEqual(4.5);
     }
   });

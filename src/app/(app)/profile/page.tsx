@@ -35,7 +35,7 @@ export default async function ProfileOverviewPage() {
             {completion.parts.map((p) => (
               <li key={p.key} className="flex items-center justify-between gap-4 py-3">
                 <span className="flex items-center gap-3 text-[14.5px]">
-                  {p.done ? <Check className="h-4 w-4 text-brand-600" /> : <Circle className="h-4 w-4 text-ink-300" />}
+                  {p.done ? <Check className="h-4 w-4 text-success-600" /> : <Circle className="h-4 w-4 text-ink-300" />}
                   <span className={p.done ? "text-ink-500" : "font-medium text-ink-800"}>{p.label}</span>
                   <span className="text-[12px] text-ink-400">{p.weight}%</span>
                 </span>

@@ -57,7 +57,7 @@ export default async function CertificatePage({ params }: { params: Promise<{ id
 
         {verifyUrl && (
           <div className="mt-10 flex flex-wrap items-center gap-3 rounded-2xl bg-ink-50 px-4 py-3 text-[12.5px] text-ink-600">
-            <ShieldCheck className="h-4 w-4 text-brand-600" />
+            <ShieldCheck className="h-4 w-4 text-success-600" />
             <span>Verify this certificate at <a href={verifyUrl} className="font-mono font-semibold text-brand-700">{verifyUrl}</a></span>
           </div>
         )}
