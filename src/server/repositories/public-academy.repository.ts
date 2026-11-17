@@ -6,6 +6,31 @@ export type CoachLink = { label: string; url: string };
 const courseSlugSelect = { id: true, slug: true, status: true, listing: true } satisfies Prisma.AcademyCourseSelect;
 
 export const publicAcademyRepository = {
+  // Partner courses (taught on another site, reached through an affiliate link)
+  setPartnerLink(db: Db, id: string, d: { externalUrl: string | null; externalProvider: string | null; externalPriceLabel: string | null }) {
+    return db.academyCourse.update({ where: { id }, data: d, select: { id: true } });
+  },
+  enrolmentCount(db: Db, courseId: string) {
+    return db.courseEnrollment.count({ where: { courseId } });
+  },
+  /** The address behind /go/<slug>: only a published partner course has one. */
+  partnerTarget(db: Db, courseId: string) {
+    return db.academyCourse.findFirst({ where: { id: courseId, status: "PUBLISHED", externalUrl: { not: null } }, select: { id: true, externalUrl: true } });
+  },
+  recordClick(db: Db, courseId: string, userId: string | null) {
+    return db.externalCourseClick.create({ data: { courseId, userId }, select: { id: true } });
+  },
+  async clickCounts(db: Db, since: Date): Promise<Map<string, { total: number; recent: number }>> {
+    const [all, recent] = await Promise.all([
+      db.externalCourseClick.groupBy({ by: ["courseId"], _count: { _all: true } }),
+      db.externalCourseClick.groupBy({ by: ["courseId"], where: { createdAt: { gte: since } }, _count: { _all: true } }),
+    ]);
+    const out = new Map<string, { total: number; recent: number }>();
+    for (const r of all) out.set(r.courseId, { total: r._count._all, recent: 0 });
+    for (const r of recent) out.set(r.courseId, { total: out.get(r.courseId)?.total ?? 0, recent: r._count._all });
+    return out;
+  },
+
   // Slugs and redirects
   courseSlugTaken(db: Db, slug: string, exceptCourseId?: string) {
     return db.academyCourse.findFirst({ where: { slug, ...(exceptCourseId ? { id: { not: exceptCourseId } } : {}) }, select: { id: true } }).then(Boolean);

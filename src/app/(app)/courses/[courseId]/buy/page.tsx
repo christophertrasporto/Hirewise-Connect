@@ -12,6 +12,7 @@ import { PageHeader, Card, Banner } from "@/components/app/ui";
 import { CourseCover } from "@/components/academy/CourseTile";
 import { PurchaseForm } from "@/components/academy/PurchaseForm";
 import { PendingPromoBox } from "@/components/academy/PromoCode";
+import { PartnerCoursePanel } from "@/components/academy/PartnerCoursePanel";
 
 export const metadata: Metadata = { title: "Checkout" };
 
@@ -42,6 +43,16 @@ export default async function BuyCoursePage({ params }: { params: Promise<{ cour
     throw e;
   }
   const { course, enrollment } = data;
+  if (course.partner && !enrollment) {
+    // Taught on another site: nothing to enrol in or pay for here.
+    return (
+      <>
+        <Link href="/courses" className="mb-4 inline-flex items-center gap-1.5 text-[13.5px] font-medium text-ink-500 hover:text-ink-900"><ArrowLeft className="h-4 w-4" /> Courses</Link>
+        <PageHeader eyebrow={`${course.category} · Partner course`} title={course.title} description={course.description} />
+        <div className="max-w-xl"><PartnerCoursePanel partner={course.partner} /></div>
+      </>
+    );
+  }
   if (enrollment && enrollment.paymentStatus !== "PENDING") redirect(`/courses/${courseId}`);
 
   const onboardingLock = "locked" in data && data.locked?.kind === "ONBOARDING" ? data.locked : null;

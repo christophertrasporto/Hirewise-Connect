@@ -115,7 +115,7 @@ export default async function PublicCoursePage({ params }: Props) {
   return (
     <>
       <ReferralCapture />
-      <JsonLd data={courseLd({ slug: c.slug, title: c.title, description: c.pitch || c.description, difficulty: c.difficulty, priceCents: c.priceCents, currency: c.currency, image: c.coverUrl, ratingAverage: c.ratingAverage, ratingCount: c.ratingCount, coaches: c.coaches })} />
+      <JsonLd data={courseLd({ slug: c.slug, title: c.title, description: c.pitch || c.description, difficulty: c.difficulty, partner: !!c.partner, priceCents: c.priceCents, currency: c.currency, image: c.coverUrl, ratingAverage: c.ratingAverage, ratingCount: c.ratingCount, coaches: c.coaches })} />
       <JsonLd data={breadcrumbLd(crumbs)} />
       {c.faq.length > 0 && <JsonLd data={{ "@context": "https://schema.org", "@type": "FAQPage", mainEntity: c.faq.map((f) => ({ "@type": "Question", name: f.question, acceptedAnswer: { "@type": "Answer", text: f.answer } })) }} />}
 
@@ -187,7 +187,7 @@ export default async function PublicCoursePage({ params }: Props) {
             </div>
           </div>
 
-          <CourseViewerPanel payNote={payNoteFor(c)} course={{ id: c.id, slug: c.slug, title: c.title, priceCents: c.priceCents, priceLabel: c.priceLabel, lessonCount: c.lessonCount, previewCount: c.previewCount, certification: c.certification }} />
+          <CourseViewerPanel payNote={payNoteFor(c)} course={{ id: c.id, slug: c.slug, title: c.title, priceCents: c.priceCents, priceLabel: c.priceLabel, lessonCount: c.lessonCount, previewCount: c.previewCount, certification: c.certification, partner: c.partner }} />
         </div>
       </section>
 
@@ -217,43 +217,45 @@ export default async function PublicCoursePage({ params }: Props) {
             </section>
           )}
 
-          <section aria-labelledby="curriculum-heading">
-            <h2 id="curriculum-heading" className="text-[1.6rem] font-bold">
-              What is in this course
-            </h2>
-            <p className="mt-1 text-[13.5px] text-ink-500">
-              {c.curriculum.length} module{c.curriculum.length === 1 ? "" : "s"} · {c.lessonCount} lesson{c.lessonCount === 1 ? "" : "s"}
-              {c.durationLabel ? ` · ${c.durationLabel}` : ""}
-            </p>
-            <ol className="mt-6 space-y-6">
-              {c.curriculum.map((m, i) => (
-                <li key={m.id}>
-                  <p className="text-[12px] font-semibold uppercase tracking-[0.12em] text-ink-400">Module {i + 1}</p>
-                  <p className="text-[16px] font-bold text-ink-900">{m.title}</p>
-                  <ul className="mt-2 divide-y divide-ink-100 rounded-2xl border border-ink-100 bg-white">
-                    {m.lessons.map((l) => {
-                      const Icon = LESSON_TYPE_META[l.contentType as LessonContentType].icon;
-                      return (
-                        <li key={l.id} className="flex items-center gap-3 px-4 py-3 text-[14px]">
-                          <Icon className="h-4 w-4 shrink-0 text-ink-400" aria-hidden="true" />
-                          <span className="min-w-0 flex-1 truncate text-ink-800">{l.title}</span>
-                          {l.durationSec ? <span className="text-[12.5px] text-ink-400">{fmtDuration(l.durationSec)}</span> : null}
-                          {l.isFreePreview ? (
-                            <span className="rounded-full bg-brand-50 px-2.5 py-0.5 text-[11px] font-semibold text-brand-700 ring-1 ring-inset ring-brand-200">Free preview</span>
-                          ) : (
-                            <span className="inline-flex items-center gap-1 text-[12px] text-ink-400" title="Included when you buy the course">
-                              <Lock className="h-3.5 w-3.5" aria-hidden="true" />
-                              Locked
-                            </span>
-                          )}
-                        </li>
-                      );
-                    })}
-                  </ul>
-                </li>
-              ))}
-            </ol>
-          </section>
+          {!c.partner && (
+            <section aria-labelledby="curriculum-heading">
+              <h2 id="curriculum-heading" className="text-[1.6rem] font-bold">
+                What is in this course
+              </h2>
+              <p className="mt-1 text-[13.5px] text-ink-500">
+                {c.curriculum.length} module{c.curriculum.length === 1 ? "" : "s"} · {c.lessonCount} lesson{c.lessonCount === 1 ? "" : "s"}
+                {c.durationLabel ? ` · ${c.durationLabel}` : ""}
+              </p>
+              <ol className="mt-6 space-y-6">
+                {c.curriculum.map((m, i) => (
+                  <li key={m.id}>
+                    <p className="text-[12px] font-semibold uppercase tracking-[0.12em] text-ink-400">Module {i + 1}</p>
+                    <p className="text-[16px] font-bold text-ink-900">{m.title}</p>
+                    <ul className="mt-2 divide-y divide-ink-100 rounded-2xl border border-ink-100 bg-white">
+                      {m.lessons.map((l) => {
+                        const Icon = LESSON_TYPE_META[l.contentType as LessonContentType].icon;
+                        return (
+                          <li key={l.id} className="flex items-center gap-3 px-4 py-3 text-[14px]">
+                            <Icon className="h-4 w-4 shrink-0 text-ink-400" aria-hidden="true" />
+                            <span className="min-w-0 flex-1 truncate text-ink-800">{l.title}</span>
+                            {l.durationSec ? <span className="text-[12.5px] text-ink-400">{fmtDuration(l.durationSec)}</span> : null}
+                            {l.isFreePreview ? (
+                              <span className="rounded-full bg-brand-50 px-2.5 py-0.5 text-[11px] font-semibold text-brand-700 ring-1 ring-inset ring-brand-200">Free preview</span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 text-[12px] text-ink-400" title="Included when you buy the course">
+                                <Lock className="h-3.5 w-3.5" aria-hidden="true" />
+                                Locked
+                              </span>
+                            )}
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </li>
+                ))}
+              </ol>
+            </section>
+          )}
 
           {otherPreviews.length > 0 && (
             <section aria-labelledby="previews-heading">
@@ -314,52 +316,57 @@ export default async function PublicCoursePage({ params }: Props) {
             </section>
           )}
 
-          <section aria-labelledby="reviews-heading">
-            <h2 id="reviews-heading" className="text-[1.6rem] font-bold">
-              Reviews
-            </h2>
-            <div className="mt-2">
-              <StarRating value={c.ratingAverage} count={c.ratingCount} size="md" />
-            </div>
-            <div className="mt-5 space-y-4">
-              <ReviewBox courseId={c.id} />
-              {c.reviews.length === 0 ? (
-                <p className="rounded-2xl border border-dashed border-ink-200 bg-white px-5 py-8 text-center text-[14px] text-ink-500">No reviews yet. Learners who own this course can leave the first one.</p>
-              ) : (
-                <ul className="space-y-3">
-                  {c.reviews.map((rev) => (
-                    <li key={rev.id} className="rounded-2xl border border-ink-100 bg-white p-5">
-                      <div className="flex flex-wrap items-center justify-between gap-2">
-                        <p className="text-[14.5px] font-semibold text-ink-900">{rev.author}</p>
-                        <time dateTime={rev.createdAt} className="text-[12.5px] text-ink-400">
-                          {new Date(rev.createdAt).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric", timeZone: "UTC" })}
-                        </time>
-                      </div>
-                      <StarRating value={rev.rating} className="mt-1" />
-                      {rev.body && <p className="mt-2 whitespace-pre-line text-[14.5px] leading-relaxed text-ink-600">{rev.body}</p>}
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          </section>
+          {!c.partner && (
+            <section aria-labelledby="reviews-heading">
+              <h2 id="reviews-heading" className="text-[1.6rem] font-bold">
+                Reviews
+              </h2>
+              <div className="mt-2">
+                <StarRating value={c.ratingAverage} count={c.ratingCount} size="md" />
+              </div>
+              <div className="mt-5 space-y-4">
+                <ReviewBox courseId={c.id} />
+                {c.reviews.length === 0 ? (
+                  <p className="rounded-2xl border border-dashed border-ink-200 bg-white px-5 py-8 text-center text-[14px] text-ink-500">No reviews yet. Learners who own this course can leave the first one.</p>
+                ) : (
+                  <ul className="space-y-3">
+                    {c.reviews.map((rev) => (
+                      <li key={rev.id} className="rounded-2xl border border-ink-100 bg-white p-5">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <p className="text-[14.5px] font-semibold text-ink-900">{rev.author}</p>
+                          <time dateTime={rev.createdAt} className="text-[12.5px] text-ink-400">
+                            {new Date(rev.createdAt).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric", timeZone: "UTC" })}
+                          </time>
+                        </div>
+                        <StarRating value={rev.rating} className="mt-1" />
+                        {rev.body && <p className="mt-2 whitespace-pre-line text-[14.5px] leading-relaxed text-ink-600">{rev.body}</p>}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            </section>
+          )}
 
-          <section aria-labelledby="refund-heading" className="rounded-3xl border border-ink-100 bg-ink-50/60 p-6">
-            <h2 id="refund-heading" className="inline-flex items-center gap-2 text-[1.2rem] font-bold">
-              <ShieldCheck className="h-5 w-5 text-brand-600" aria-hidden="true" /> Refunds
-            </h2>
-            <p className="mt-2 text-[14.5px] leading-relaxed text-ink-600">
-              Course payments and refunds follow the Hirewise Connect{" "}
-              <Link href="/legal/terms" className="font-semibold text-brand-700 hover:text-brand-800">
-                Terms
-              </Link>
-              . Watch the free preview first, and{" "}
-              <Link href="/contact" className="font-semibold text-brand-700 hover:text-brand-800">
-                contact us
-              </Link>{" "}
-              if you have a question before you buy.
-            </p>
-          </section>
+          {/* A partner course is bought on the partner's site, so Hirewise's course refund terms do not apply to it. */}
+          {!c.partner && (
+            <section aria-labelledby="refund-heading" className="rounded-3xl border border-ink-100 bg-ink-50/60 p-6">
+              <h2 id="refund-heading" className="inline-flex items-center gap-2 text-[1.2rem] font-bold">
+                <ShieldCheck className="h-5 w-5 text-brand-600" aria-hidden="true" /> Refunds
+              </h2>
+              <p className="mt-2 text-[14.5px] leading-relaxed text-ink-600">
+                Course payments and refunds follow the Hirewise Connect{" "}
+                <Link href="/legal/terms" className="font-semibold text-brand-700 hover:text-brand-800">
+                  Terms
+                </Link>
+                . Watch the free preview first, and{" "}
+                <Link href="/contact" className="font-semibold text-brand-700 hover:text-brand-800">
+                  contact us
+                </Link>{" "}
+                if you have a question before you buy.
+              </p>
+            </section>
+          )}
 
           {c.faq.length > 0 && (
             <section aria-labelledby="faq-heading">

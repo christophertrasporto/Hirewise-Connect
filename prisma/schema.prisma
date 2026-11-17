@@ -1454,8 +1454,15 @@ model AcademyCourse {
   publishedAt                       DateTime?
   publishedById                     String?
   externalId                        String?                @unique
+  /// Partner course: taught on another site. The address is an affiliate link; it never leaves the server except through /go/<slug>. Null = a course taught here.
+  externalUrl                       String?
+  /// Partner name shown to visitors (for example "Udemy").
+  externalProvider                  String?
+  /// The partner's price as typed text (for example "from $19"); never used in any calculation.
+  externalPriceLabel                String?
   createdAt                         DateTime               @default(now())
   updatedAt                         DateTime               @updatedAt
+  externalClicks                    ExternalCourseClick[]
 
   coaches           CourseCoach[]
   enrollments       CourseEnrollment[]
@@ -3959,4 +3966,16 @@ model AccessCode {
 
   @@index([courseId, status])
   @@index([status, expiresAt])
+}
+
+/// One press of the Take this course button on a partner course. Counts only: no address, no browser details.
+model ExternalCourseClick {
+  id        String        @id @default(cuid())
+  courseId  String
+  course    AcademyCourse @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  /// The signed-in user, when there is one. Not a relation, so deleting a user never touches click history.
+  userId    String?
+  createdAt DateTime      @default(now())
+
+  @@index([courseId, createdAt])
 }
