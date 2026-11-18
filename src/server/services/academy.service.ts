@@ -33,6 +33,7 @@ import { toSubmissionLearnerView as toSubmissionView, type SubmissionLearnerView
 import { coverUrlsFor, coverUrlFor } from "./course-cover";
 import { COVER_MAX_BYTES, COVER_MIMES, coverKeyPrefix } from "@/lib/course-cover";
 import { hasWelcomeVideo, welcomeVideoProblem } from "@/lib/welcome-video";
+import { partnerPublishProblem } from "@/lib/partner-course";
 
 const optionalText = (max: number) => z.string().trim().max(max).optional().or(z.literal(""));
 
@@ -110,9 +111,13 @@ function publishedLessonCount(c: { modules: Array<{ status: string; lessons: Arr
   return c.modules.filter((m) => m.status === "PUBLISHED").reduce((n, m) => n + m.lessons.filter((l) => l.status === "PUBLISHED").length, 0);
 }
 
-/** A course goes live only with its welcome video (see src/lib/welcome-video.ts). Courses already live are not taken down. */
-function assertWelcomeVideo(c: { modules: Parameters<typeof welcomeVideoProblem>[0] }, Err: typeof UserMessageError) {
-  const problem = welcomeVideoProblem(c.modules);
+/**
+ * A course goes live only with its welcome video (see src/lib/welcome-video.ts). A partner course (taught on another
+ * site) needs the same video, which is the free sales video for the course, plus its link, the partner's name and a
+ * cover. Courses already live are not taken down.
+ */
+function assertWelcomeVideo(c: { modules: Parameters<typeof welcomeVideoProblem>[0]; externalUrl?: string | null; externalProvider?: string | null; thumbnailKey?: string | null }, Err: typeof UserMessageError) {
+  const problem = (c.externalUrl ? partnerPublishProblem(c) : null) ?? welcomeVideoProblem(c.modules);
   if (problem) throw new Err(problem);
 }
 
@@ -636,8 +641,13 @@ export async function reorderLessons(db: PrismaClient, actor: Actor, courseId: s
 }
 
 /** Non-blocking notes shown to the admin on the builder: a course people can buy should have something free to try. */
-export function courseWarnings(c: { status: string; modules: Array<{ status: string; lessons: Array<{ status: string; isFreePreview: boolean; title?: string; contentType?: string; storageKey?: string | null; url?: string | null }> }> }): string[] {
+export function courseWarnings(c: { status: string; externalUrl?: string | null; externalProvider?: string | null; hasCover?: boolean; modules: Array<{ status: string; lessons: Array<{ status: string; isFreePreview: boolean; title?: string; contentType?: string; storageKey?: string | null; url?: string | null }> }> }): string[] {
   const warnings: string[] = [];
+  if (c.externalUrl && c.status !== "PUBLISHED" && c.status !== "ARCHIVED") {
+    // A partner course also needs its link, the partner's name and a cover before it goes live (and the welcome video, below).
+    const problem = partnerPublishProblem({ externalUrl: c.externalUrl, externalProvider: c.externalProvider, hasCover: c.hasCover });
+    if (problem) warnings.push(problem);
+  }
   // A welcome video that is still an external link (older courses, or the migrated intro video) should be uploaded.
   for (const m of c.modules) {
     for (const l of m.lessons) {
@@ -720,6 +730,7 @@ export async function enrol(db: PrismaClient, actor: Actor, courseId: string, pr
   const profileId = ownProfileId(actor);
   const c = await academyRepository.findCourse(db, courseId);
   if (!c || c.status !== "PUBLISHED") throw new NotFoundError();
+  if (c.externalUrl) throw new UserMessageError(`This course is taught on ${c.externalProvider ?? "a partner's"} site. Use the Take this course button to go there.`);
   if (await academyRepository.findEnrollment(db, courseId, profileId)) return;
   const lock = await coursesLockedFor(db, actor);
   if (lock.locked) throw new ForbiddenError(lock.reason ?? "Finish your onboarding checklist before enrolling.");

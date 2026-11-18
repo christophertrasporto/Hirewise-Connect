@@ -16,7 +16,7 @@ export const trainingRepository = {
     return db.academyCourse.findMany({ where: { status: "PUBLISHED" }, orderBy: { title: "asc" }, select: { id: true, title: true, category: true, description: true, priceCents: true, certificationTemplate: { select: { name: true } }, _count: { select: { modules: true } } } });
   },
   course(db: Db, id: string) {
-    return db.academyCourse.findUnique({ where: { id }, select: { id: true, title: true, priceCents: true, status: true, ownerCoachUserId: true, coaches: { select: { coachUserId: true } } } });
+    return db.academyCourse.findUnique({ where: { id }, select: { id: true, title: true, priceCents: true, status: true, externalUrl: true, ownerCoachUserId: true, coaches: { select: { coachUserId: true } } } });
   },
 
   // ---- purchases

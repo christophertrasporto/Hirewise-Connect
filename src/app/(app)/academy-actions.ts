@@ -9,6 +9,7 @@ import { toActionError, formList, formString, type ActionResult } from "@/server
 import { rejectCourse, publishOwnCourse } from "@/server/services/academy.service";
 import { coverUploadRequestSchema, createCourseCoverUploadUrl, setCourseCover, courseSchema, courseSettingsSchema, createCourse, updateCourse, updateCourseSettings, setCourseCertificationTemplate, submitCourseForApproval, publishCourse, archiveCourse, restoreCourse, enrol, recordCoursePayment, addCoachToCourse, moduleSchema, lessonSchema, lessonUploadRequestSchema, saveModule, deleteModule, moveModule, duplicateModule, saveLesson, deleteLesson, moveLesson, reorderLessons, duplicateLesson, createLessonUploadUrl } from "@/server/services/academy.service";
 import { savePublicDetails, setCourseListing, setCourseFeatured } from "@/server/services/public-course.service";
+import { setPartnerLink } from "@/server/services/partner-course.service";
 import { hideReview, unhideReview, writeReview } from "@/server/services/review.service";
 import { saveOwnCoachProfile, createCoachPhotoUploadUrl, setCoachPhoto, coachPhotoRequestSchema } from "@/server/services/coach-profile.service";
 import { categorySchema, saveCategory } from "@/server/services/category.service";
@@ -538,6 +539,20 @@ export async function setFeaturedAction(_prev: ActionResult, fd: FormData): Prom
     const courseId = formString(fd, "courseId");
     const raw = formString(fd, "rank");
     await setCourseFeatured(prisma, actor, courseId, raw === "" ? null : Number(raw));
+    revalidateCourse(courseId);
+    return { ok: true };
+  } catch (e) {
+    return toActionError(e);
+  }
+}
+
+/** Admin: make a course a partner course (an affiliate link to a course taught elsewhere), change its link, or turn it back. */
+export async function setPartnerLinkAction(_prev: ActionResult, fd: FormData): Promise<ActionResult> {
+  try {
+    const actor = await requireActor();
+    const courseId = formString(fd, "courseId");
+    if (formString(fd, "op") === "REMOVE") await setPartnerLink(prisma, actor, courseId, null);
+    else await setPartnerLink(prisma, actor, courseId, { url: formString(fd, "url"), provider: formString(fd, "provider"), priceLabel: formString(fd, "priceLabel") });
     revalidateCourse(courseId);
     return { ok: true };
   } catch (e) {

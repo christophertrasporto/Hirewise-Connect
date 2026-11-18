@@ -1,6 +1,7 @@
 import type { CardRow } from "@/server/repositories/public-catalog.repository";
 import { clipText, courseMinutes, durationLabel, isPreviewable } from "@/lib/public-catalog";
 import { priceLabel } from "@/server/views/academy.views";
+import { partnerGoPath, partnerPriceText } from "@/lib/partner-course";
 
 /**
  * Allow-list views for the public Academy pages. Visitors may be signed out and the pages are cached and shared by
@@ -33,6 +34,8 @@ export type PublicCourseCard = {
   ratingCount: number;
   /** Null when the Admin hid the count for this course (it is still used to order "most popular"). */
   enrolled: number | null;
+  /** A partner course (taught on another site): the partner's name and the only address to link to, `/go/<slug>`. */
+  partner: { provider: string | null; goPath: string } | null;
 };
 
 /** What the catalog sorts by: the card plus fields that are never shown. */
@@ -58,16 +61,17 @@ export function toSortableCard(c: CardRow, extra: { enrolled: number; rating: { 
     difficulty: c.difficulty,
     priceCents: c.priceCents,
     currency: c.currency,
-    priceLabel: priceLabel(c.priceCents, c.currency),
+    priceLabel: c.externalUrl ? partnerPriceText(c.externalProvider, c.externalPriceLabel) : priceLabel(c.priceCents, c.currency),
     coverUrl: coverUrlFor(c),
     coaches: extra.coaches,
-    lessonCount: lessons.length,
+    lessonCount: c.externalUrl ? 0 : lessons.length,
     minutes,
     durationLabel: durationLabel(minutes),
     hasPreview: lessons.some((l) => l.isFreePreview && isPreviewable(l.contentType)),
     ratingAverage: rating ? Math.round(rating.average * 10) / 10 : null,
     ratingCount: rating?.count ?? 0,
-    enrolled: c.hideEnrolledCount ? null : extra.enrolled,
+    enrolled: c.hideEnrolledCount || c.externalUrl ? null : extra.enrolled,
+    partner: c.externalUrl ? { provider: c.externalProvider, goPath: partnerGoPath(c.slug) } : null,
     sortEnrolled: extra.enrolled,
     publishedAt: c.publishedAt ? c.publishedAt.toISOString() : null,
     featuredRank: c.featuredRank,
@@ -112,6 +116,8 @@ export type PublicCoursePageView = {
   priceCents: number;
   currency: string;
   priceLabel: string;
+  /** A partner course (taught on another site): the partner's name and the only address to link to, `/go/<slug>`. */
+  partner: { provider: string | null; goPath: string } | null;
   coverUrl: string | null;
   /** Unlisted courses are reachable by link but must not be indexed. */
   unlisted: boolean;

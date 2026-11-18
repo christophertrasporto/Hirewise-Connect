@@ -5,6 +5,7 @@ import { publicAcademyRepository } from "@/server/repositories/public-academy.re
 import { publicCatalogRepository, type CardRow, type CoachProfileRow } from "@/server/repositories/public-catalog.repository";
 import { CATALOG_PAGE_SIZE, pageCount, sortCatalog, courseMinutes, durationLabel, isPreviewable, type CatalogQuery } from "@/lib/public-catalog";
 import { siteUrl } from "@/lib/site-url";
+import { partnerGoPath, partnerPriceText } from "@/lib/partner-course";
 import { priceLabel } from "@/server/views/academy.views";
 import {
   toCard,
@@ -125,6 +126,9 @@ export async function getPublicCoursePage(db: Db, slug: string): Promise<PublicC
     return p && live.has(id) ? [coachBlock(p)] : [];
   });
 
+  // A partner course is taught elsewhere. Its welcome video plays here like any course's, but the lesson list is not shown
+  // and it has no learners or reviews of its own.
+  const isPartner = !!c.externalUrl;
   const lessons = c.modules.flatMap((m) => m.lessons);
   const previews: PreviewLesson[] = lessons
     .filter((l) => l.isFreePreview && isPreviewable(l.contentType))
@@ -158,10 +162,11 @@ export async function getPublicCoursePage(db: Db, slug: string): Promise<PublicC
       difficulty: c.difficulty,
       priceCents: c.priceCents,
       currency: c.currency,
-      priceLabel: priceLabel(c.priceCents, c.currency),
+      priceLabel: isPartner ? partnerPriceText(c.externalProvider, c.externalPriceLabel) : priceLabel(c.priceCents, c.currency),
+      partner: isPartner ? { provider: c.externalProvider, goPath: partnerGoPath(c.slug) } : null,
       coverUrl: coverUrlFor(c),
       unlisted: c.listing === "UNLISTED",
-      lessonCount: lessons.length,
+      lessonCount: isPartner ? 0 : lessons.length,
       previewCount: previews.length,
       minutes,
       durationLabel: durationLabel(minutes),
@@ -170,12 +175,12 @@ export async function getPublicCoursePage(db: Db, slug: string): Promise<PublicC
       audience: c.audience,
       requirements: c.requirements,
       faq: faqOf(c.faq),
-      enrolled: c.hideEnrolledCount ? null : (enrolled.get(c.id) ?? 0),
+      enrolled: c.hideEnrolledCount || isPartner ? null : (enrolled.get(c.id) ?? 0),
       ratingAverage: rating.average,
       ratingCount: rating.count,
       coaches,
       // Titles, types and durations for every published lesson. Nothing playable, and no link, body or file for a gated lesson.
-      curriculum: c.modules.map((m) => ({ id: m.id, title: m.title, lessons: m.lessons.map((l) => ({ id: l.id, title: l.title, contentType: l.contentType, durationSec: l.durationSec, isFreePreview: previewIds.has(l.id) })) })),
+      curriculum: (isPartner ? [] : c.modules).map((m) => ({ id: m.id, title: m.title, lessons: m.lessons.map((l) => ({ id: l.id, title: l.title, contentType: l.contentType, durationSec: l.durationSec, isFreePreview: previewIds.has(l.id) })) })),
       previews,
       reviews: reviews.map((r) => ({ id: r.id, rating: r.rating, body: r.body, author: r.author, createdAt: r.createdAt.toISOString() })),
       related: relatedCards,
@@ -264,6 +269,8 @@ export async function sitemapEntries(db: Db): Promise<SitemapEntry[]> {
 
 export type CourseViewer = {
   state: ViewerState;
+  /** True for a partner course: the button is the same for everyone (Take this course), whoever is looking. */
+  partner: boolean;
   /** An owner's own review, so the form can show it. */
   myReview: { rating: number; body: string } | null;
   canShare: boolean;
@@ -273,13 +280,14 @@ export type CourseViewer = {
 export async function getCourseViewer(db: PrismaClient, actor: Actor | null, courseId: string): Promise<CourseViewer> {
   const course = await publicAcademyRepository.findCourseSlugById(db, courseId);
   if (!course || course.status !== "PUBLISHED") throw new NotFoundError();
+  if (await publicAcademyRepository.partnerTarget(db, courseId)) return { state: actor ? "NOT_TALENT" : "SIGNED_OUT", partner: true, myReview: null, canShare: !!actor && canRefer(actor) };
   const { state, enrollmentId } = await viewerStateFor(db, actor, courseId);
   let myReview: CourseViewer["myReview"] = null;
   if (state === "OWNER" && enrollmentId) {
     const r = await publicAcademyRepository.findReviewByEnrollment(db, enrollmentId);
     if (r) myReview = { rating: r.rating, body: r.body ?? "" };
   }
-  return { state, myReview, canShare: !!actor && canRefer(actor) };
+  return { state, partner: false, myReview, canShare: !!actor && canRefer(actor) };
 }
 
 const SHARE_PATH = /^\/(?:academy|coaches)(?:\/[a-z0-9][a-z0-9-]{0,80}){0,2}$/;

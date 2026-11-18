@@ -3,6 +3,7 @@ import Link from "next/link";
 import { prisma } from "@/server/db/client";
 import { requireActor } from "@/server/auth/require-actor";
 import { listAllCoursesForStaff, listTemplatesForAdmin } from "@/server/services/academy.service";
+import { partnerClickCounts } from "@/server/services/partner-course.service";
 import { ForbiddenError } from "@/server/policies/authorize";
 import { Card, StatusBadge, EmptyState, Banner, fmtDate } from "@/components/app/ui";
 import { CourseWorkflowButton } from "@/components/academy/CourseActions";
@@ -19,6 +20,7 @@ export default async function StaffAcademyCoursesPage() {
     throw e;
   }
   const templates = await listTemplatesForAdmin(prisma, actor);
+  const clicks = await partnerClickCounts(prisma, actor);
   const pending = courses.filter((c) => c.status === "PENDING_APPROVAL");
   const others = courses.filter((c) => c.status !== "PENDING_APPROVAL");
   const noWelcome = courses.filter((c) => c.status === "PUBLISHED" && !c.hasWelcome);
@@ -53,7 +55,7 @@ export default async function StaffAcademyCoursesPage() {
             <tbody className="divide-y divide-ink-100">
               {others.map((c) => (
                 <tr key={c.id}>
-                  <td className="py-3"><Link href={`/courses/manage/${c.id}`} className="font-semibold text-brand-600">{c.title}</Link><span className="block text-[12px] text-ink-400">{c.category}{c.publishedAt ? ` · ${fmtDate(c.publishedAt)}` : ""}{c.status === "PUBLISHED" && !c.hasWelcome ? " · no welcome video" : ""}</span></td>
+                  <td className="py-3"><Link href={`/courses/manage/${c.id}`} className="font-semibold text-brand-600">{c.title}</Link><span className="block text-[12px] text-ink-400">{c.category}{c.publishedAt ? ` · ${fmtDate(c.publishedAt)}` : ""}{c.externalUrl ? ` · Partner course (${c.externalProvider ?? "no name yet"}) · ${clicks.get(c.id)?.total ?? 0} clicks, ${clicks.get(c.id)?.recent ?? 0} in 30 days` : ""}{c.status === "PUBLISHED" && !c.hasWelcome ? " · no welcome video" : ""}</span></td>
                   <td className="py-3 text-ink-600">{c.ownerCoach.email}</td>
                   <td className="py-3 font-semibold text-ink-800">{c.priceLabel}</td>
                   <td className="py-3 text-ink-600">{c.enrolledCount}</td>

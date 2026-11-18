@@ -1,4 +1,4 @@
-import { Clock, PlayCircle, Users } from "lucide-react";
+import { Clock, ExternalLink, PlayCircle, Users } from "lucide-react";
 import { CourseTile } from "@/components/academy/CourseTile";
 import { StarRating } from "./StarRating";
 import type { PublicCourseCard } from "@/server/views/public-academy.views";
@@ -10,7 +10,7 @@ export function CatalogCard({ course }: { course: PublicCourseCard }) {
     <CourseTile
       href={course.href}
       cover={{ title: course.title, category: course.category, difficulty: course.difficulty, coverUrl: course.coverUrl }}
-      pill={course.hasPreview ? { label: "Free preview", tone: "good", icon: <PlayCircle className="h-3.5 w-3.5" aria-hidden="true" /> } : null}
+      pill={course.partner ? { label: "Partner course", tone: "neutral", icon: <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" /> } : course.hasPreview ? { label: "Free preview", tone: "good", icon: <PlayCircle className="h-3.5 w-3.5" aria-hidden="true" /> } : null}
       title={course.title}
       description={course.summary}
       footer={
@@ -19,7 +19,7 @@ export function CatalogCard({ course }: { course: PublicCourseCard }) {
           <StarRating value={course.ratingAverage} count={course.ratingCount} />
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[12.5px] text-ink-500">
             <span>{course.difficulty.charAt(0) + course.difficulty.slice(1).toLowerCase()}</span>
-            <span>{course.lessonCount} lesson{course.lessonCount === 1 ? "" : "s"}</span>
+            {!course.partner && <span>{course.lessonCount} lesson{course.lessonCount === 1 ? "" : "s"}</span>}
             {course.durationLabel && (
               <span className="inline-flex items-center gap-1">
                 <Clock className="h-3.5 w-3.5" aria-hidden="true" /> {course.durationLabel}

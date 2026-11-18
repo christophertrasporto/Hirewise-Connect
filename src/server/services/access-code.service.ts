@@ -132,7 +132,7 @@ export async function redeemAccessCode(db: PrismaClient, actor: Actor, rawCode: 
     if (!me || me.email.toLowerCase() !== code.buyerEmail) throw refused();
   }
   const course = await academyRepository.findCourse(db, code.courseId);
-  if (!course || course.status !== "PUBLISHED") throw refused();
+  if (!course || course.status !== "PUBLISHED" || course.externalUrl) throw refused();
 
   // Same onboarding rule as enrolling by hand: a new enrolment waits for the welcome video when staff require it.
   if (!(await academyRepository.findEnrollment(db, course.id, profileId))) {
