@@ -21,9 +21,16 @@ export default async function StaffAcademyCoursesPage() {
   const templates = await listTemplatesForAdmin(prisma, actor);
   const pending = courses.filter((c) => c.status === "PENDING_APPROVAL");
   const others = courses.filter((c) => c.status !== "PENDING_APPROVAL");
+  const noWelcome = courses.filter((c) => c.status === "PUBLISHED" && !c.hasWelcome);
 
   return (
     <div className="space-y-5">
+      {noWelcome.length > 0 && (
+        <Banner tone="warn" title={`${noWelcome.length} live course${noWelcome.length === 1 ? "" : "s"} without a welcome video`}>
+          Visitors cannot watch a free sales video on these. Ask the coach to upload one as a free-preview lesson:{" "}
+          {noWelcome.map((c, i) => <span key={c.id}>{i > 0 && ", "}<Link href={`/courses/manage/${c.id}`} className="font-semibold underline">{c.title}</Link></span>)}.
+        </Banner>
+      )}
       <Card title="Awaiting publication" description="Coach-submitted courses. Check the syllabus and exam on the coach page, choose a certification template, and publish.">
         {pending.length === 0 ? <EmptyState title="Nothing waiting" /> : (
           <ul className="divide-y divide-ink-100">
@@ -46,7 +53,7 @@ export default async function StaffAcademyCoursesPage() {
             <tbody className="divide-y divide-ink-100">
               {others.map((c) => (
                 <tr key={c.id}>
-                  <td className="py-3"><Link href={`/courses/manage/${c.id}`} className="font-semibold text-brand-600">{c.title}</Link><span className="block text-[12px] text-ink-400">{c.category}{c.publishedAt ? ` · ${fmtDate(c.publishedAt)}` : ""}</span></td>
+                  <td className="py-3"><Link href={`/courses/manage/${c.id}`} className="font-semibold text-brand-600">{c.title}</Link><span className="block text-[12px] text-ink-400">{c.category}{c.publishedAt ? ` · ${fmtDate(c.publishedAt)}` : ""}{c.status === "PUBLISHED" && !c.hasWelcome ? " · no welcome video" : ""}</span></td>
                   <td className="py-3 text-ink-600">{c.ownerCoach.email}</td>
                   <td className="py-3 font-semibold text-ink-800">{c.priceLabel}</td>
                   <td className="py-3 text-ink-600">{c.enrolledCount}</td>

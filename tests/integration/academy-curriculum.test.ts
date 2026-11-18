@@ -2,7 +2,7 @@ import { beforeAll, afterAll, describe, expect, it } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { testDb, resetDb } from "../setup/db";
+import { testDb, resetDb, addWelcomeVideo } from "../setup/db";
 import { createCourse, submitCourseForApproval, publishCourse, updateCourse, getCourseForCoach, saveModule, deleteModule, moveModule, saveLesson, deleteLesson, moveLesson, createLessonUploadUrl, lessonDownloadUrl, enrol, getEnrollmentForAgent, catalogForAgent, KEEP_FILE } from "@/server/services/academy.service";
 import { saveQuestion, deleteQuestion, startAttempt, attemptForLearner, submitAttempt } from "@/server/services/quiz.service";
 import { resolveActor } from "@/server/auth/resolve-actor";
@@ -165,9 +165,13 @@ describe("editing after publishing", () => {
     const quiz = await buildQuiz(ids.course, ids.m1);
     const paidModule = await saveModule(db, await coach(), ids.paid, { title: "Module 1", description: "" });
     await buildQuiz(ids.paid, paidModule);
+    await addWelcomeVideo(db, ids.course);
     await submitCourseForApproval(db, await coach(), ids.course);
+    await addWelcomeVideo(db, ids.paid);
     await submitCourseForApproval(db, await coach(), ids.paid);
+    await addWelcomeVideo(db, ids.course);
     await publishCourse(db, admin(), ids.course, {});
+    await addWelcomeVideo(db, ids.paid);
     await publishCourse(db, admin(), ids.paid, {});
 
     const before = await db.question.findMany({ where: { lessonId: quiz }, orderBy: { order: "asc" }, include: { choices: { orderBy: { order: "asc" } } } });
@@ -212,7 +216,7 @@ describe("what agents see", () => {
   it("catalog and locked enrolments show the outline only; unlocked enrolments get the content but never a storage key", async () => {
     const catalog = await catalogForAgent(db, agent2());
     const card = catalog.find((c) => c.id === ids.course)!;
-    expect(card.lessonCount).toBe(6);
+    expect(card.lessonCount).toBe(7);
     expect(card.modules).toBeNull();
     expect(card.outline.map((m) => m.title)).toEqual(["Module 1: Openers", "Module 2: Handling objections", "Module 3: Booking"]);
     expect(card.outline[1].lessons.map((l) => l.contentType)).toEqual(["VIDEO", "DOCUMENT", "LINK"]);
@@ -237,7 +241,7 @@ describe("what agents see", () => {
     const doc = m2.lessons.find((l) => l.id === ids.doc)!;
     expect(doc.hasFile).toBe(true);
     expect(doc.fileName).toBe("handout.pdf");
-    const text = unlocked.course.modules!.find((m) => m.id === ids.m1)!.lessons[0];
+    const text = unlocked.course.modules!.find((m) => m.id === ids.m1)!.lessons.find((l) => l.id === ids.text)!;
     expect(text.body).toContain("Earn permission");
     const keys = collectKeys(unlocked);
     expect(keys.has("storageKey")).toBe(false);

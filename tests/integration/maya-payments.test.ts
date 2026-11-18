@@ -1,6 +1,6 @@
 import { beforeAll, afterAll, afterEach, describe, expect, it } from "vitest";
 import { createSign, generateKeyPairSync } from "node:crypto";
-import { testDb, resetDb } from "../setup/db";
+import { testDb, resetDb, addWelcomeVideo } from "../setup/db";
 import { createCourse, updateCourse, saveModule, saveLesson, publishCourse, archiveCourse, restoreCourse, enrol, getEnrollmentForAgent, recordCoursePayment, recordCourseRefund, catalogForAgent } from "@/server/services/academy.service";
 import { startMayaCheckout, reconcileOnlinePayment, reconcileMyCourse, handleMayaWebhook, reconcilePendingOnlinePayments, mayaAvailableFor } from "@/server/services/maya-payment.service";
 import { FakeMayaGateway, setMayaGatewayForTests, type MayaGateway } from "@/server/adapters/maya";
@@ -76,6 +76,7 @@ beforeAll(async () => {
   await saveLesson(db, admin(), ids.phpCourse, { moduleId, title: "Welcome", contentType: "TEXT", body: "Hello learners." });
   await db.courseModule.updateMany({ where: { courseId: ids.phpCourse }, data: { status: "PUBLISHED" } });
   await db.courseLesson.updateMany({ where: { module: { courseId: ids.phpCourse } }, data: { status: "PUBLISHED" } });
+  await addWelcomeVideo(db, ids.phpCourse);
   await publishCourse(db, admin(), ids.phpCourse, {});
   const mk = async (title: string, priceCents: number, currency: string, status: "PUBLISHED" | "ARCHIVED") => (await db.academyCourse.create({ data: { code: title.replace(/\s/g, "-").toUpperCase(), title, category: "Sales", description: "A course description long enough to satisfy validation rules.", status, priceCents, currency, ownerCoachUserId: ids.coach } })).id;
   ids.usdCourse = await mk("Closing Mastery USD", 4900, "USD", "PUBLISHED");
@@ -430,13 +431,18 @@ describe("the webhook", () => {
 
 describe("restoring an archived course", () => {
   it("an Admin brings an archived course back to published; others cannot", async () => {
+    await addWelcomeVideo(db, ids.phpCourse);
     await expect(restoreCourse(db, admin(), ids.phpCourse)).rejects.toThrow(/Only an archived course/);
+    await addWelcomeVideo(db, ids.archivedCourse);
     await expect(restoreCourse(db, admin(), ids.archivedCourse)).rejects.toThrow(/at least one published lesson/);
     // Give the archived course a published lesson, as Freelancers Foundation has.
     const m = await db.courseModule.create({ data: { courseId: ids.archivedCourse, order: 1, title: "Module", status: "PUBLISHED" } });
     await db.courseLesson.create({ data: { moduleId: m.id, order: 1, title: "Lesson", contentType: "TEXT", body: "Hi", status: "PUBLISHED" } });
+    await addWelcomeVideo(db, ids.archivedCourse);
     for (const actor of [sales(), agent(1), coach()]) await expect(restoreCourse(db, actor, ids.archivedCourse)).rejects.toThrow(ForbiddenError);
+    await addWelcomeVideo(db, "missing");
     await expect(restoreCourse(db, admin(), "missing")).rejects.toThrow(NotFoundError);
+    await addWelcomeVideo(db, ids.archivedCourse);
     await restoreCourse(db, admin(), ids.archivedCourse);
     const c = await db.academyCourse.findUniqueOrThrow({ where: { id: ids.archivedCourse } });
     expect(c.status).toBe("PUBLISHED");
@@ -444,6 +450,7 @@ describe("restoring an archived course", () => {
     expect((await catalogForAgent(db, agent(1))).some((x) => x.id === ids.archivedCourse)).toBe(true);
     // Archiving and restoring again is possible.
     await archiveCourse(db, admin(), ids.archivedCourse);
+    await addWelcomeVideo(db, ids.archivedCourse);
     await restoreCourse(db, admin(), ids.archivedCourse);
     expect((await db.academyCourse.findUniqueOrThrow({ where: { id: ids.archivedCourse } })).status).toBe("PUBLISHED");
   });

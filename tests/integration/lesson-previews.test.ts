@@ -311,7 +311,8 @@ describe("the admin warning", () => {
   it("warns when a course has no published free-preview lesson, and never blocks", () => {
     expect(courseWarnings({ status: "PUBLISHED", modules: lessonsOf([{}, {}]) })[0]).toMatch(/no free-preview lesson/);
     expect(courseWarnings({ status: "DRAFT", modules: lessonsOf([{}]) })[0]).toMatch(/before this course goes live/);
-    expect(courseWarnings({ status: "PUBLISHED", modules: lessonsOf([{}, { isFreePreview: true }]) })).toEqual([]);
+    // A free preview that is not an uploaded video is still not the welcome video.
+    expect(courseWarnings({ status: "PUBLISHED", modules: lessonsOf([{}, { isFreePreview: true }]) })[0]).toMatch(/no welcome video/);
     expect(courseWarnings({ status: "PUBLISHED", modules: lessonsOf([{ isFreePreview: true, status: "DRAFT" }]) })).toHaveLength(1); // an unpublished preview does not count
     expect(courseWarnings({ status: "ARCHIVED", modules: [] })).toEqual([]);
     // A welcome preview that is still an external link is flagged; an uploaded one, or a gated link, is not.

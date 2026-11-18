@@ -25,3 +25,18 @@ export async function resetDb(db: PrismaClient) {
   const list = tables.map((t) => `"${t.tablename}"`).join(", ");
   if (list) await db.$executeRawUnsafe(`TRUNCATE TABLE ${list} RESTART IDENTITY CASCADE`);
 }
+
+/**
+ * Gives a course the welcome video every live course needs (a published, uploaded, free-preview video that is not
+ * required), so fixtures that publish a course need not each build one. Does nothing when the course has no published
+ * module yet (so "no lesson" refusals are unaffected) or already has one. It sits first in its module (as a real welcome lesson does, so
+ * sequential unlock never locks it) and is optional, so it never changes completion.
+ */
+export async function addWelcomeVideo(db: PrismaClient, courseId: string) {
+  const mod = await db.courseModule.findFirst({ where: { courseId, status: "PUBLISHED" }, orderBy: { order: "asc" } });
+  if (!mod) return;
+  const has = await db.courseLesson.findFirst({ where: { module: { courseId }, status: "PUBLISHED", isFreePreview: true, contentType: "VIDEO", storageKey: { not: null } } });
+  if (has) return;
+  const first = await db.courseLesson.aggregate({ where: { moduleId: mod.id }, _min: { order: true } });
+  await db.courseLesson.create({ data: { moduleId: mod.id, order: (first._min.order ?? 1) - 1, title: "Welcome video", contentType: "VIDEO", storageKey: `lessons/${courseId}/welcome.mp4`, fileName: "welcome.mp4", contentMime: "video/mp4", sizeBytes: 1, durationSec: 60, status: "PUBLISHED", isFreePreview: true, isRequired: false } });
+}

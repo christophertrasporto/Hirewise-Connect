@@ -1,5 +1,5 @@
 import { beforeAll, afterAll, describe, expect, it } from "vitest";
-import { testDb, resetDb } from "../setup/db";
+import { testDb, resetDb, addWelcomeVideo } from "../setup/db";
 import { createCourse, publishCourse, submitCourseForApproval, rejectCourse, publishOwnCourse, archiveCourse } from "@/server/services/academy.service";
 import { savePublicDetails, setCourseListing, setCourseFeatured } from "@/server/services/public-course.service";
 import { resolveCourseSlug, resolveCoachSlug } from "@/server/services/slug.service";
@@ -159,6 +159,7 @@ describe("featured courses", () => {
   it("admin features a published, listed course; unlisting or archiving removes the feature; others cannot feature", async () => {
     const id = await courseWithLesson("Featured Course");
     await expect(setCourseFeatured(db, admin(), id, 1)).rejects.toThrow(/published, listed/); // still a draft
+    await addWelcomeVideo(db, id);
     await publishCourse(db, admin(), id, {});
     await setCourseFeatured(db, admin(), id, 2);
     expect((await db.academyCourse.findUniqueOrThrow({ where: { id } })).featuredRank).toBe(2);
@@ -177,6 +178,7 @@ describe("featured courses", () => {
 describe("approval: reject with a reason, and self-publishing when approval is off", () => {
   it("rejecting sends the course back to draft with the reason, notifies the coach, and resubmitting clears it", async () => {
     const id = await courseWithLesson("Reject Me");
+    await addWelcomeVideo(db, id);
     await submitCourseForApproval(db, coach(), id);
     await expect(rejectCourse(db, coach(), id, "Not good enough")).rejects.toThrow(ForbiddenError);
     await expect(rejectCourse(db, sales(), id, "Not good enough")).rejects.toThrow(ForbiddenError);
@@ -188,6 +190,7 @@ describe("approval: reject with a reason, and self-publishing when approval is o
     expect(await db.auditLog.count({ where: { action: "COURSE_REJECTED", entityId: id } })).toBe(1);
     const ev = await db.outboxEvent.findFirst({ where: { type: "COURSE_REJECTED" } });
     expect(ev?.payload).toMatchObject({ courseId: id, coachUserId: ids.coach, reason: "Add a welcome video and a clearer description." });
+    await addWelcomeVideo(db, id);
     await submitCourseForApproval(db, coach(), id);
     expect((await db.academyCourse.findUniqueOrThrow({ where: { id } })).reviewNote).toBeNull();
   });
@@ -200,14 +203,17 @@ describe("approval: reject with a reason, and self-publishing when approval is o
 
   it("publishing clears an old rejection note", async () => {
     const id = await courseWithLesson("Fix And Publish");
+    await addWelcomeVideo(db, id);
     await submitCourseForApproval(db, coach(), id);
     await rejectCourse(db, admin(), id, "Please fix the title.");
+    await addWelcomeVideo(db, id);
     await publishCourse(db, admin(), id, {});
     expect((await db.academyCourse.findUniqueOrThrow({ where: { id } })).reviewNote).toBeNull();
   });
 
   it("a coach cannot publish their own course while approval is required (the default)", async () => {
     const id = await courseWithLesson("Needs Approval");
+    await addWelcomeVideo(db, id);
     await expect(publishOwnCourse(db, coach(), id)).rejects.toThrow(ForbiddenError);
     expect((await db.academyCourse.findUniqueOrThrow({ where: { id } })).status).toBe("DRAFT");
   });
@@ -215,14 +221,19 @@ describe("approval: reject with a reason, and self-publishing when approval is o
   it("with approval switched off a coach publishes their own draft, but it still needs a published lesson and ownership", async () => {
     await setSetting(db, owner(), "academy", { requireApproval: false });
     const empty = await createCourse(db, coach(), input("No Lessons Yet"));
+    await addWelcomeVideo(db, empty);
     await expect(publishOwnCourse(db, coach(), empty)).rejects.toThrow(/at least one published lesson/);
     const id = await courseWithLesson("Self Published");
+    await addWelcomeVideo(db, id);
     await expect(publishOwnCourse(db, otherCoach(), id)).rejects.toThrow(NotFoundError);
+    await addWelcomeVideo(db, id);
     await expect(publishOwnCourse(db, sales(), id)).rejects.toThrow(ForbiddenError);
+    await addWelcomeVideo(db, id);
     await publishOwnCourse(db, coach(), id);
     const c = await db.academyCourse.findUniqueOrThrow({ where: { id } });
     expect(c.status).toBe("PUBLISHED");
     expect(c.publishedById).toBe(ids.coach);
+    await addWelcomeVideo(db, id);
     await expect(publishOwnCourse(db, coach(), id)).rejects.toThrow(/Only a draft/);
     await setSetting(db, owner(), "academy", { requireApproval: true });
   });
@@ -280,6 +291,7 @@ describe("coach profiles", () => {
 
     // Once the coach has a published, listed course the page goes live; unlisting it takes the page down again.
     const id = await courseWithLesson("Other Coach Course", otherCoach);
+    await addWelcomeVideo(db, id);
     await publishCourse(db, admin(), id, {});
     expect((await coachNamesFor(db, [ids.otherCoach])).get(ids.otherCoach)?.slug).toBe("maria-two");
     await setCourseListing(db, otherCoach(), id, "UNLISTED");
@@ -291,6 +303,7 @@ describe("reviews", () => {
   let courseId = "";
   beforeAll(async () => {
     courseId = await courseWithLesson("Reviewed Course");
+    await addWelcomeVideo(db, courseId);
     await publishCourse(db, admin(), courseId, {});
     await enrolWith(courseId, "owner", "PAID");
     await enrolWith(courseId, "waived", "WAIVED");

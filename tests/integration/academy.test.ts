@@ -1,5 +1,5 @@
 import { beforeAll, afterAll, describe, expect, it } from "vitest";
-import { testDb, resetDb } from "../setup/db";
+import { testDb, resetDb, addWelcomeVideo } from "../setup/db";
 import { createCourse, updateCourse, saveModule, saveLesson, submitCourseForApproval, publishCourse, listCoursesForCoach, getCourseForCoach, catalogForAgent, enrol, getEnrollmentForAgent, recordCoursePayment, listPendingCoursePayments } from "@/server/services/academy.service";
 import { saveQuestion, startAttempt, attemptForLearner, submitAttempt } from "@/server/services/quiz.service";
 import { recordAssessment, recordEvaluation } from "@/server/services/assessment.service";
@@ -108,14 +108,20 @@ describe("coach-authored courses with pricing and exams", () => {
   });
 
   it("submitting without a published lesson is refused; the coach builds the quiz and submits; admin publishes with a template", async () => {
+    await addWelcomeVideo(db, ids.freeCourse);
     await expect(submitCourseForApproval(db, await coach(), ids.freeCourse)).rejects.toThrow(/published lesson/i);
     quizIds.free = await buildQuiz(ids.freeCourse, 2);
     quizIds.paid = await buildQuiz(ids.paidCourse, 1);
     await expect(saveQuestion(db, await coach(), ids.freeCourse, quizIds.free, { prompt: "No right answer", choices: [{ text: "A" }, { text: "B" }] })).rejects.toThrow(/exactly one choice/);
+    await addWelcomeVideo(db, ids.freeCourse);
     await submitCourseForApproval(db, await coach(), ids.freeCourse);
+    await addWelcomeVideo(db, ids.paidCourse);
     await submitCourseForApproval(db, await coach(), ids.paidCourse);
+    await addWelcomeVideo(db, ids.freeCourse);
     await expect(publishCourse(db, await coach(), ids.freeCourse, {})).rejects.toThrow(ForbiddenError);
+    await addWelcomeVideo(db, ids.freeCourse);
     await publishCourse(db, admin(), ids.freeCourse, { certificationTemplateId: ids.templateSetter });
+    await addWelcomeVideo(db, ids.paidCourse);
     await publishCourse(db, admin(), ids.paidCourse, { certificationTemplateId: ids.templateCsr });
     const r = await runWorkerOnce(db);
     expect(r.failures).toBe(0);
