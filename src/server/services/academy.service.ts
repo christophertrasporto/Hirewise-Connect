@@ -20,7 +20,7 @@ import { recalculateAllForCourse, lockedLessonsFor, assertLessonUnlocked } from 
 import { assertCanWatchLesson, entitledToCourse } from "@/server/policies/lesson-access";
 import { getEnv } from "@/server/env";
 import { LESSON_UPLOAD_RULES } from "@/lib/lesson-upload";
-import { applyPromoTx, consumePromoTx, promoForEnrollment } from "./promo.service";
+import { applyPromoTx, consumePromoTx, promoForEnrollment, repricePendingEnrollmentsTx } from "./promo.service";
 import { recordEarningForPaymentTx, reverseEarningForRefundTx } from "./wallet.service";
 import { parseMoneyToMinor } from "@/lib/coach-wallet";
 import { recordLessonVersion, changedFields } from "./lesson-version.service";
@@ -163,7 +163,11 @@ export async function updateCourse(db: PrismaClient, actor: Actor, courseId: str
   await db.$transaction(async (tx) => {
     await academyRepository.updateCourse(tx, c.id, { currency, title: input.title, ...builderFields(input, cat.name), description: input.description, syllabus: input.syllabus || null, contentUrl: input.contentUrl || null, priceCents, passingScore: input.passingScore, requiresCoachReview: input.requiresCoachReview });
     await audit(tx, { actor, action: "COURSE_UPDATED", entityType: "AcademyCourse", entityId: c.id, newValue: { title: input.title, passingScore: input.passingScore } });
-    if (priceCents !== c.priceCents || currency !== c.currency) await audit(tx, { actor, action: "COURSE_PRICE_CHANGED", entityType: "AcademyCourse", entityId: c.id, previousValue: { priceCents: c.priceCents, currency: c.currency }, newValue: { priceCents, currency } });
+    if (priceCents !== c.priceCents || currency !== c.currency) {
+      await audit(tx, { actor, action: "COURSE_PRICE_CHANGED", entityType: "AcademyCourse", entityId: c.id, previousValue: { priceCents: c.priceCents, currency: c.currency }, newValue: { priceCents, currency } });
+      // Unpaid enrolments copied the old price when they were made; they follow the new one.
+      await repricePendingEnrollmentsTx(tx, actor, { id: c.id, priceCents, currency });
+    }
   });
 }
 
