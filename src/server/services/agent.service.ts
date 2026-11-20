@@ -1,6 +1,4 @@
 import { z } from "zod";
-import { skillsRepository } from "@/server/repositories/skills.repository";
-import { recomputeSkillVerification } from "@/server/services/skill-verification.service";
 import { clientLabelFrom } from "@/lib/client-redaction";
 import { joinAgencyTx } from "@/server/services/seat.service";
 import { acceptTermsTx, requireTermsAccepted } from "@/server/services/terms.service";
@@ -96,9 +94,8 @@ export const professionalSchema = z.object({
   industries: z.array(z.object({ industry: z.string().trim().min(2).max(80), years: z.coerce.number().int().min(0).max(50) })).max(10),
 });
 
-export const skillsSchema = z.object({
-  /** Skills system: declared tags only; verification is derived and never part of this input. */
-  skills: z.array(z.string().min(1)).min(3, "Add at least three skill tags.").max(25),
+/** Software the talent uses. Skills are not part of this: they come only from courses (skill-verification.service). */
+export const softwareSchema = z.object({
   software: z.array(z.object({ softwareId: z.string().min(1), level: z.enum(["BASIC", "INTERMEDIATE", "ADVANCED", "EXPERT"]) })).max(25),
 });
 
@@ -191,21 +188,29 @@ export async function getOwnProfile(db: PrismaClient, actor: Actor): Promise<Age
 }
 
 /**
- * Section 8.2 step 3: weighted checklist. personal 15, professional 20, résumé 10,
- * skills 10, experience 10, video 20, voice 15.
+ * The simple profile: three scored sections (personal 30, professional 40, work experience 30). Skills come only from the
+ * courses a talent has access to, so they are not scored; a résumé, a video introduction, and a voice sample are optional
+ * extras that never count toward the score or block a submission.
  */
-export function computeCompletion(v: AgentSelfView): { total: number; parts: Array<{ key: string; label: string; weight: number; done: boolean; href: string }> } {
+export const SUBMIT_MIN_PERCENT = 80;
+
+export function computeCompletion(v: AgentSelfView): {
+  total: number;
+  parts: Array<{ key: string; label: string; weight: number; done: boolean; href: string }>;
+  extras: Array<{ key: string; label: string; done: boolean; href: string }>;
+} {
   const parts = [
-    { key: "personal", label: "Personal information", weight: 15, done: !!(v.privateContact?.fullLegalName && v.locationCity && v.timezone && v.languages.length && v.workSetup), href: "/profile/personal" },
-    { key: "professional", label: "Professional information", weight: 20, done: !!(v.headline && v.summary && v.summary.length >= 80 && v.primaryRole && v.experienceLevel), href: "/profile/professional" },
-    { key: "resume", label: "Résumé", weight: 10, done: !!v.privateContact?.hasResume, href: "/profile/resume" },
-    { key: "skills", label: "Skills", weight: 10, done: v.skills.length >= 3, href: "/profile/skills" },
-    { key: "experience", label: "Work experience", weight: 10, done: v.experiences.length >= 1, href: "/profile/experience" },
-    { key: "video", label: "Video introduction", weight: 20, done: v.videos.some((x) => ["SUBMITTED", "UNDER_REVIEW", "APPROVED"].includes(x.status)), href: "/profile/media" },
-    { key: "voice", label: "Voice sample", weight: 15, done: v.recordings.some((x) => ["SUBMITTED", "UNDER_REVIEW", "APPROVED"].includes(x.status)), href: "/profile/media" },
+    { key: "personal", label: "Personal information", weight: 30, done: !!(v.privateContact?.fullLegalName && v.locationCity && v.timezone && v.languages.length && v.workSetup), href: "/profile/personal" },
+    { key: "professional", label: "Professional information", weight: 40, done: !!(v.headline && v.summary && v.summary.length >= 80 && v.primaryRole && v.experienceLevel), href: "/profile/professional" },
+    { key: "experience", label: "Work experience", weight: 30, done: v.experiences.length >= 1, href: "/profile/experience" },
+  ];
+  const extras = [
+    { key: "resume", label: "Résumé", done: !!v.privateContact?.hasResume, href: "/profile/resume" },
+    { key: "video", label: "Video introduction", done: v.videos.some((x) => ["SUBMITTED", "UNDER_REVIEW", "APPROVED"].includes(x.status)), href: "/profile/media" },
+    { key: "voice", label: "Voice sample", done: v.recordings.some((x) => ["SUBMITTED", "UNDER_REVIEW", "APPROVED"].includes(x.status)), href: "/profile/media" },
   ];
   const total = parts.reduce((sum, p) => sum + (p.done ? p.weight : 0), 0);
-  return { total, parts };
+  return { total, parts, extras };
 }
 
 async function recomputeCompletion(db: PrismaClient, agentProfileId: string) {
@@ -254,14 +259,11 @@ export async function updateProfessional(db: PrismaClient, actor: Actor, input: 
   return recomputeCompletion(db, p.id);
 }
 
-export async function updateSkills(db: PrismaClient, actor: Actor, raw: z.input<typeof skillsSchema>) {
-  const input = skillsSchema.parse(raw);
+export async function updateSoftware(db: PrismaClient, actor: Actor, raw: z.input<typeof softwareSchema>) {
+  const input = softwareSchema.parse(raw);
   const p = await loadOwn(db, actor);
-  const validSkills = new Set((await taxonomyRepository.skillIdsExist(db, input.skills)).map((s) => s.id));
   const validSoftware = new Set((await taxonomyRepository.softwareIdsExist(db, input.software.map((s) => s.softwareId))).map((s) => s.id));
-  await skillsRepository.replaceDeclaredTags(db, p.id, [...new Set(input.skills.filter((id) => validSkills.has(id)))]);
   await agentRepository.replaceSoftware(db, p.id, input.software.filter((s) => validSoftware.has(s.softwareId)));
-  await recomputeSkillVerification(db, p.id);
   return recomputeCompletion(db, p.id);
 }
 
@@ -302,17 +304,15 @@ export class SubmissionBlockedError extends Error {
 }
 
 /**
- * DRAFT | REVISION_REQUIRED → SUBMITTED. Guard from Section 5.1: completion ≥ 80,
- * résumé uploaded, at least one video submitted or approved.
+ * DRAFT | REVISION_REQUIRED → SUBMITTED. The only guard is the completion score (the three sections); a résumé, video, and
+ * voice sample are optional.
  */
 export async function submitForReview(db: PrismaClient, actor: Actor) {
   const p = await loadOwn(db, actor);
   const view = toAgentSelfView(p);
   const { total, parts } = computeCompletion(view);
   const missing: string[] = [];
-  if (total < 80) missing.push(`profile completion is ${total}% (need 80%)`);
-  if (!view.privateContact?.hasResume) missing.push("résumé");
-  if (!parts.find((x) => x.key === "video")?.done) missing.push("video introduction");
+  if (total < SUBMIT_MIN_PERCENT) missing.push(`profile completion is ${total}% (need ${SUBMIT_MIN_PERCENT}%): finish ${parts.filter((x) => !x.done).map((x) => x.label.toLowerCase()).join(", ")}`);
   if (missing.length) throw new SubmissionBlockedError(missing);
   assertTransitionAllowed(actor, p.id, p.status as AgentProfileStatus, "SUBMITTED");
   await db.$transaction(async (tx) => {

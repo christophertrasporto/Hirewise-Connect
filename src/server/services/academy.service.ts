@@ -21,6 +21,7 @@ import { assertCanWatchLesson, entitledToCourse } from "@/server/policies/lesson
 import { getEnv } from "@/server/env";
 import { LESSON_UPLOAD_RULES } from "@/lib/lesson-upload";
 import { applyPromoTx, consumePromoTx, promoForEnrollment, repricePendingEnrollmentsTx } from "./promo.service";
+import { recomputeSkillVerification } from "./skill-verification.service";
 import { recordEarningForPaymentTx, reverseEarningForRefundTx } from "./wallet.service";
 import { parseMoneyToMinor } from "@/lib/coach-wallet";
 import { recordLessonVersion, changedFields } from "./lesson-version.service";
@@ -747,6 +748,8 @@ export async function enrol(db: PrismaClient, actor: Actor, courseId: string, pr
     const status = dueCents > 0 ? e.paymentStatus : "NOT_REQUIRED";
     await audit(tx, { actor, action: "COURSE_ENROLLED", entityType: "CourseEnrollment", entityId: e.id, newValue: { courseId, priceCents: dueCents, listPriceCents: code ? c.priceCents : undefined, paymentStatus: status, credentialSource: dueCents > 0 ? e.credentialSource : "HIREWISE_DIRECT" } });
     await publishEvent(tx, "COURSE_ENROLLED", { courseId, title: c.title, agentProfileId: profileId, agentUserId: actor.userId, coachUserIds: [c.ownerCoachUserId, ...c.coaches.map((x) => x.coachUserId)], paymentRequired: dueCents > 0, priceCents: dueCents });
+    // A free enrolment (or one a code made free) opens the course now, so the skills it carries are derived now.
+    if (dueCents === 0) await recomputeSkillVerification(tx, profileId);
   });
 }
 
@@ -803,6 +806,8 @@ export async function settleEnrollmentPaymentTx(tx: Db, actor: Actor, e: Enrollm
   if (!p.waived && (p.paidCents ?? 0) > 0) await recordEarningForPaymentTx(tx, { enrollmentId: e.id, channel: p.channel, gatewayFeeMinor: p.gatewayFeeMinor, paidAt: new Date() });
   await audit(tx, { actor, action: "COURSE_PAYMENT_RECORDED", entityType: "CourseEnrollment", entityId: e.id, newValue: { paidCents: p.paidCents, waived: p.waived, reference: p.reference, currency: e.currency, channel: p.channel }, reason: p.reason });
   await publishEvent(tx, "COURSE_PAYMENT_RECORDED", { enrollmentId: e.id, courseTitle: e.course.title, agentUserId: e.agentProfile.userId, agentEmail: e.agentProfile.user.email, waived: p.waived });
+  // The course is now the learner's, and so are the skills it carries.
+  await recomputeSkillVerification(tx, e.agentProfileId);
 }
 
 export async function recordCoursePayment(db: PrismaClient, actor: Actor, enrollmentId: string, p: { paid?: string; /** Legacy name for paid. */ paidUsd?: string; reference?: string; waived: boolean; reason?: string; /** Bank or GCash fees staff want recorded against the sale; empty means none. */ gatewayFee?: string }) {
@@ -853,6 +858,8 @@ export async function recordCourseRefund(db: PrismaClient, actor: Actor, enrollm
     // Coach wallet: whatever is left of the sale is reversed (before withdrawal it leaves the wallet; after, the balance can go negative).
     const wallet = await reverseEarningForRefundTx(tx, actor, { enrollmentId: e.id, kind: input.kind, reason: input.reason });
     await audit(tx, { actor, action: "COURSE_PAYMENT_REFUNDED", entityType: "CourseEnrollment", entityId: e.id, previousValue: { paymentStatus: "PAID" }, newValue: { paymentStatus: "REFUNDED", kind: input.kind, commissionReversed: reversal.reversed, coachReversedMinor: wallet?.coachReversedMinor ?? 0, feeAbsorbedMinor: wallet?.feeAbsorbedMinor ?? 0 }, reason: input.reason });
+    // A full refund ends access, so the skills that course gave are taken back (a partial refund keeps access and skills).
+    await recomputeSkillVerification(tx, e.agentProfileId);
   });
 }
 

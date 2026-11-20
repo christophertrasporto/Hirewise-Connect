@@ -9,25 +9,19 @@ import { SkillsForm } from "@/components/profile/SkillsForm";
 
 export const metadata: Metadata = { title: "Skills" };
 
-type TagRow = Awaited<ReturnType<typeof skillsRepository.listTags>>[number];
-/** The published course(s) that earn the badge for a tag, for the "Want to verify this skill?" link. */
-function coursesToVerify(t: TagRow): Array<{ id: string; title: string }> {
-  if (t.verificationMode === "REQUIRED_COURSE") return t.requiredCourse && t.requiredCourse.status === "PUBLISHED" ? [{ id: t.requiredCourse.id, title: t.requiredCourse.title }] : [];
-  if (t.verificationMode === "ANY_COURSE") return t.courses.filter((c) => c.course.status === "PUBLISHED").map((c) => ({ id: c.course.id, title: c.course.title }));
-  return [];
-}
-
-/** Skills system: declared hashtags plus the derived Verified by Hirewise section. */
+/** Skills come only from the talent's courses (shown read-only, with the course behind each). Software is the one editable list. */
 export default async function SkillsPage() {
   const actor = await requireActor();
-  const [p, tags, software] = await Promise.all([getOwnProfile(prisma, actor), skillsRepository.listTags(prisma, true), taxonomyRepository.activeSoftware(prisma)]);
+  const [p, software] = await Promise.all([getOwnProfile(prisma, actor), taxonomyRepository.activeSoftware(prisma)]);
+  const sources = await skillsRepository.ownedCourseSkills(prisma, p.id);
+  const coursesBySkill = new Map<string, Array<{ id: string; title: string }>>();
+  for (const r of sources) coursesBySkill.set(r.skillId, [...(coursesBySkill.get(r.skillId) ?? []), r.course]);
   return (
     <>
-      <PageHeader title="Skills and software" description="Skill tags are self-declared and searchable. The Verified by Hirewise badge is earned only through Hirewise courses, assessments, or pathways." />
+      <PageHeader title="Skills and software" description="Your skills are earned through Hirewise courses, so every one is backed by training you took. You cannot add skills by hand." />
       <SkillsForm
-        tags={tags.map((t) => ({ id: t.id, name: t.name, hashtag: t.hashtag ?? `#${t.name.replace(/\s+/g, "")}`, category: t.category, verifiable: t.verificationMode !== "NONE", courses: coursesToVerify(t) }))}
         software={software.map((s) => ({ id: s.id, name: s.name, category: s.category }))}
-        mine={p.skills.map((s) => ({ skillId: s.skillId, verified: s.verified, verifiedAt: s.verifiedAt, hashtag: s.hashtag, name: s.name, verifiable: s.verifiable }))}
+        mine={p.skills.map((s) => ({ skillId: s.skillId, verified: s.verified, hashtag: s.hashtag, name: s.name, courses: coursesBySkill.get(s.skillId) ?? [] }))}
         selectedSoftware={Object.fromEntries(p.software.map((s) => [s.softwareId, s.level]))}
       />
     </>
