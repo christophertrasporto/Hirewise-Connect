@@ -282,6 +282,30 @@ async function releaseTx(tx: Db, actor: Actor, e: EnrollmentPricing, reason: str
   return true;
 }
 
+/**
+ * A course's price or currency changed: every unpaid enrolment in it follows the new price, because an enrolment copies the
+ * price when the learner enrols and would otherwise keep charging the old amount (or the old currency). A reserved promo code
+ * is released (the learner can apply it again to the new price), open online checkouts are cancelled so a stale one is never
+ * reused, and a course that became free turns its unpaid enrolments into free access. Paid, waived, refunded, and free
+ * enrolments are never touched. Runs inside the price change's own transaction.
+ */
+export async function repricePendingEnrollmentsTx(tx: Db, actor: Actor, course: { id: string; priceCents: number; currency: string }): Promise<number> {
+  const pending = await academyRepository.listPendingForCourse(tx, course.id);
+  const free = course.priceCents === 0;
+  for (const e of pending) {
+    const live = await promoRepository.liveForEnrollment(tx, e.id);
+    if (live?.status === "RESERVED" && (await promoRepository.releaseReserved(tx, live.id, "The course price changed")) === 1) {
+      await audit(tx, { actor, action: "PROMO_RELEASED", entityType: "PromoRedemption", entityId: live.id, newValue: { enrollmentId: e.id, code: live.promoCode.code }, reason: "The course price changed" });
+      await publishEvent(tx, "PROMO_RELEASED", { promoCodeId: live.promoCodeId, code: live.promoCode.code, enrollmentId: e.id, userId: actor.userId, reason: "The course price changed" });
+    }
+    await academyRepository.repriceEnrollment(tx, e.id, { priceCents: course.priceCents, currency: course.currency, paymentStatus: free ? "NOT_REQUIRED" : "PENDING" });
+    if (free) await trainingRepository.setEnrollmentSource(tx, e.id, "HIREWISE_DIRECT");
+    await onlinePaymentRepository.cancelOpenForEnrollment(tx, e.id, "The course price changed");
+    await audit(tx, { actor, action: "COURSE_PRICE_CHANGED", entityType: "CourseEnrollment", entityId: e.id, previousValue: { priceCents: e.priceCents, listPriceCents: e.listPriceCents, currency: e.currency }, newValue: { priceCents: course.priceCents, currency: course.currency }, reason: "The course price changed" });
+  }
+  return pending.length;
+}
+
 async function ownPendingEnrollment(db: Db, actor: Actor, enrollmentId: string) {
   const profileId = ownProfile(actor);
   const e = await academyRepository.findEnrollmentById(db, enrollmentId);
