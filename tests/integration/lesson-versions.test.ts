@@ -1,5 +1,5 @@
 import { beforeAll, afterAll, describe, expect, it } from "vitest";
-import { testDb, resetDb } from "../setup/db";
+import { testDb, resetDb, addWelcomeVideo } from "../setup/db";
 import { createCourse, saveModule, saveLesson, submitCourseForApproval, publishCourse, enrol } from "@/server/services/academy.service";
 import { saveQuestion, deleteQuestion, startAttempt, attemptForLearner, submitAttempt } from "@/server/services/quiz.service";
 import { markLessonComplete } from "@/server/services/lesson-media.service";
@@ -74,7 +74,9 @@ describe("lesson version history", () => {
     const q1Choices = (await db.questionChoice.findMany({ where: { questionId: ids.q1 }, orderBy: { order: "asc" } })).map((x) => ({ id: x.id, text: x.text, isCorrect: x.isCorrect }));
     await saveQuestion(db, c, ids.course, ids.quiz, { id: ids.q1, prompt: "Pick A", explanation: "Because.", choices: q1Choices });
     expect((await lesson(ids.quiz)).version).toBe(2); // explanation only: not significant
+    await addWelcomeVideo(db, ids.course);
     await submitCourseForApproval(db, c, ids.course);
+    await addWelcomeVideo(db, ids.course);
     await publishCourse(db, admin(), ids.course, {});
     await enrol(db, agent(), ids.course);
     await markLessonComplete(db, agent(), ids.text);

@@ -11,7 +11,7 @@ export default function robots(): MetadataRoute.Robots {
       {
         userAgent: "*",
         allow: ["/", "/academy", "/coaches"],
-        disallow: ["/api/", "/staff/", "/dashboard", "/courses", "/wallet", "/account", "/billing", "/profile", "/messages", "/notifications", "/onboarding", "/refer", "/agency", "/coach", "/company", "/interviews", "/opportunities", "/partners", "/placements", "/shortlist", "/talent", "/certificates", "/login", "/register", "/join", "/forgot-password", "/reset-password", "/mfa", "/agreements", "/verify-email"],
+        disallow: ["/api/", "/go/", "/staff/", "/dashboard", "/courses", "/wallet", "/account", "/billing", "/profile", "/messages", "/notifications", "/onboarding", "/refer", "/agency", "/coach", "/company", "/interviews", "/opportunities", "/partners", "/placements", "/shortlist", "/talent", "/certificates", "/login", "/register", "/join", "/forgot-password", "/reset-password", "/mfa", "/agreements", "/verify-email"],
       },
     ],
     sitemap: absoluteUrl("/sitemap.xml"),

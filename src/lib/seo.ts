@@ -43,6 +43,8 @@ export function courseLd(c: {
   title: string;
   description: string;
   difficulty: string;
+  /** A partner course has no price of ours to state, so no offer is described. */
+  partner?: boolean;
   priceCents: number;
   currency: string;
   image: string | null;
@@ -59,7 +61,7 @@ export function courseLd(c: {
     provider: organization(),
     educationalLevel: c.difficulty.charAt(0) + c.difficulty.slice(1).toLowerCase(),
     ...(c.image ? { image: c.image.startsWith("http") ? c.image : absoluteUrl(c.image) } : {}),
-    offers: { "@type": "Offer", category: c.priceCents === 0 ? "Free" : "Paid", price: (c.priceCents / 100).toFixed(2), priceCurrency: c.currency, availability: "https://schema.org/InStock", url: absoluteUrl(`/academy/${c.slug}`) },
+    ...(c.partner ? {} : { offers: { "@type": "Offer", category: c.priceCents === 0 ? "Free" : "Paid", price: (c.priceCents / 100).toFixed(2), priceCurrency: c.currency, availability: "https://schema.org/InStock", url: absoluteUrl(`/academy/${c.slug}`) } }),
     hasCourseInstance: { "@type": "CourseInstance", courseMode: "online", courseWorkload: "Self-paced" },
     ...(c.ratingCount > 0 && c.ratingAverage !== null ? { aggregateRating: { "@type": "AggregateRating", ratingValue: c.ratingAverage, ratingCount: c.ratingCount, bestRating: 5, worstRating: 1 } } : {}),
     ...(c.coaches.length ? { instructor: c.coaches.map((p) => ({ "@type": "Person", name: p.name, ...(p.slug ? { url: absoluteUrl(`/coaches/${p.slug}`) } : {}) })) } : {}),

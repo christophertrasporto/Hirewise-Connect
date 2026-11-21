@@ -1,5 +1,6 @@
 import type { Prisma } from "@/server/db/types";
 import { isQuizLesson } from "@/lib/lesson-questions";
+import { partnerGoPath } from "@/lib/partner-course";
 import type { courseInclude } from "@/server/repositories/academy.repository";
 
 type CourseRecord = Prisma.AcademyCourseGetPayload<{ include: ReturnType<typeof courseInclude> }>;
@@ -48,6 +49,8 @@ export function toCourseAgentView(c: CourseRecord, unlocked = false) {
     coach: c.ownerCoach.email.split("@")[0],
     quizCount: visibleModules(c).reduce((n, m) => n + m.lessons.filter((l) => isQuizLesson(l.contentType, l._count.questions)).length, 0),
     questionCount: visibleModules(c).reduce((n, m) => n + m.lessons.reduce((k, l) => k + l._count.questions, 0), 0),
+    /** Partner course: taught on another site. Carries the go path, never the affiliate link itself. */
+    partner: c.externalUrl ? { provider: c.externalProvider, priceLabel: c.externalPriceLabel, goPath: partnerGoPath(c.slug), pagePath: `/academy/${c.slug}` } : null,
     introVideoUrl: c.introVideoUrl,
     welcomeMessage: unlocked ? c.welcomeMessage : null,
     syllabus: unlocked ? c.syllabus : null,
@@ -97,6 +100,11 @@ export function toCourseCoachView(c: CourseRecord) {
     description: c.description,
     syllabus: c.syllabus,
     contentUrl: c.contentUrl,
+    /** Staff and coach view only: the partner link itself, the partner's name and price text, and whether a cover is set. */
+    externalUrl: c.externalUrl,
+    externalProvider: c.externalProvider,
+    externalPriceLabel: c.externalPriceLabel,
+    hasCover: !!c.thumbnailKey,
     priceCents: c.priceCents,
     priceLabel: priceLabel(c.priceCents, c.currency),
     currency: c.currency,

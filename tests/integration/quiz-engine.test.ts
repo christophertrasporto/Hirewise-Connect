@@ -1,5 +1,5 @@
 import { beforeAll, afterAll, describe, expect, it } from "vitest";
-import { testDb, resetDb } from "../setup/db";
+import { testDb, resetDb, addWelcomeVideo } from "../setup/db";
 import { createCourse, saveModule, saveLesson, submitCourseForApproval, publishCourse, enrol, getEnrollmentForAgent } from "@/server/services/academy.service";
 import { saveQuestion, deleteQuestion, moveQuestion, duplicateQuestion, startAttempt, attemptForLearner, submitAttempt, quizStateForLearner, attemptsAwaitingReview, reviewAttempt } from "@/server/services/quiz.service";
 import { resolveActor } from "@/server/auth/resolve-actor";
@@ -92,7 +92,9 @@ describe("question builder", () => {
 
 describe("learner attempts", () => {
   it("published course with questions; locked for the unenrolled; snapshot never leaks answers; shuffled choices score correctly", async () => {
+    await addWelcomeVideo(db, ids.course);
     await submitCourseForApproval(db, await coach(), ids.course);
+    await addWelcomeVideo(db, ids.course);
     await publishCourse(db, admin(), ids.course, { certificationTemplateId: ids.template });
     await expect(startAttempt(db, agent(), ids.quiz)).rejects.toBeInstanceOf(NotFoundError); // not enrolled
     await enrol(db, agent(), ids.course);

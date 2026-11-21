@@ -2,7 +2,7 @@ import { beforeAll, afterAll, describe, expect, it } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { testDb, resetDb } from "../setup/db";
+import { testDb, resetDb, addWelcomeVideo } from "../setup/db";
 import { createCourse, saveModule, saveLesson, createLessonUploadUrl, submitCourseForApproval, publishCourse, enrol, getEnrollmentForAgent } from "@/server/services/academy.service";
 import { saveQuestion, startAttempt, attemptForLearner, submitAttempt, attemptsAwaitingReview, reviewAttempt } from "@/server/services/quiz.service";
 import { recordMediaProgress, markLessonComplete, startLesson, isSelfMarked } from "@/server/services/lesson-media.service";
@@ -77,7 +77,9 @@ describe("every lesson type has a completion path", () => {
     ids.docAssignment = await saveLesson(db, c, ids.course, { moduleId: ids.module, title: "Upload your call recording notes", contentType: "ASSIGNMENT", submissionType: "DOCUMENT", isRequired: false });
     ids.assessment = await saveLesson(db, c, ids.course, { moduleId: ids.module, title: "Final assessment", contentType: "ASSESSMENT", passingScore: 50, reviewMode: "MANUAL", isRequired: false });
     await saveQuestion(db, c, ids.course, ids.assessment, { prompt: "Best opener?", choices: [{ text: "Permission-based", isCorrect: true }, { text: "Pitch first", isCorrect: false }] });
+    await addWelcomeVideo(db, ids.course);
     await submitCourseForApproval(db, c, ids.course);
+    await addWelcomeVideo(db, ids.course);
     await publishCourse(db, admin(), ids.course, {});
     await enrol(db, agent(), ids.course);
     const e = await getEnrollmentForAgent(db, agent(), ids.course);

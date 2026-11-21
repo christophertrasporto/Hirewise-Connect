@@ -3,7 +3,7 @@ import { testDb, resetDb } from "../setup/db";
 import { seedTerms } from "../setup/terms";
 import { createAgencyDirect } from "@/server/services/agency.service";
 import { inviteLinkForAgency, registerViaInvite } from "@/server/services/invite.service";
-import { registerAgent, updateSkills, getOwnProfile } from "@/server/services/agent.service";
+import { registerAgent, getOwnProfile } from "@/server/services/agent.service";
 import { createRequirement } from "@/server/services/requirement.service";
 import { publishOpportunity, listOpportunitiesForAgency, getOpportunityForClient, getOpportunityForStaff, submitAgent } from "@/server/services/opportunity.service";
 import { saveSkillTag, listSkillTags, setCourseSkillTags, courseSkillTags, savePathway, requestSkillTag, myTagRequests, listTagRequests, decideTagRequest, setOpportunityRequirements, unmetRequirements, slugify, hashtagFor } from "@/server/services/skills.service";
@@ -37,12 +37,21 @@ const coach = () => makeActor("COACH", { userId: ids.coach, coachCourseIds: [ids
 const coach2 = () => makeActor("COACH", { userId: ids.coach2, coachCourseIds: [] });
 const ownerA = () => resolveActor(db, ids.ownerA);
 const maria = () => makeActor("AGENT", { userId: ids.mariaUser, agentProfileId: ids.maria });
-const leo = () => makeActor("AGENT", { userId: ids.leoUser, agentProfileId: ids.leo });
 const clientA = () => makeActor("CLIENT", { userId: ids.userA, clientId: ids.clientA });
 
 async function complete(agentProfileId: string, courseId: string, examScore: number | null, sponsoringAgencyId: string | null = null) {
   const e = await db.courseEnrollment.upsert({ where: { courseId_agentProfileId: { courseId, agentProfileId } }, create: { courseId, agentProfileId, status: "COMPLETED", credentialSource: sponsoringAgencyId ? "AGENCY_SPONSORED" : "HIREWISE_DIRECT", sponsoringAgencyId }, update: { status: "COMPLETED", accessRevokedAt: null } });
   await db.courseCompletion.upsert({ where: { enrollmentId: e.id }, create: { enrollmentId: e.id, examScore }, update: { examScore } });
+  return recomputeSkillVerification(db, agentProfileId);
+}
+/** Gives a talent skill tags the only way the app does: through a course they have access to that carries the tag (a started, unpaid-free enrolment, never completed, so it never verifies anything by itself). */
+async function grantSkills(agentProfileId: string, tagIds: string[]) {
+  for (const tagId of tagIds) {
+    const code = `GRANT-${tagId}`;
+    const course = (await db.academyCourse.findUnique({ where: { code } })) ?? (await db.academyCourse.create({ data: { code, title: `Grant ${tagId}`, category: "Sales", description: "A course description long enough to satisfy validation rules.", status: "PUBLISHED", ownerCoachUserId: ids.coach } }));
+    await db.courseSkillTag.upsert({ where: { courseId_skillId: { courseId: course.id, skillId: tagId } }, create: { courseId: course.id, skillId: tagId }, update: {} });
+    await db.courseEnrollment.upsert({ where: { courseId_agentProfileId: { courseId: course.id, agentProfileId } }, create: { courseId: course.id, agentProfileId, priceCents: 0 }, update: {} });
+  }
   return recomputeSkillVerification(db, agentProfileId);
 }
 const verifiedOf = async (agentProfileId: string) => new Map((await db.agentSkill.findMany({ where: { agentProfileId } })).map((s) => [s.skillId, s.verifiedAt]));
@@ -148,11 +157,10 @@ describe("tags (curated by Hirewise)", () => {
   });
 });
 
-describe("declared tags (talent)", () => {
-  it("talent picks at least three curated tags; unknown ids are dropped; verification is never part of the input", async () => {
-    await expect(updateSkills(db, maria(), { skills: [ids.tagCold, ids.tagCrm], software: [] })).rejects.toThrow();
-    await updateSkills(db, maria(), { skills: [ids.tagCold, ids.tagCrm, ids.tagLead, "not-a-skill"], software: [] });
-    await updateSkills(db, leo(), { skills: [ids.tagCold, ids.tagCrm, ids.tagPath, ids.tagAny], software: [] });
+describe("skills held by talent (derived from courses)", () => {
+  it("a talent holds the tags of the courses they have access to, with verification never part of any input", async () => {
+    await grantSkills(ids.maria, [ids.tagCold, ids.tagCrm, ids.tagLead]);
+    await grantSkills(ids.leo, [ids.tagCold, ids.tagCrm, ids.tagPath, ids.tagAny]);
     const mine = await getOwnProfile(db, maria());
     expect(mine.skills.map((s) => s.skillId).sort()).toEqual([ids.tagCold, ids.tagCrm, ids.tagLead].sort());
     expect(mine.skills.every((s) => s.verified === false && s.verifiedAt === null)).toBe(true);
@@ -207,12 +215,12 @@ describe("Verified by Hirewise (derived, never set by hand)", () => {
     expect((await verifiedOf(ids.leo)).get(ids.tagPath)).not.toBeNull(); // all three passed
   });
 
-  it("raising a tag's threshold or revoking course access clears the badge; re-declaring keeps a surviving one", async () => {
+  it("raising a tag's threshold or revoking course access clears the badge; holding more tags keeps a surviving badge", async () => {
     await saveSkillTag(db, admin(), { id: ids.tagCold, name: "Cold Calling", category: "Sales", verificationMode: "REQUIRED_COURSE", requiredCourseId: ids.courseExam, minAssessmentScore: 90 });
     expect((await verifiedOf(ids.leo)).get(ids.tagCold)).toBeNull();
     await saveSkillTag(db, admin(), { id: ids.tagCold, name: "Cold Calling", category: "Sales", verificationMode: "REQUIRED_COURSE", requiredCourseId: ids.courseExam, minAssessmentScore: 80 });
     expect((await verifiedOf(ids.leo)).get(ids.tagCold)).not.toBeNull();
-    await updateSkills(db, leo(), { skills: [ids.tagCold, ids.tagCrm, ids.tagPath, ids.tagAny, ids.tagLead], software: [] });
+    await grantSkills(ids.leo, [ids.tagLead]);
     expect((await verifiedOf(ids.leo)).get(ids.tagCold)).not.toBeNull();
     await db.courseEnrollment.update({ where: { courseId_agentProfileId: { courseId: ids.courseExam, agentProfileId: ids.leo } }, data: { accessRevokedAt: new Date(), status: "REVOKED" } });
     expect(await recomputeSkillVerification(db, ids.leo)).toEqual({ verified: 0, cleared: 1 });
@@ -253,7 +261,7 @@ describe("Verified by Hirewise (derived, never set by hand)", () => {
 });
 
 describe("tag requests", () => {
-  it("talent requests, Hirewise approves (creating the tag and adding it to the requester), merges, or rejects with a note", async () => {
+  it("talent requests, Hirewise approves (creating the tag, which no one holds until a course carries it), merges, or rejects with a note", async () => {
     await expect(requestSkillTag(db, clientA(), "Medical billing")).rejects.toThrow(ForbiddenError);
     await expect(requestSkillTag(db, maria(), "#cold calling")).rejects.toThrow(/already exists/);
     const r = await requestSkillTag(db, maria(), "Medical billing");
@@ -268,7 +276,7 @@ describe("tag requests", () => {
     expect(approved.status).toBe("APPROVED");
     expect(approved.createdSkill?.name).toBe("Medical Billing");
     expect((await db.skill.findUniqueOrThrow({ where: { id: approved.createdSkill!.id } })).hashtag).toBe("#MedicalBilling");
-    expect(await db.agentSkill.count({ where: { agentProfileId: ids.maria, skillId: approved.createdSkill!.id } })).toBe(1);
+    expect(await db.agentSkill.count({ where: { agentProfileId: ids.maria, skillId: approved.createdSkill!.id } })).toBe(0); // skills come only from courses
     await expect(decideTagRequest(db, admin(), { requestId: r.id, decision: "APPROVE" })).rejects.toThrow(/already decided/);
     const r2 = await requestSkillTag(db, maria(), "Cold calls");
     const merged = await decideTagRequest(db, admin(), { requestId: r2.id, decision: "MERGE", mergeIntoSkillId: ids.tagCold });

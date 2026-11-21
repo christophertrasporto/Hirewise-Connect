@@ -103,6 +103,24 @@ export const skillsRepository = {
   passingCompletions(db: Db, agentProfileId: string) {
     return db.courseEnrollment.findMany({ where: { agentProfileId, status: { not: "REVOKED" }, accessRevokedAt: null, completion: { isNot: null } }, select: { courseId: true, completion: { select: { examScore: true } }, course: { select: { exam: { select: { id: true } } } } } });
   },
+  /**
+   * The skill tags a talent holds: those mapped to a course they have full access to (a paid, waived, or free enrolment that
+   * is not refunded or revoked). A skill is never declared by hand; this is where the list comes from.
+   */
+  ownedCourseSkills(db: Db, agentProfileId: string) {
+    return db.courseSkillTag.findMany({
+      where: { skill: { isActive: true }, course: { enrollments: { some: { agentProfileId, status: { not: "REVOKED" }, accessRevokedAt: null, paymentStatus: { in: ["NOT_REQUIRED", "PAID", "WAIVED"] } } } } },
+      select: { skillId: true, course: { select: { id: true, title: true } } },
+      orderBy: { createdAt: "asc" },
+    });
+  },
+  /** Everyone with an enrolment: the safety net re-derives each of their skills. */
+  agentsWithEnrollments(db: Db) {
+    return db.courseEnrollment.findMany({ select: { agentProfileId: true }, distinct: ["agentProfileId"] });
+  },
+  agentsEnrolledInCourse(db: Db, courseId: string) {
+    return db.courseEnrollment.findMany({ where: { courseId }, select: { agentProfileId: true }, distinct: ["agentProfileId"] });
+  },
   agentsHoldingTag(db: Db, skillId: string) {
     return db.agentSkill.findMany({ where: { skillId }, select: { agentProfileId: true } });
   },

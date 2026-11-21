@@ -20,7 +20,8 @@ import { recalculateAllForCourse, lockedLessonsFor, assertLessonUnlocked } from 
 import { assertCanWatchLesson, entitledToCourse } from "@/server/policies/lesson-access";
 import { getEnv } from "@/server/env";
 import { LESSON_UPLOAD_RULES } from "@/lib/lesson-upload";
-import { applyPromoTx, consumePromoTx, promoForEnrollment } from "./promo.service";
+import { applyPromoTx, consumePromoTx, promoForEnrollment, repricePendingEnrollmentsTx } from "./promo.service";
+import { recomputeSkillVerification } from "./skill-verification.service";
 import { recordEarningForPaymentTx, reverseEarningForRefundTx } from "./wallet.service";
 import { parseMoneyToMinor } from "@/lib/coach-wallet";
 import { recordLessonVersion, changedFields } from "./lesson-version.service";
@@ -32,6 +33,8 @@ import { assignmentRepository } from "@/server/repositories/assignment.repositor
 import { toSubmissionLearnerView as toSubmissionView, type SubmissionLearnerView } from "@/server/views/academy.views";
 import { coverUrlsFor, coverUrlFor } from "./course-cover";
 import { COVER_MAX_BYTES, COVER_MIMES, coverKeyPrefix } from "@/lib/course-cover";
+import { hasWelcomeVideo, welcomeVideoProblem } from "@/lib/welcome-video";
+import { partnerPublishProblem } from "@/lib/partner-course";
 
 const optionalText = (max: number) => z.string().trim().max(max).optional().or(z.literal(""));
 
@@ -109,6 +112,16 @@ function publishedLessonCount(c: { modules: Array<{ status: string; lessons: Arr
   return c.modules.filter((m) => m.status === "PUBLISHED").reduce((n, m) => n + m.lessons.filter((l) => l.status === "PUBLISHED").length, 0);
 }
 
+/**
+ * A course goes live only with its welcome video (see src/lib/welcome-video.ts). A partner course (taught on another
+ * site) needs the same video, which is the free sales video for the course, plus its link, the partner's name and a
+ * cover. Courses already live are not taken down.
+ */
+function assertWelcomeVideo(c: { modules: Parameters<typeof welcomeVideoProblem>[0]; externalUrl?: string | null; externalProvider?: string | null; thumbnailKey?: string | null }, Err: typeof UserMessageError) {
+  const problem = (c.externalUrl ? partnerPublishProblem(c) : null) ?? welcomeVideoProblem(c.modules);
+  if (problem) throw new Err(problem);
+}
+
 async function categoryOrThrow(db: PrismaClient, categoryId: string) {
   const cat = await categoryRepository.findById(db, categoryId);
   if (!cat || !cat.isActive) throw new Error("Choose an active category.");
@@ -151,7 +164,11 @@ export async function updateCourse(db: PrismaClient, actor: Actor, courseId: str
   await db.$transaction(async (tx) => {
     await academyRepository.updateCourse(tx, c.id, { currency, title: input.title, ...builderFields(input, cat.name), description: input.description, syllabus: input.syllabus || null, contentUrl: input.contentUrl || null, priceCents, passingScore: input.passingScore, requiresCoachReview: input.requiresCoachReview });
     await audit(tx, { actor, action: "COURSE_UPDATED", entityType: "AcademyCourse", entityId: c.id, newValue: { title: input.title, passingScore: input.passingScore } });
-    if (priceCents !== c.priceCents || currency !== c.currency) await audit(tx, { actor, action: "COURSE_PRICE_CHANGED", entityType: "AcademyCourse", entityId: c.id, previousValue: { priceCents: c.priceCents, currency: c.currency }, newValue: { priceCents, currency } });
+    if (priceCents !== c.priceCents || currency !== c.currency) {
+      await audit(tx, { actor, action: "COURSE_PRICE_CHANGED", entityType: "AcademyCourse", entityId: c.id, previousValue: { priceCents: c.priceCents, currency: c.currency }, newValue: { priceCents, currency } });
+      // Unpaid enrolments copied the old price when they were made; they follow the new one.
+      await repricePendingEnrollmentsTx(tx, actor, { id: c.id, priceCents, currency });
+    }
   });
 }
 
@@ -219,6 +236,7 @@ export async function submitCourseForApproval(db: PrismaClient, actor: Actor, co
   const c = await loadEditableCourse(db, actor, courseId);
   if (c.status !== "DRAFT") throw new Error("Only draft courses can be submitted.");
   if (publishedLessonCount(c) === 0) throw new Error("Add at least one published lesson in a published module before submitting.");
+  assertWelcomeVideo(c, UserMessageError);
   await db.$transaction(async (tx) => {
     await academyRepository.setCourseStatus(tx, c.id, "PENDING_APPROVAL");
     if (c.reviewNote) await publicAcademyRepository.setReviewNote(tx, c.id, null);
@@ -233,6 +251,7 @@ export async function publishCourse(db: PrismaClient, actor: Actor, courseId: st
   const c = await academyRepository.findCourse(db, courseId);
   if (!c) throw new NotFoundError();
   if (publishedLessonCount(c) === 0) throw new Error("The course needs at least one published lesson before it can go live.");
+  assertWelcomeVideo(c, UserMessageError);
   await db.$transaction(async (tx) => {
     if (opts.certificationTemplateId !== undefined) await academyRepository.updateCourse(tx, c.id, { certificationTemplateId: opts.certificationTemplateId || null });
     await academyRepository.setCourseStatus(tx, c.id, "PUBLISHED", { publishedById: actor.userId, publishedAt: new Date() });
@@ -267,6 +286,7 @@ export async function publishOwnCourse(db: PrismaClient, actor: Actor, courseId:
   if ((await getSetting(db, "academy")).requireApproval) throw new ForbiddenError("Courses need Hirewise approval before they go live");
   if (c.status !== "DRAFT") throw new UserMessageError("Only a draft course can be published.");
   if (publishedLessonCount(c) === 0) throw new UserMessageError("Add at least one published lesson in a published module before publishing.");
+  assertWelcomeVideo(c, UserMessageError);
   await db.$transaction(async (tx) => {
     await academyRepository.setCourseStatus(tx, c.id, "PUBLISHED", { publishedById: actor.userId, publishedAt: new Date() });
     if (c.reviewNote) await publicAcademyRepository.setReviewNote(tx, c.id, null);
@@ -306,6 +326,7 @@ export async function restoreCourse(db: PrismaClient, actor: Actor, courseId: st
   if (!c) throw new NotFoundError();
   if (c.status !== "ARCHIVED") throw new Error("Only an archived course can be restored.");
   if (publishedLessonCount(c) === 0) throw new Error("The course needs at least one published lesson before it can go live again.");
+  assertWelcomeVideo(c, UserMessageError);
   await db.$transaction(async (tx) => {
     await academyRepository.setCourseStatus(tx, c.id, "PUBLISHED", { publishedById: actor.userId, publishedAt: c.publishedAt ?? new Date() });
     await audit(tx, { actor, action: "COURSE_RESTORED", entityType: "AcademyCourse", entityId: c.id, previousValue: { status: "ARCHIVED" }, newValue: { status: "PUBLISHED" } });
@@ -625,8 +646,13 @@ export async function reorderLessons(db: PrismaClient, actor: Actor, courseId: s
 }
 
 /** Non-blocking notes shown to the admin on the builder: a course people can buy should have something free to try. */
-export function courseWarnings(c: { status: string; modules: Array<{ status: string; lessons: Array<{ status: string; isFreePreview: boolean; title?: string; contentType?: string; storageKey?: string | null; url?: string | null }> }> }): string[] {
+export function courseWarnings(c: { status: string; externalUrl?: string | null; externalProvider?: string | null; hasCover?: boolean; modules: Array<{ status: string; lessons: Array<{ status: string; isFreePreview: boolean; title?: string; contentType?: string; storageKey?: string | null; url?: string | null }> }> }): string[] {
   const warnings: string[] = [];
+  if (c.externalUrl && c.status !== "PUBLISHED" && c.status !== "ARCHIVED") {
+    // A partner course also needs its link, the partner's name and a cover before it goes live (and the welcome video, below).
+    const problem = partnerPublishProblem({ externalUrl: c.externalUrl, externalProvider: c.externalProvider, hasCover: c.hasCover });
+    if (problem) warnings.push(problem);
+  }
   // A welcome video that is still an external link (older courses, or the migrated intro video) should be uploaded.
   for (const m of c.modules) {
     for (const l of m.lessons) {
@@ -642,6 +668,10 @@ export function courseWarnings(c: { status: string; modules: Array<{ status: str
         ? "This published course has no free-preview lesson, so visitors have nothing to try before buying. Mark a published lesson as a free preview."
         : "No free-preview lesson yet. Mark a published lesson as a free preview before this course goes live, so visitors can try it before buying.",
     );
+  } else if (c.status !== "ARCHIVED" && warnings.length === 0) {
+    // A free preview exists but it is not an uploaded video: the course still needs its welcome (sales) video.
+    const problem = welcomeVideoProblem(c.modules);
+    if (problem) warnings.push(problem);
   }
   return warnings;
 }
@@ -705,6 +735,7 @@ export async function enrol(db: PrismaClient, actor: Actor, courseId: string, pr
   const profileId = ownProfileId(actor);
   const c = await academyRepository.findCourse(db, courseId);
   if (!c || c.status !== "PUBLISHED") throw new NotFoundError();
+  if (c.externalUrl) throw new UserMessageError(`This course is taught on ${c.externalProvider ?? "a partner's"} site. Use the Take this course button to go there.`);
   if (await academyRepository.findEnrollment(db, courseId, profileId)) return;
   const lock = await coursesLockedFor(db, actor);
   if (lock.locked) throw new ForbiddenError(lock.reason ?? "Finish your onboarding checklist before enrolling.");
@@ -717,6 +748,8 @@ export async function enrol(db: PrismaClient, actor: Actor, courseId: string, pr
     const status = dueCents > 0 ? e.paymentStatus : "NOT_REQUIRED";
     await audit(tx, { actor, action: "COURSE_ENROLLED", entityType: "CourseEnrollment", entityId: e.id, newValue: { courseId, priceCents: dueCents, listPriceCents: code ? c.priceCents : undefined, paymentStatus: status, credentialSource: dueCents > 0 ? e.credentialSource : "HIREWISE_DIRECT" } });
     await publishEvent(tx, "COURSE_ENROLLED", { courseId, title: c.title, agentProfileId: profileId, agentUserId: actor.userId, coachUserIds: [c.ownerCoachUserId, ...c.coaches.map((x) => x.coachUserId)], paymentRequired: dueCents > 0, priceCents: dueCents });
+    // A free enrolment (or one a code made free) opens the course now, so the skills it carries are derived now.
+    if (dueCents === 0) await recomputeSkillVerification(tx, profileId);
   });
 }
 
@@ -773,6 +806,8 @@ export async function settleEnrollmentPaymentTx(tx: Db, actor: Actor, e: Enrollm
   if (!p.waived && (p.paidCents ?? 0) > 0) await recordEarningForPaymentTx(tx, { enrollmentId: e.id, channel: p.channel, gatewayFeeMinor: p.gatewayFeeMinor, paidAt: new Date() });
   await audit(tx, { actor, action: "COURSE_PAYMENT_RECORDED", entityType: "CourseEnrollment", entityId: e.id, newValue: { paidCents: p.paidCents, waived: p.waived, reference: p.reference, currency: e.currency, channel: p.channel }, reason: p.reason });
   await publishEvent(tx, "COURSE_PAYMENT_RECORDED", { enrollmentId: e.id, courseTitle: e.course.title, agentUserId: e.agentProfile.userId, agentEmail: e.agentProfile.user.email, waived: p.waived });
+  // The course is now the learner's, and so are the skills it carries.
+  await recomputeSkillVerification(tx, e.agentProfileId);
 }
 
 export async function recordCoursePayment(db: PrismaClient, actor: Actor, enrollmentId: string, p: { paid?: string; /** Legacy name for paid. */ paidUsd?: string; reference?: string; waived: boolean; reason?: string; /** Bank or GCash fees staff want recorded against the sale; empty means none. */ gatewayFee?: string }) {
@@ -823,6 +858,8 @@ export async function recordCourseRefund(db: PrismaClient, actor: Actor, enrollm
     // Coach wallet: whatever is left of the sale is reversed (before withdrawal it leaves the wallet; after, the balance can go negative).
     const wallet = await reverseEarningForRefundTx(tx, actor, { enrollmentId: e.id, kind: input.kind, reason: input.reason });
     await audit(tx, { actor, action: "COURSE_PAYMENT_REFUNDED", entityType: "CourseEnrollment", entityId: e.id, previousValue: { paymentStatus: "PAID" }, newValue: { paymentStatus: "REFUNDED", kind: input.kind, commissionReversed: reversal.reversed, coachReversedMinor: wallet?.coachReversedMinor ?? 0, feeAbsorbedMinor: wallet?.feeAbsorbedMinor ?? 0 }, reason: input.reason });
+    // A full refund ends access, so the skills that course gave are taken back (a partial refund keeps access and skills).
+    await recomputeSkillVerification(tx, e.agentProfileId);
   });
 }
 
@@ -867,5 +904,6 @@ export async function listTemplatesForAdmin(db: PrismaClient, actor: Actor) {
 
 export async function listAllCoursesForStaff(db: PrismaClient, actor: Actor) {
   authorize(actor, "course.manage");
-  return (await academyRepository.listCourses(db, {})).map(toCourseCoachView);
+  // `hasWelcome` lets staff chase live courses that predate the welcome-video rule (they stay live; only new publishing is blocked).
+  return (await academyRepository.listCourses(db, {})).map((c) => ({ ...toCourseCoachView(c), hasWelcome: hasWelcomeVideo(c.modules) }));
 }

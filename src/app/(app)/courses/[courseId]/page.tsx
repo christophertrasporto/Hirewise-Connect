@@ -11,6 +11,7 @@ import { EnrolButton } from "@/components/academy/AgentCourseActions";
 import { CourseCover } from "@/components/academy/CourseTile";
 import { PayWithMayaButton } from "@/components/academy/PayWithMaya";
 import { PayWithPayPalButton } from "@/components/academy/PayWithPayPal";
+import { PartnerCoursePanel } from "@/components/academy/PartnerCoursePanel";
 import { EnrolWithPromo, PendingPromoBox } from "@/components/academy/PromoCode";
 import { AccessCodeBox } from "@/components/academy/AccessCodeBox";
 import { mayaAvailableFor, reconcileMyCourse } from "@/server/services/maya-payment.service";
@@ -33,6 +34,16 @@ export default async function CoursePage({ params, searchParams }: { params: Pro
     throw e;
   }
   const { course, enrollment, lessonProgress, courseProgress, submissions, lockedLessons } = data;
+  if (course.partner && !enrollment) {
+    // Taught on another site: nothing to enrol in or pay for here.
+    return (
+      <>
+        <Link href="/courses" className="mb-4 inline-flex items-center gap-1.5 text-[13.5px] font-medium text-ink-500 hover:text-ink-900"><ArrowLeft className="h-4 w-4" /> Courses</Link>
+        <PageHeader eyebrow={`${course.category} · Partner course`} title={course.title} description={course.description} />
+        <div className="max-w-xl"><PartnerCoursePanel partner={course.partner} /></div>
+      </>
+    );
+  }
   const onboardingLock = "locked" in data ? data.locked : null;
   const locked = enrollment?.paymentStatus === "PENDING";
   const mayaOk = locked && mayaAvailableFor({ currency: enrollment!.currency, priceCents: enrollment!.priceCents });

@@ -30,6 +30,10 @@ const cardSelect = {
   publishedAt: true,
   featuredRank: true,
   hideEnrolledCount: true,
+  /** Only to tell a partner course apart (the views carry a flag and the go path, never this address). */
+  externalUrl: true,
+  externalProvider: true,
+  externalPriceLabel: true,
   ownerCoachUserId: true,
   coaches: { select: { coachUserId: true }, orderBy: { addedAt: "asc" } },
   modules: { where: { status: "PUBLISHED" }, select: { lessons: { where: { status: "PUBLISHED" }, select: { durationSec: true, isFreePreview: true, contentType: true } } } },
@@ -51,7 +55,8 @@ function listedWhere(f: CatalogFilter): Prisma.AcademyCourseWhereInput {
   const and: Prisma.AcademyCourseWhereInput[] = [];
   if (f.categorySlug) and.push({ categoryRef: { slug: f.categorySlug } });
   if (f.level) and.push({ difficulty: f.level });
-  if (f.price === "free") and.push({ priceCents: 0 });
+  // A partner course has no price of its own here, so it is never counted as free.
+  if (f.price === "free") and.push({ priceCents: 0, externalUrl: null });
   if (f.price === "paid") {
     const range: Prisma.IntFilter = { gt: 0 };
     if (f.min != null) range.gte = Math.max(1, Math.round(f.min * 100));

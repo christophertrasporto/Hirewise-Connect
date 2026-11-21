@@ -1,19 +1,16 @@
 "use client";
 
-import { useActionState, useMemo, useState } from "react";
+import { useActionState } from "react";
 import Link from "next/link";
-import { BadgeCheck, Hash, GraduationCap } from "lucide-react";
-import { saveSkillsAction } from "@/app/(app)/actions";
-import { requestSkillTagAction } from "@/app/(app)/skills-actions";
+import { BadgeCheck, GraduationCap } from "lucide-react";
+import { saveSoftwareAction } from "@/app/(app)/actions";
 import { idle } from "@/server/http/action-result";
-import { SubmitButton, FormAlert, Select, Input, Checkbox } from "@/components/ui/Form";
+import { SubmitButton, FormAlert, Select } from "@/components/ui/Form";
 import { Card } from "@/components/app/ui";
 import { SKILL_LEVELS } from "@/lib/options";
-import { cn } from "@/lib/cn";
 
-type Tag = { id: string; name: string; hashtag: string; category: string; verifiable: boolean; courses: Array<{ id: string; title: string }> };
 type Tax = { id: string; name: string; category: string };
-type Mine = { skillId: string; verified: boolean; verifiedAt: Date | null; hashtag: string; name: string; verifiable: boolean };
+type Mine = { skillId: string; verified: boolean; hashtag: string; name: string; courses: Array<{ id: string; title: string }> };
 
 function groupBy<T extends { category: string }>(items: T[]) {
   const map = new Map<string, T[]>();
@@ -22,69 +19,38 @@ function groupBy<T extends { category: string }>(items: T[]) {
 }
 
 /**
- * Skills system: two tiers. Skill tags are self-declared hashtags; the "Verified by Hirewise" badge is derived from
- * completed training and cannot be set here. The form only adds and removes declared tags.
+ * Skills are never typed or picked here: a skill appears because a course the talent has access to carries it, and the
+ * check mark means they also passed it. Only the software list is edited on this page.
  */
-export function SkillsForm({ tags, software, mine, selectedSoftware }: { tags: Tag[]; software: Tax[]; mine: Mine[]; selectedSoftware: Record<string, string> }) {
-  const [state, action] = useActionState(saveSkillsAction, idle);
-  const [q, setQ] = useState("");
-  const [selected, setSelected] = useState<Set<string>>(new Set(mine.map((m) => m.skillId)));
-  const filtered = useMemo(() => tags.filter((t) => !q || t.name.toLowerCase().includes(q.toLowerCase()) || t.hashtag.toLowerCase().includes(q.toLowerCase())), [tags, q]);
-  const verified = mine.filter((m) => m.verified);
-  const unverified = mine.filter((m) => !m.verified);
-  const byId = new Map(tags.map((t) => [t.id, t]));
+export function SkillsForm({ software, mine, selectedSoftware }: { software: Tax[]; mine: Mine[]; selectedSoftware: Record<string, string> }) {
+  const [state, action] = useActionState(saveSoftwareAction, idle);
   return (
     <div className="space-y-5">
-      <div className="grid gap-5 lg:grid-cols-2">
-        <Card title={<span className="inline-flex items-center gap-2"><BadgeCheck className="h-4 w-4 text-success-600" /> Verified by Hirewise</span>} description="Earned through Hirewise courses, assessments, or pathways. You cannot set these yourself; they are computed from what you have completed.">
-          {verified.length === 0 ? <p className="text-[13.5px] text-ink-400">No verified skills yet. Complete the mapped course for a tag below to earn the badge.</p> : (
-            <div className="flex flex-wrap gap-1.5">{verified.map((m) => <span key={m.skillId} className="inline-flex items-center gap-1 rounded-full bg-success-50 px-2.5 py-1 text-[12.5px] font-semibold text-success-700 ring-1 ring-inset ring-success-200"><BadgeCheck className="h-3.5 w-3.5" /> {m.hashtag}</span>)}</div>
-          )}
-        </Card>
-        <Card title={<span className="inline-flex items-center gap-2"><Hash className="h-4 w-4 text-ink-500" /> Your skill tags</span>} description="Self-declared. Searchable by clients, but not proof of anything until verified.">
-          {unverified.length === 0 ? <p className="text-[13.5px] text-ink-400">Pick tags below.</p> : (
-            <ul className="space-y-1.5">
-              {unverified.map((m) => {
-                const t = byId.get(m.skillId);
-                return (
-                  <li key={m.skillId} className="flex flex-wrap items-center justify-between gap-2 text-[13.5px]">
-                    <span className="rounded-full bg-ink-100 px-2.5 py-1 font-medium text-ink-700">{m.hashtag}</span>
-                    {t?.verifiable && t.courses.length > 0 ? <span className="inline-flex items-center gap-1 text-[12.5px] text-brand-700"><GraduationCap className="h-3.5 w-3.5" /> Want to verify this skill? <Link href={`/courses/${t.courses[0].id}`} className="font-semibold underline">{t.courses[0].title}</Link></span> : <span className="text-[12px] text-ink-400">{t?.verifiable ? "Verification configured by Hirewise" : "Not verifiable yet"}</span>}
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-        </Card>
-      </div>
+      <Card title={<span className="inline-flex items-center gap-2"><GraduationCap className="h-4 w-4 text-brand-600" /> Skills from your courses</span>} description="Your skills come from the Hirewise courses you have taken, so they are proof, not claims. Buy or finish more courses to add more.">
+        {mine.length === 0 ? (
+          <p className="text-[13.5px] text-ink-500">No skills yet. <Link href="/courses" className="font-semibold text-brand-600 hover:text-brand-700">Browse courses</Link> to build your skills.</p>
+        ) : (
+          <ul className="space-y-2.5">
+            {mine.map((m) => (
+              <li key={m.skillId} className="flex flex-wrap items-center justify-between gap-2 text-[13.5px]">
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-success-50 px-2.5 py-1 font-semibold text-success-700">
+                  {m.verified && <BadgeCheck className="h-3.5 w-3.5" aria-label="Passed the course" />}
+                  {m.hashtag}
+                </span>
+                <span className="text-[12.5px] text-ink-400">
+                  {m.courses.map((c, i) => (
+                    <span key={c.id}>{i > 0 && ", "}<Link href={`/courses/${c.id}`} className="hover:text-brand-700">{c.title}</Link></span>
+                  ))}
+                  {m.verified ? " · passed" : ""}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Card>
 
       <form action={action} className="space-y-5" noValidate>
-        <Card title="Choose your skill tags" description="Pick from the Hirewise list; at least three. Is something missing? Request a tag below.">
-          <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search tags" className="mb-4 max-w-sm" aria-label="Search tags" />
-          <div className="space-y-5">
-            {groupBy(filtered).map(([category, items]) => (
-              <div key={category}>
-                <p className="mb-2 text-[12px] font-semibold uppercase tracking-[0.14em] text-ink-400">{category}</p>
-                <div className="flex flex-wrap gap-1.5">
-                  {items.map((t) => {
-                    const on = selected.has(t.id);
-                    return (
-                      <label key={t.id} className={cn("inline-flex cursor-pointer items-center gap-1.5 rounded-full px-3 py-1.5 text-[13px] font-medium ring-1 ring-inset", on ? "bg-ink-900 text-white ring-ink-900" : "bg-white text-ink-700 ring-ink-200 hover:bg-ink-50")}>
-                        <input type="checkbox" name="skills" value={t.id} checked={on} onChange={() => setSelected((s) => { const n = new Set(s); if (n.has(t.id)) n.delete(t.id); else n.add(t.id); return n; })} className="sr-only" />
-                        {t.hashtag}
-                        {t.verifiable && <BadgeCheck className={cn("h-3.5 w-3.5", on ? "text-success-300" : "text-success-600")} aria-label="Can be verified through Hirewise training" />}
-                      </label>
-                    );
-                  })}
-                </div>
-              </div>
-            ))}
-          </div>
-          <p className="mt-4 text-[12px] text-ink-400">Legend: <BadgeCheck className="inline h-3.5 w-3.5 text-success-600" /> can be verified by completing Hirewise training. Verified badges are platform-generated and never self-assigned.</p>
-          {state.fieldErrors?.skills && <p className="mt-2 text-[12.5px] font-medium text-red-600">{state.fieldErrors.skills}</p>}
-        </Card>
-
-        <Card title="Software" description="Tools you can use on day one.">
+        <Card title="Software" description="Tools you can use on day one. This part is optional and is your own description.">
           <div className="space-y-6">
             {groupBy(software).map(([category, items]) => (
               <div key={category}>
@@ -107,27 +73,8 @@ export function SkillsForm({ tags, software, mine, selectedSoftware }: { tags: T
 
         {state.error && <FormAlert>{state.error}</FormAlert>}
         {state.ok && <FormAlert tone="success">Saved.</FormAlert>}
-        <SubmitButton pendingText="Saving…">Save skills</SubmitButton>
-        <p className="text-[12px] text-ink-400">Disclaimer: skill tags are self-declared by talent. Only skills marked Verified by Hirewise, and certifications, were confirmed through Hirewise training or assessment.</p>
+        <SubmitButton pendingText="Saving…">Save software</SubmitButton>
       </form>
-
-      <RequestTagForm />
     </div>
-  );
-}
-
-function RequestTagForm() {
-  const [state, action] = useActionState(requestSkillTagAction, idle);
-  return (
-    <Card title="Request a tag" description="Hirewise reviews requests and either adds the tag, merges it into an existing one, or declines.">
-      {state.ok ? <FormAlert tone="success">Request sent. You will be notified when Hirewise decides.</FormAlert> : (
-        <form action={action} className="flex flex-wrap items-center gap-2" noValidate>
-          <Input name="text" placeholder="e.g. Medical billing" className="max-w-xs" />
-          <SubmitButton variant="outline" pendingText="Sending…" className="h-10 text-[13.5px]"><Hash className="h-4 w-4" /> Request tag</SubmitButton>
-          {state.error && <FormAlert>{state.error}</FormAlert>}
-        </form>
-      )}
-      <Checkbox name="noop" className="hidden" label="" />
-    </Card>
   );
 }

@@ -2,7 +2,7 @@ import { beforeAll, afterAll, describe, expect, it } from "vitest";
 import { seedTerms } from "../setup/terms";
 import { testDb, resetDb } from "../setup/db";
 import { registerClient, activateClient, getOwnClient, listClientsForStaff, RegistrationError } from "@/server/services/client.service";
-import { registerAgent, updateSkills, submitForReview, reviewTransition, getOwnProfile, getAgentForStaff, computeCompletion, SubmissionBlockedError } from "@/server/services/agent.service";
+import { registerAgent, updateSoftware, submitForReview, reviewTransition, getOwnProfile, getAgentForStaff, computeCompletion, SubmissionBlockedError } from "@/server/services/agent.service";
 import { loginWithPassword, requestMagicLink, consumeMagicLink, verifyEmail, AuthError, beginMfaEnrollment, completeMfaEnrollment } from "@/server/services/auth.service";
 import { agreementsFor, missingAgreementsFor, acceptAgreement } from "@/server/services/agreement.service";
 import { resolveActor } from "@/server/auth/resolve-actor";
@@ -199,18 +199,18 @@ describe("agent registration → profile → submission → review", () => {
     expect(await db.outboxEvent.count({ where: { type: "AGENT_REGISTERED" } })).toBe(1);
   });
 
-  it("agent can only edit their own profile; skills outside the taxonomy are ignored", async () => {
+  it("agent can only edit their own profile; software outside the taxonomy is ignored and skills cannot be set by hand", async () => {
     const actor = await resolveActor(db, agentUserId);
     expect(actor.agentProfileId).toBe(agentProfileId);
-    const skills = await db.skill.findMany();
-    await updateSkills(db, actor, { skills: [...skills.map((s) => s.id), "not-a-skill"], software: [] });
+    await updateSoftware(db, actor, { software: [{ softwareId: "not-software", level: "BASIC" }] });
     const view = await getOwnProfile(db, actor);
-    expect(view.skills.length).toBe(3);
+    expect(view.software.length).toBe(0);
+    expect(view.skills.length).toBe(0); // skills come only from courses
     const other = makeActor("AGENT", { userId: "x", agentProfileId: "someone-else" });
     await expect(getOwnProfile(db, other)).rejects.toThrow(NotFoundError);
   });
 
-  it("submission is blocked until completion, résumé, and video are present", async () => {
+  it("submission is blocked until the three sections are done", async () => {
     const actor = await resolveActor(db, agentUserId);
     const view = await getOwnProfile(db, actor);
     expect(computeCompletion(view).total).toBeLessThan(80);
@@ -218,15 +218,12 @@ describe("agent registration → profile → submission → review", () => {
   });
 
   it("with the guard satisfied, submit → recruiter reviews → admin approves, with audit and notifications", async () => {
-    // Satisfy the guard directly: résumé key, a submitted video, a voice sample, and text sections.
-    await db.agentPrivateContact.update({ where: { agentProfileId }, data: { resumeKey: `agents/${agentProfileId}/resume/x.pdf` } });
-    await db.video.create({ data: { agentProfileId, storageKey: `agents/${agentProfileId}/video/x.mp4`, status: "SUBMITTED", isCurrent: true } });
-    await db.recording.create({ data: { agentProfileId, kind: "COLD_CALL", title: "Solar", storageKey: `agents/${agentProfileId}/recording/x.mp3`, status: "SUBMITTED" } });
+    // Satisfy the guard with the three sections only: no résumé, video, or voice sample is needed.
     await db.agentProfile.update({ where: { id: agentProfileId }, data: { headline: "Appointment setter with four years of US solar experience", summary: "x".repeat(120), experienceLevel: "MID", languages: ["English"], workSetup: "REMOTE" } });
     await db.experience.create({ data: { agentProfileId, title: "Setter", startDate: new Date("2024-01-01") } });
 
     const actor = await resolveActor(db, agentUserId);
-    expect(computeCompletion(await getOwnProfile(db, actor)).total).toBeGreaterThanOrEqual(80);
+    expect(computeCompletion(await getOwnProfile(db, actor)).total).toBe(100);
     await submitForReview(db, actor);
     expect((await db.agentProfile.findUniqueOrThrow({ where: { id: agentProfileId } })).status).toBe("SUBMITTED");
     expect(await db.auditLog.count({ where: { action: "PROFILE_SUBMITTED", entityId: agentProfileId } })).toBe(1);

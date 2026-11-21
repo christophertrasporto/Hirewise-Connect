@@ -31,11 +31,20 @@ type CommonProps = {
 };
 
 type ButtonProps = CommonProps & ComponentProps<"button"> & { href?: undefined };
-type LinkProps = CommonProps & Omit<ComponentProps<typeof Link>, "className"> & { href: string };
+type LinkProps = CommonProps & Omit<ComponentProps<typeof Link>, "className"> & { href: string; external?: undefined };
+/** A plain link that leaves the site (a partner course): a normal anchor in a new tab, marked as an affiliate link. */
+type ExternalProps = CommonProps & { href: string; external: true };
 
-export function Button(props: ButtonProps | LinkProps) {
+export function Button(props: ButtonProps | LinkProps | ExternalProps) {
   const { variant = "primary", size = "md", className, children } = props;
   const cls = cn(base, variants[variant], sizes[size], className);
+  if ("external" in props && props.external) {
+    return (
+      <a className={cls} href={props.href} target="_blank" rel="sponsored nofollow noopener">
+        {children}
+      </a>
+    );
+  }
   if ("href" in props && props.href) {
     const { variant: _v, size: _s, className: _c, children: _ch, ...rest } = props as LinkProps;
     return (

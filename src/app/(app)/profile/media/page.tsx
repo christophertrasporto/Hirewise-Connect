@@ -14,7 +14,7 @@ export default async function MediaPage() {
   const p = await getOwnProfile(prisma, actor);
   return (
     <>
-      <PageHeader title="Video introduction and voice samples" description="Hirewise reviews every upload before clients can see or hear it. Keep the video to 60–120 seconds: who you are, what you do, and the campaigns you have worked." />
+      <PageHeader title="Video introduction and voice samples (optional)" description="Both are optional and never required to submit your profile. If you add them, Hirewise reviews every upload before clients can see or hear it. A good video is 60–120 seconds: who you are, what you do, and the campaigns you have worked." />
       <div className="grid gap-5 lg:grid-cols-2">
         <Card title="Video introduction">
           {p.videos.length === 0 ? (

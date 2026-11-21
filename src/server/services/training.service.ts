@@ -53,7 +53,7 @@ export async function purchaseCourseSeats(db: PrismaClient, actor: Actor, raw: z
   const agencyId = requireActiveAgency(actor);
   const input = coursePurchaseSchema.parse(raw);
   const course = await trainingRepository.course(db, input.courseId);
-  if (!course || course.status !== "PUBLISHED") throw new NotFoundError("Course not found");
+  if (!course || course.status !== "PUBLISHED" || course.externalUrl) throw new NotFoundError("Course not found");
   if (course.priceCents === 0) throw new ForbiddenError("This course is free: assign it to members directly, no purchase needed.");
   const agency = await agencyOrThrow(db, agencyId);
   return db.$transaction(async (tx) => {
@@ -127,7 +127,7 @@ export async function assignCourse(db: PrismaClient, actor: Actor, raw: z.input<
   const agencyId = requireActiveAgency(actor);
   const input = assignCourseSchema.parse(raw);
   const [course, membership, agency] = await Promise.all([trainingRepository.course(db, input.courseId), membershipRepository.openForProfile(db, input.agentProfileId), agencyOrThrow(db, agencyId)]);
-  if (!course || course.status !== "PUBLISHED") throw new NotFoundError("Course not found");
+  if (!course || course.status !== "PUBLISHED" || course.externalUrl) throw new NotFoundError("Course not found");
   if (!membership || membership.agencyId !== agencyId) throw new NotFoundError("Member not found");
   if (await academyRepository.findEnrollment(db, course.id, input.agentProfileId)) throw new ForbiddenError(`${membership.agentProfile.displayName} is already enrolled in ${course.title}.`);
   let purchaseId: string | null = null;

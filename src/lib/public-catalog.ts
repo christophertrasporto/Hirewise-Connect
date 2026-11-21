@@ -98,7 +98,7 @@ export function isUnfiltered(q: CatalogQuery): boolean {
   return !q.q && !q.category && q.price === "any" && !q.level && !q.preview && q.sort === "popular";
 }
 
-export type CatalogSortable = { sortEnrolled: number; ratingAverage: number | null; ratingCount: number; priceCents: number; publishedAt: string | null; title: string };
+export type CatalogSortable = { sortEnrolled: number; ratingAverage: number | null; ratingCount: number; priceCents: number; publishedAt: string | null; title: string; /** A partner course has no price of ours, so a price sort puts it after the rest. */ partner?: unknown };
 
 function byTitle(a: CatalogSortable, b: CatalogSortable) {
   return a.title.localeCompare(b.title);
@@ -116,9 +116,9 @@ export function sortCatalog<T extends CatalogSortable>(rows: T[], sort: CatalogS
       case "rating":
         return rank(b) - rank(a) || b.sortEnrolled - a.sortEnrolled || byTitle(a, b);
       case "price-low":
-        return a.priceCents - b.priceCents || byTitle(a, b);
+        return Number(!!a.partner) - Number(!!b.partner) || a.priceCents - b.priceCents || byTitle(a, b);
       case "price-high":
-        return b.priceCents - a.priceCents || byTitle(a, b);
+        return Number(!!a.partner) - Number(!!b.partner) || b.priceCents - a.priceCents || byTitle(a, b);
       default:
         return b.sortEnrolled - a.sortEnrolled || rank(b) - rank(a) || byTitle(a, b);
     }

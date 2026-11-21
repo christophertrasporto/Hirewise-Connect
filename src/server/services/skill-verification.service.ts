@@ -3,6 +3,9 @@ import { skillsRepository } from "@/server/repositories/skills.repository";
 
 /**
  * Skill verification (docs/plan-skills-tags.md, section 3). The ONLY writer of AgentSkill.verifiedAt.
+ * A talent holds a skill tag only because a course gives it to them: the tags are re-derived here from the courses they have
+ * full access to (`syncCourseSkills`), so nothing a form or a person types can add one, and losing access (a refund, a revoked
+ * enrolment, an agency exit) removes it.
  * A tag is verified when the agent's passing, non-revoked course completions satisfy the tag's configuration:
  * REQUIRED_COURSE (that course), PATHWAY (every required course of the pathway), ANY_COURSE (any course mapped to
  * the tag). NONE is never verified. Nothing a user or a staff form does writes the column; this service is called
@@ -49,8 +52,16 @@ export function evaluateTag(tag: { verificationMode: string; requiredCourseId: s
   }
 }
 
-/** Recomputes every declared tag of one agent. Keeps an existing verifiedAt when the rule still holds. */
+/** Makes the talent's tags exactly the tags of the courses they have full access to. Returns how many tags they hold. */
+export async function syncCourseSkills(db: Db, agentProfileId: string): Promise<number> {
+  const owned = [...new Set((await skillsRepository.ownedCourseSkills(db, agentProfileId)).map((r) => r.skillId))];
+  await skillsRepository.replaceDeclaredTags(db, agentProfileId, owned);
+  return owned.length;
+}
+
+/** Re-derives the tags from the talent's courses, then recomputes each one's verification. Keeps an existing verifiedAt when the rule still holds. */
 export async function recomputeSkillVerification(db: Db, agentProfileId: string): Promise<{ verified: number; cleared: number }> {
+  await syncCourseSkills(db, agentProfileId);
   const [tags, rows, certRows] = await Promise.all([skillsRepository.declaredTagsWithConfig(db, agentProfileId), skillsRepository.passingCompletions(db, agentProfileId), skillsRepository.certificationStatuses(db, agentProfileId)]);
   const completions = new Map<string, Completion>(rows.map((r) => [r.courseId, { courseId: r.courseId, score: r.completion?.examScore ?? null, hasExam: !!r.course.exam }]));
   const certs = new Map<string, CertStatus[]>();
@@ -81,14 +92,16 @@ export async function recomputeForSkill(db: Db, skillId: string): Promise<number
 
 /** After a course's tags or a pathway change: every agent who completed the course. */
 export async function recomputeForCourse(db: Db, courseId: string): Promise<number> {
-  const agents = await skillsRepository.agentsCompletedCourse(db, courseId);
+  const agents = await skillsRepository.agentsEnrolledInCourse(db, courseId);
   for (const a of agents) await recomputeSkillVerification(db, a.agentProfileId);
   return agents.length;
 }
 
-/** Maintenance safety net: every agent holding a verifiable tag. */
+/** Maintenance safety net: every talent with an enrolment or a tag, so a missed change (a price drop to free, a seat) still lands. */
 export async function recomputeAllSkillVerifications(db: Db): Promise<number> {
-  const agents = await skillsRepository.agentsHoldingAnyTag(db);
-  for (const a of agents) await recomputeSkillVerification(db, a.agentProfileId);
-  return agents.length;
+  const ids = new Set<string>();
+  for (const a of await skillsRepository.agentsWithEnrollments(db)) ids.add(a.agentProfileId);
+  for (const a of await skillsRepository.agentsHoldingAnyTag(db)) ids.add(a.agentProfileId);
+  for (const id of ids) await recomputeSkillVerification(db, id);
+  return ids.size;
 }
