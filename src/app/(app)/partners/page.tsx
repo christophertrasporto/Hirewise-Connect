@@ -33,7 +33,7 @@ export default async function PartnerTeamsPage() {
                   <Link href={`/partners/${t.code}`} className="text-[17px] font-bold text-ink-900 hover:text-brand-700">{t.name}</Link>
                   <p className="text-[12.5px] text-ink-400">Partner since {fmtDate(t.memberSince)}{t.disclosed ? ` · ${t.disclosed.agencyName}` : ""}</p>
                 </div>
-                <span className="inline-flex items-center gap-1 rounded-full bg-brand-50 px-2.5 py-1 text-[11.5px] font-semibold text-brand-700 ring-1 ring-inset ring-brand-200"><ShieldCheck className="h-3.5 w-3.5" /> Certified</span>
+                <span className="inline-flex items-center gap-1 rounded-full bg-success-50 px-2.5 py-1 text-[11.5px] font-semibold text-success-700 ring-1 ring-inset ring-success-200"><ShieldCheck className="h-3.5 w-3.5" /> Certified</span>
               </div>
               {t.specializations.length > 0 && <div className="mt-3 flex flex-wrap gap-1">{t.specializations.map((s) => <span key={s} className="rounded-full bg-ink-100 px-2 py-0.5 text-[11.5px] font-medium text-ink-700">{s}</span>)}</div>}
               <dl className="mt-4 grid grid-cols-2 gap-3 text-[13px] sm:grid-cols-4">

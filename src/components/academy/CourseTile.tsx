@@ -72,7 +72,7 @@ export function ProgressPill({ percent, complete = false }: { percent: number; c
   const p = Math.max(0, Math.min(100, Math.round(percent)));
   return (
     <div className="relative h-7 overflow-hidden rounded-full bg-ink-100" role="progressbar" aria-valuenow={p} aria-valuemin={0} aria-valuemax={100} aria-label="Course progress">
-      <div className={cn("absolute inset-y-0 left-0 rounded-full transition-[width]", complete ? "bg-brand-600" : "bg-brand-500")} style={{ width: p === 0 ? 0 : `${Math.max(p, 14)}%` }} />
+      <div className={cn("absolute inset-y-0 left-0 rounded-full transition-[width]", complete ? "bg-success-600" : "bg-brand-500")} style={{ width: p === 0 ? 0 : `${Math.max(p, 14)}%` }} />
       <span className={cn("relative flex h-full items-center pl-3 text-[12px] font-bold tabular-nums", p === 0 ? "text-ink-500" : "text-white")}>{p}%</span>
     </div>
   );

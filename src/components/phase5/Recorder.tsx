@@ -114,7 +114,7 @@ export function Recorder({ kind, extra, onDone, maxSeconds = kind === "VIDEO" ? 
           </>
         )}
         {phase === "uploading" && <span className="inline-flex items-center gap-2 text-[13.5px] text-ink-600"><Loader2 className="h-4 w-4 animate-spin" /> Uploading…</span>}
-        {phase === "done" && <span className="text-[13.5px] font-semibold text-brand-700">Uploaded. Hirewise will review it.</span>}
+        {phase === "done" && <span className="text-[13.5px] font-semibold text-success-700">Uploaded. Hirewise will review it.</span>}
       </div>
       {err && <div className="mt-3"><FormAlert>{err}</FormAlert></div>}
     </div>

@@ -133,7 +133,7 @@ export function PhotoUploader({ agentProfileId, name, version }: { agentProfileI
           </>
         )}
       </div>
-      {notice && <p role="status" className="mt-3 inline-flex items-center gap-1.5 text-[13.5px] font-semibold text-brand-700"><CheckCircle2 className="h-4 w-4" /> {notice}</p>}
+      {notice && <p role="status" className="mt-3 inline-flex items-center gap-1.5 text-[13.5px] font-semibold text-success-700"><CheckCircle2 className="h-4 w-4" /> {notice}</p>}
       {error && <div className="mt-3"><FormAlert>{error}</FormAlert></div>}
     </div>
   );

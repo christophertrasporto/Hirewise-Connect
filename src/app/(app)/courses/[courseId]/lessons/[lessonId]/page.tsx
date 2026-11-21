@@ -72,7 +72,7 @@ export default async function LessonPlayerPage({ params }: { params: Promise<{ c
                       const current = l.id === lessonId;
                       const row = (
                         <>
-                          {done ? <CheckCircle2 className="h-4 w-4 shrink-0 text-brand-600" aria-label="Completed" /> : locked ? <Lock className="h-4 w-4 shrink-0 text-ink-300" aria-label="Locked" /> : <Icon className="h-4 w-4 shrink-0 text-ink-300" aria-hidden="true" />}
+                          {done ? <CheckCircle2 className="h-4 w-4 shrink-0 text-success-600" aria-label="Completed" /> : locked ? <Lock className="h-4 w-4 shrink-0 text-ink-300" aria-label="Locked" /> : <Icon className="h-4 w-4 shrink-0 text-ink-300" aria-hidden="true" />}
                           <span className="min-w-0 flex-1 truncate">{l.title}</span>
                           {l.durationSec ? <span className="text-[11.5px] text-ink-400">{fmtDuration(l.durationSec)}</span> : null}
                         </>

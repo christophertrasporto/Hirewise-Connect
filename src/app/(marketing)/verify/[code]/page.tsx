@@ -18,7 +18,7 @@ export default async function VerifyPage({ params }: { params: Promise<{ code: s
       <h1 className="mt-2 font-display text-[2rem] font-extrabold leading-tight text-ink-900 sm:text-[2.6rem]">{r.found ? (r.valid ? "This certificate is valid." : "This certificate is not currently valid.") : "No certificate matches this code."}</h1>
       <p className="mt-3 text-[15px] text-ink-600">Code <span className="font-mono font-semibold text-ink-900">{decodeURIComponent(code).toUpperCase()}</span></p>
       <div className={`mt-8 rounded-3xl border p-6 sm:p-8 ${r.valid ? "border-brand-200 bg-brand-50/50" : "border-ink-200 bg-ink-50/60"}`}>
-        <p className="inline-flex items-center gap-2 text-[14px] font-semibold text-ink-900">{r.valid ? <ShieldCheck className="h-5 w-5 text-brand-600" /> : <ShieldX className="h-5 w-5 text-ink-400" />} {r.found ? (r.status === "APPROVED" ? "Approved" : r.status === "EXPIRED" ? "Expired" : r.status === "REVOKED" ? "Revoked" : r.status === "PENDING_REVIEW" ? "Awaiting approval" : r.status) : "Not found"}</p>
+        <p className="inline-flex items-center gap-2 text-[14px] font-semibold text-ink-900">{r.valid ? <ShieldCheck className="h-5 w-5 text-success-600" /> : <ShieldX className="h-5 w-5 text-ink-400" />} {r.found ? (r.status === "APPROVED" ? "Approved" : r.status === "EXPIRED" ? "Expired" : r.status === "REVOKED" ? "Revoked" : r.status === "PENDING_REVIEW" ? "Awaiting approval" : r.status) : "Not found"}</p>
         {r.found && (
           <dl className="mt-5 grid gap-4 text-[14px] sm:grid-cols-2">
             <div><dt className="text-ink-400">Certificate ID</dt><dd className="font-mono font-semibold text-ink-900">{r.certificateNumber ?? "—"}</dd></div>

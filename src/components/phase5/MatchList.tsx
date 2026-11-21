@@ -20,7 +20,7 @@ export function MatchList({ matches, canShortlist, profileHref }: { matches: Mat
                 <Link href={profileHref(m.candidate.id)} className="text-[17px] font-bold text-ink-900 hover:text-brand-700">{m.candidate.name}</Link>
                 <p className="text-[13px] text-ink-500">{m.candidate.primaryRole ?? "Talent"}{m.candidate.yearsExperience ? ` · ${m.candidate.yearsExperience} yrs` : ""}{m.candidate.experienceLevel ? ` · ${labelFor(m.candidate.experienceLevel)}` : ""}</p>
                 <div className="mt-1.5 flex flex-wrap gap-1">
-                  <span className="inline-flex items-center gap-1 rounded-full bg-brand-50 px-2 py-0.5 text-[11px] font-semibold text-brand-700 ring-1 ring-inset ring-brand-200"><BadgeCheck className="h-3 w-3" /> {labelFor(m.candidate.verificationLevel)}</span>
+                  <span className="inline-flex items-center gap-1 rounded-full bg-success-50 px-2 py-0.5 text-[11px] font-semibold text-success-700 ring-1 ring-inset ring-success-200"><BadgeCheck className="h-3 w-3" /> {labelFor(m.candidate.verificationLevel)}</span>
                   <StatusBadge status={m.candidate.availabilityStatus} />
                   {m.candidate.clientRate && <span className="rounded-full bg-ink-100 px-2 py-0.5 text-[11px] font-semibold text-ink-700">{m.candidate.clientRate.label}</span>}
                 </div>

@@ -73,7 +73,7 @@ function StatusChip({ status }: { status: string | undefined }) {
   if (!status || status === "NOT_STARTED") return null;
   const map: Record<string, { label: string; cls: string }> = {
     IN_PROGRESS: { label: "In progress", cls: "bg-ink-50 text-ink-600 ring-ink-200" },
-    COMPLETED: { label: "Completed", cls: "bg-brand-50 text-brand-700 ring-brand-200" },
+    COMPLETED: { label: "Completed", cls: "bg-success-50 text-success-700 ring-success-200" },
     FAILED: { label: "Not passed", cls: "bg-red-50 text-red-700 ring-red-200" },
     RETAKE_REQUIRED: { label: "Retake", cls: "bg-gold-50 text-gold-700 ring-gold-200" },
     PENDING_REVIEW: { label: "Awaiting review", cls: "bg-gold-50 text-gold-700 ring-gold-200" },
@@ -165,7 +165,7 @@ export function LessonContent({ modules, courseId, progress = {}, submissions = 
                 <li key={l.id} id={`lesson-${l.id}`} className="rounded-2xl border border-ink-100 bg-white p-4">
                   <details open={i === 0 && j === 0}>
                     <summary className="flex cursor-pointer list-none items-center gap-3">
-                      <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full ring-1 ring-inset ${done ? "bg-brand-50 text-brand-600 ring-brand-200" : "bg-ink-50 text-ink-500 ring-ink-100"}`}>{done ? <CheckCircle2 className="h-4 w-4" /> : <I className="h-4 w-4" />}</span>
+                      <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full ring-1 ring-inset ${done ? "bg-success-50 text-success-600 ring-success-200" : "bg-ink-50 text-ink-500 ring-ink-100"}`}>{done ? <CheckCircle2 className="h-4 w-4" /> : <I className="h-4 w-4" />}</span>
                       <span className="min-w-0 flex-1">
                         <span className="block text-[14.5px] font-semibold text-ink-900">{j + 1}. {l.title}</span>
                         <span className="block text-[12.5px] text-ink-400">{LESSON_TYPE_META[l.contentType].label}{l.durationSec ? ` · ${fmtDuration(l.durationSec)}` : ""}{(QUESTION_TYPES.includes(l.contentType) || (l.contentType === "VIDEO" && (l.questionCount ?? 0) > 0)) && l.questionCount !== undefined ? ` · ${l.questionCount} question${l.questionCount === 1 ? "" : "s"}` : ""}{l.isRequired === false ? " · optional" : ""}</span>

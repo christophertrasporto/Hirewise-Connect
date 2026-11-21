@@ -6,12 +6,12 @@
 
 /** Surfaces, darkest to lightest. `panel` is what `bg-white` becomes (cards, sidebar, header). */
 export const DARK_SURFACES = {
-  page: "#070e1b",
-  sunken: "#0b1527",
-  panel: "#0e192c",
-  raised: "#15233b",
+  page: "#060e24",
+  sunken: "#0a1630",
+  panel: "#0d1b3a",
+  raised: "#142750",
   /** Navy sections and panels that are already dark in the light theme. */
-  navy: "#0d1c33",
+  navy: "#0c1e44",
 } as const;
 
 /** Text colour classes: light-theme token -> dark value. Tokens not listed (ink-100..300, white) keep their light-on-dark values. */
@@ -23,10 +23,14 @@ export const DARK_TEXT: Record<string, string> = {
   "ink-800": "#dde4ef",
   "ink-900": "#f1f5fb",
   "ink-950": "#f8fafd",
-  "brand-500": "#34c996",
-  "brand-600": "#45d1a1",
-  "brand-700": "#5fdcb0",
-  "brand-800": "#8fe3c3",
+  "brand-500": "#5b9dff",
+  "brand-600": "#74adff",
+  "brand-700": "#93c0ff",
+  "brand-800": "#b8d6ff",
+  "success-500": "#34c996",
+  "success-600": "#45d1a1",
+  "success-700": "#5fdcb0",
+  "success-800": "#8fe3c3",
   "gold-600": "#e8b44c",
   "gold-700": "#f0c46a",
   "gold-800": "#f6d78c",
@@ -42,41 +46,47 @@ export const DARK_BG: Record<string, string> = {
   white: DARK_SURFACES.panel,
   "ink-50": DARK_SURFACES.sunken,
   "ink-100": DARK_SURFACES.raised,
-  "ink-200": "#1f3050",
-  "brand-50": "rgb(14 164 122 / 0.14)",
-  "brand-100": "rgb(14 164 122 / 0.22)",
+  "ink-200": "#1f3560",
+  "brand-50": "rgb(27 111 240 / 0.16)",
+  "brand-100": "rgb(27 111 240 / 0.26)",
+  "success-50": "rgb(14 164 122 / 0.14)",
+  "success-100": "rgb(14 164 122 / 0.22)",
   "gold-50": "rgb(232 180 76 / 0.13)",
   "gold-100": "rgb(232 180 76 / 0.2)",
   "red-50": "rgb(239 68 68 / 0.14)",
   "red-100": "rgb(239 68 68 / 0.22)",
   "orange-50": "rgb(249 115 22 / 0.14)",
-  /** Solid brand fills carry white text; the light-theme green is only 3.2:1 against white, these clear 4.5:1. */
-  "brand-500": "#0b8663",
-  "brand-600": "#096b50",
+  /** Solid brand fills carry white text; these clear 4.5:1 against white. */
+  "brand-500": "#1257d6",
+  "brand-600": "#0e44b0",
+  "success-500": "#0b8663",
+  "success-600": "#096b50",
 };
 
 /** Border, divider and ring colours. */
 export const DARK_LINE: Record<string, string> = {
-  "ink-100": "#1b2b45",
-  "ink-200": "#27395a",
-  "ink-300": "#34486b",
-  "brand-200": "rgb(14 164 122 / 0.45)",
-  "brand-300": "rgb(14 164 122 / 0.6)",
+  "ink-100": "#1b2f58",
+  "ink-200": "#27406c",
+  "ink-300": "#34507f",
+  "brand-200": "rgb(27 111 240 / 0.5)",
+  "brand-300": "rgb(27 111 240 / 0.65)",
+  "success-200": "rgb(14 164 122 / 0.45)",
+  "success-300": "rgb(14 164 122 / 0.6)",
   "gold-200": "rgb(232 180 76 / 0.4)",
   "gold-300": "rgb(232 180 76 / 0.55)",
   "red-200": "rgb(239 68 68 / 0.4)",
   "red-300": "rgb(239 68 68 / 0.55)",
   "orange-200": "rgb(249 115 22 / 0.4)",
   /** Selected-state chips use a dark border in the light theme. */
-  "ink-900": "#45d1a1",
+  "ink-900": "#74adff",
 };
 
 /** Opacity variants of the two neutral surfaces (`bg-white/80`, `bg-ink-50/60`) keep their opacity over the dark colour. */
-export const DARK_BG_RGB: Record<string, string> = { white: "14 25 44", "ink-50": "11 21 39" };
+export const DARK_BG_RGB: Record<string, string> = { white: "13 27 58", "ink-50": "10 22 48" };
 
-/** Filled call-to-action controls (`bg-ink-900 text-white` buttons and chips) become brand green, white text stays. */
-export const DARK_CTA_BG = "#096b50";
-export const DARK_CTA_BG_HOVER = "#0b8663";
+/** Filled call-to-action controls (`bg-ink-900 text-white` buttons and chips) become brand blue, white text stays. */
+export const DARK_CTA_BG = "#1257d6";
+export const DARK_CTA_BG_HOVER = "#1b6ff0";
 export const DARK_CTA_ELEMENTS = ["a", "button", "span", "label", "input"] as const;
 
 /** Variables redefined under `[data-theme="dark"]`. */

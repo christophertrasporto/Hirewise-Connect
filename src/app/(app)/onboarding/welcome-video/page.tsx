@@ -33,7 +33,7 @@ export default async function WelcomeVideoPage() {
             <Card title={done ? "Step completed" : "What happens next"}>
               {done ? (
                 <>
-                  <p className="inline-flex items-center gap-1.5 text-[14px] font-semibold text-brand-700"><CheckCircle2 className="h-4 w-4" /> Completed {fmtDate(done)}</p>
+                  <p className="inline-flex items-center gap-1.5 text-[14px] font-semibold text-success-700"><CheckCircle2 className="h-4 w-4" /> Completed {fmtDate(done)}</p>
                   <p className="mt-2 text-[13.5px] text-ink-500">{onboarding.done ? "Your onboarding is complete." : "One more step on your checklist and you are done."}</p>
                   <Link href={onboarding.done ? "/courses" : "/dashboard"} className="mt-4 inline-flex h-10 items-center gap-1.5 rounded-full bg-ink-900 px-4 text-[13.5px] font-semibold text-white hover:bg-ink-800">{onboarding.done ? "Open the Academy" : "Back to checklist"} <ArrowRight className="h-4 w-4" /></Link>
                 </>

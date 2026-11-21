@@ -15,7 +15,7 @@ export function AuthShell({ children, aside }: { children: ReactNode; aside?: Re
     <div className="grid min-h-dvh lg:grid-cols-[1.05fr_1fr]">
       <aside className="relative hidden overflow-hidden bg-navy p-12 text-white lg:flex lg:flex-col lg:justify-between">
         <div className="pointer-events-none absolute inset-0 grid-bg-dark [mask-image:radial-gradient(ellipse_at_top_left,black_10%,transparent_70%)]" />
-        <div className="pointer-events-none absolute -bottom-48 -left-24 h-[560px] w-[560px] animate-drift rounded-full bg-[radial-gradient(closest-side,rgb(14_164_122/0.28),transparent)]" />
+        <div className="pointer-events-none absolute -bottom-48 -left-24 h-[560px] w-[560px] animate-drift rounded-full bg-[radial-gradient(closest-side,rgb(27_111_240/0.28),transparent)]" />
         <div className="pointer-events-none absolute -top-40 right-[-140px] h-[460px] w-[460px] animate-drift rounded-full [animation-direction:alternate-reverse] bg-[radial-gradient(closest-side,rgb(232_180_76/0.16),transparent)]" />
 
         <div className="relative">

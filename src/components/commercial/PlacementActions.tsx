@@ -65,7 +65,7 @@ export function Checklist({ placementId, items, editable }: { placementId: strin
             <input type="hidden" name="placementId" value={placementId} />
             <input type="hidden" name="itemId" value={it.id} />
             <input type="hidden" name="done" value={it.isDone ? "false" : "true"} />
-            <button type="submit" disabled={!editable} aria-label={it.isDone ? `Mark "${it.label}" not done` : `Mark "${it.label}" done`} className={cn("flex h-6 w-6 items-center justify-center rounded-md border text-[12px] font-bold", it.isDone ? "border-brand-500 bg-brand-500 text-white" : "border-ink-300 bg-white text-transparent hover:border-brand-400", !editable && "cursor-default opacity-70")}>✓</button>
+            <button type="submit" disabled={!editable} aria-label={it.isDone ? `Mark "${it.label}" not done` : `Mark "${it.label}" done`} className={cn("flex h-6 w-6 items-center justify-center rounded-md border text-[12px] font-bold", it.isDone ? "border-success-500 bg-success-500 text-white" : "border-ink-300 bg-white text-transparent hover:border-success-400", !editable && "cursor-default opacity-70")}>✓</button>
             <span className={cn("text-[14px]", it.isDone ? "text-ink-500 line-through decoration-ink-300" : "text-ink-800")}>{it.label}{it.isRequired && !it.isDone && <span className="ml-1.5 text-[11px] font-semibold text-gold-600">required</span>}</span>
           </form>
           {it.doneAt && <span className="text-[12px] text-ink-400">{new Date(it.doneAt).toLocaleDateString()}</span>}

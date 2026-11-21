@@ -43,7 +43,7 @@ export default async function QuizPage({ params }: { params: Promise<{ courseId:
                   <li key={a.id} className="flex items-center justify-between py-2.5">
                     <span className="text-ink-600">Attempt {s.attempts.length - i} · {fmtDate(a.submittedAt ?? a.startedAt)}</span>
                     <span className="flex items-center gap-3">
-                      <span className={a.passed ? "font-semibold text-brand-700" : a.status === "PENDING_REVIEW" ? "font-semibold text-gold-700" : "font-semibold text-ink-700"}>{a.status === "PENDING_REVIEW" ? "Awaiting review" : a.status === "EXPIRED" ? "Timed out" : `${a.scorePercent ?? "—"}% · ${a.passed ? "Passed" : "Not passed"}`}</span>
+                      <span className={a.passed ? "font-semibold text-success-700" : a.status === "PENDING_REVIEW" ? "font-semibold text-gold-700" : "font-semibold text-ink-700"}>{a.status === "PENDING_REVIEW" ? "Awaiting review" : a.status === "EXPIRED" ? "Timed out" : `${a.scorePercent ?? "—"}% · ${a.passed ? "Passed" : "Not passed"}`}</span>
                       <Link href={`/courses/attempt/${a.id}`} className="text-[12.5px] font-semibold text-brand-600">Review</Link>
                     </span>
                   </li>
@@ -63,7 +63,7 @@ export default async function QuizPage({ params }: { params: Promise<{ courseId:
             {s.canStart ? (
               <StartQuizButton lessonId={l.id} label={s.openAttemptId ? "Resume attempt" : s.attemptsUsed > 0 ? "Retake quiz" : "Start quiz"} />
             ) : (
-              <p className="flex items-start gap-2 rounded-2xl bg-ink-50 px-3.5 py-3 text-[13.5px] text-ink-600">{s.passed ? <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-brand-600" /> : <Lock className="mt-0.5 h-4 w-4 shrink-0 text-gold-500" />} {s.blocked}</p>
+              <p className="flex items-start gap-2 rounded-2xl bg-ink-50 px-3.5 py-3 text-[13.5px] text-ink-600">{s.passed ? <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-success-600" /> : <Lock className="mt-0.5 h-4 w-4 shrink-0 text-gold-500" />} {s.blocked}</p>
             )}
           </Card>
         </div>

@@ -66,7 +66,7 @@ function IconAction({ action, fields, label, confirm, children, danger }: { acti
 function StateBadge({ status, required }: { status: "DRAFT" | "PUBLISHED"; required: boolean }) {
   return (
     <span className="inline-flex items-center gap-1">
-      <span className={cn("rounded-full px-2 py-0.5 text-[10.5px] font-semibold uppercase tracking-[0.08em] ring-1 ring-inset", status === "PUBLISHED" ? "bg-brand-50 text-brand-700 ring-brand-200" : "bg-ink-50 text-ink-500 ring-ink-200")}>{status === "PUBLISHED" ? "Published" : "Draft"}</span>
+      <span className={cn("rounded-full px-2 py-0.5 text-[10.5px] font-semibold uppercase tracking-[0.08em] ring-1 ring-inset", status === "PUBLISHED" ? "bg-success-50 text-success-700 ring-success-200" : "bg-ink-50 text-ink-500 ring-ink-200")}>{status === "PUBLISHED" ? "Published" : "Draft"}</span>
       <span className={cn("rounded-full px-2 py-0.5 text-[10.5px] font-semibold uppercase tracking-[0.08em] ring-1 ring-inset", required ? "bg-gold-50 text-gold-700 ring-gold-200" : "bg-white text-ink-400 ring-ink-200")}>{required ? "Required" : "Optional"}</span>
     </span>
   );
@@ -268,7 +268,7 @@ export function LessonForm({ courseId, modules, moduleId, lesson, onDone, sectio
                 <input ref={input} type="file" accept={ACCEPT[uploadKind]} className="sr-only" disabled={busy} onChange={(e) => e.target.files?.[0] && upload(e.target.files[0])} />
                 {busy ? <Loader2 className="h-5 w-5 animate-spin text-brand-600" /> : <UploadCloud className="h-5 w-5 text-ink-400" />}
                 <span className="min-w-0 flex-1 text-[13.5px]">
-                  {busy ? <span className="font-semibold text-ink-800">Uploading… {file.progress ?? 0}%</span> : file.phase === "done" ? <span className="font-semibold text-ink-800"><Icon className="mr-1 inline h-3.5 w-3.5 text-brand-600" />{file.fileName ?? "Uploaded file"} <span className="font-normal text-ink-400">{[fmtBytes(file.sizeBytes), fmtDuration(file.durationSec)].filter(Boolean).join(" · ")}</span> · <span className="text-brand-700">replace</span></span> : <span className="font-semibold text-ink-700">Choose a file</span>}
+                  {busy ? <span className="font-semibold text-ink-800">Uploading… {file.progress ?? 0}%</span> : file.phase === "done" ? <span className="font-semibold text-ink-800"><Icon className="mr-1 inline h-3.5 w-3.5 text-success-600" />{file.fileName ?? "Uploaded file"} <span className="font-normal text-ink-400">{[fmtBytes(file.sizeBytes), fmtDuration(file.durationSec)].filter(Boolean).join(" · ")}</span> · <span className="text-brand-700">replace</span></span> : <span className="font-semibold text-ink-700">Choose a file</span>}
                 </span>
                 {file.phase === "done" && !busy && <button type="button" onClick={(e) => { e.preventDefault(); setFile({ phase: "idle" }); }} aria-label="Remove file" className={iconBtn}><X className="h-4 w-4" /></button>}
               </label>

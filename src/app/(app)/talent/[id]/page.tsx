@@ -39,11 +39,11 @@ export default async function CandidatePage({ params, searchParams }: { params: 
           <div>
             <div className="flex flex-wrap items-center gap-2">
               <h1 className="text-[1.75rem] font-bold leading-tight">{c.name}</h1>
-              <span className="inline-flex items-center gap-1 rounded-full bg-brand-50 px-2.5 py-1 text-[11.5px] font-semibold text-brand-700 ring-1 ring-inset ring-brand-200"><BadgeCheck className="h-3.5 w-3.5" /> {labelFor(c.verificationLevel)}</span>
+              <span className="inline-flex items-center gap-1 rounded-full bg-success-50 px-2.5 py-1 text-[11.5px] font-semibold text-success-700 ring-1 ring-inset ring-success-200"><BadgeCheck className="h-3.5 w-3.5" /> {labelFor(c.verificationLevel)}</span>
               <StatusBadge status={c.availabilityStatus} />
             </div>
             <p className="mt-1 text-[15px] text-ink-600">{c.headline ?? c.primaryRole}</p>
-            <p className="mt-1 inline-flex items-center gap-1.5 text-[12.5px] font-semibold text-brand-700"><ShieldCheck className="h-3.5 w-3.5" /> {c.partnerTeam ? <Link href={`/partners/${c.partnerTeam.code}`} className="hover:underline">{c.partnerTeam.name}</Link> : "Hirewise Direct talent"}{c.identityDisclosed && <span className="ml-2 rounded-full bg-ink-100 px-2 py-0.5 text-[11px] font-semibold text-ink-700">Full name disclosed by Hirewise</span>}</p>
+            <p className="mt-1 inline-flex items-center gap-1.5 text-[12.5px] font-semibold text-success-700"><ShieldCheck className="h-3.5 w-3.5" /> {c.partnerTeam ? <Link href={`/partners/${c.partnerTeam.code}`} className="hover:underline">{c.partnerTeam.name}</Link> : "Hirewise Direct talent"}{c.identityDisclosed && <span className="ml-2 rounded-full bg-ink-100 px-2 py-0.5 text-[11px] font-semibold text-ink-700">Full name disclosed by Hirewise</span>}</p>
             {preview && <p className="mt-1 text-[12px] text-gold-700">Preview: this is exactly what a client sees. <Link href={`/talent/${c.id}`} className="underline">Back to the staff view</Link></p>}
             {!preview && actor.role !== "CLIENT" && <p className="mt-1 text-[12px] text-ink-400"><Link href={`/talent/${c.id}?preview=client`} className="underline">Preview as a client</Link></p>}
             <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-[13px] text-ink-500">

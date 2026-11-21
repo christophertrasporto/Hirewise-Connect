@@ -14,7 +14,7 @@ export function MediaProgressBar({ state, requiredPercent, questionCount, quizHr
     <div className="mt-4">
       <div className="flex items-center justify-between text-[13px]">
         <span className="font-semibold text-ink-800">
-          {done ? <span className="inline-flex items-center gap-1.5 text-brand-700"><CheckCircle2 className="h-4 w-4" /> Completed</span> : state.mediaCompleted ? <span className="inline-flex items-center gap-1.5 text-brand-700"><CheckCircle2 className="h-4 w-4" /> {verb === "listened" ? "Audio" : "Video"} complete</span> : <span className="inline-flex items-center gap-1.5"><Icon className="h-4 w-4 text-ink-400" /> {pct}% {verb}</span>}
+          {done ? <span className="inline-flex items-center gap-1.5 text-success-700"><CheckCircle2 className="h-4 w-4" /> Completed</span> : state.mediaCompleted ? <span className="inline-flex items-center gap-1.5 text-success-700"><CheckCircle2 className="h-4 w-4" /> {verb === "listened" ? "Audio" : "Video"} complete</span> : <span className="inline-flex items-center gap-1.5"><Icon className="h-4 w-4 text-ink-400" /> {pct}% {verb}</span>}
         </span>
         <span className="text-ink-400">{state.mediaCompleted ? "" : `${requiredPercent}% required`}</span>
       </div>

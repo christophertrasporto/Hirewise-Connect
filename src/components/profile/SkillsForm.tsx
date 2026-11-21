@@ -33,7 +33,7 @@ export function SkillsForm({ software, mine, selectedSoftware }: { software: Tax
           <ul className="space-y-2.5">
             {mine.map((m) => (
               <li key={m.skillId} className="flex flex-wrap items-center justify-between gap-2 text-[13.5px]">
-                <span className="inline-flex items-center gap-1.5 rounded-full bg-brand-50 px-2.5 py-1 font-semibold text-brand-700">
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-success-50 px-2.5 py-1 font-semibold text-success-700">
                   {m.verified && <BadgeCheck className="h-3.5 w-3.5" aria-label="Passed the course" />}
                   {m.hashtag}
                 </span>

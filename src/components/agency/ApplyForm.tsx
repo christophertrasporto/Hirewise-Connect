@@ -89,7 +89,7 @@ export function ApplyForm({ values, agreement, defaultEmail, plans = [] }: { val
           <>
             <SubmitButton name="intent" value="save" pendingText="Saving…" variant="outline">Save changes</SubmitButton>
             {needsInfo && <SubmitButton name="intent" value="resubmit" pendingText="Sending…">Save and resubmit</SubmitButton>}
-            {updateState.ok && <span className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-brand-700"><CheckCircle2 className="h-4 w-4" /> Saved</span>}
+            {updateState.ok && <span className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-success-700"><CheckCircle2 className="h-4 w-4" /> Saved</span>}
           </>
         ) : (
           <SubmitButton pendingText="Submitting…">Submit application</SubmitButton>

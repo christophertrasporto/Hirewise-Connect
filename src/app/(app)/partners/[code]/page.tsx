@@ -28,7 +28,7 @@ export default async function PartnerTeamPage({ params }: { params: Promise<{ co
   return (
     <>
       <Link href="/partners" className="mb-4 inline-flex items-center gap-1.5 text-[13.5px] font-medium text-ink-500 hover:text-ink-900"><ArrowLeft className="h-4 w-4" /> All Partner Teams</Link>
-      <PageHeader eyebrow={`Partner Team ${team.code}`} title={team.name} description={`Partner since ${fmtDate(team.memberSince)}${team.disclosed ? ` · operated by ${team.disclosed.agencyName}` : ""}. Engagements, interviews, and contracts run through Hirewise.`} actions={<span className="inline-flex items-center gap-1 rounded-full bg-brand-50 px-2.5 py-1 text-[11.5px] font-semibold text-brand-700 ring-1 ring-inset ring-brand-200"><ShieldCheck className="h-3.5 w-3.5" /> Hirewise Certified</span>} />
+      <PageHeader eyebrow={`Partner Team ${team.code}`} title={team.name} description={`Partner since ${fmtDate(team.memberSince)}${team.disclosed ? ` · operated by ${team.disclosed.agencyName}` : ""}. Engagements, interviews, and contracts run through Hirewise.`} actions={<span className="inline-flex items-center gap-1 rounded-full bg-success-50 px-2.5 py-1 text-[11.5px] font-semibold text-success-700 ring-1 ring-inset ring-success-200"><ShieldCheck className="h-3.5 w-3.5" /> Hirewise Certified</span>} />
       <div className="mb-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <StatTile label="Professionals" value={team.teamSize} hint={`${team.qualifiedProfessionals} skills-assessed or above`} />
         <StatTile label="Available now" value={team.availableNow} hint={`${team.inTraining} in training`} />

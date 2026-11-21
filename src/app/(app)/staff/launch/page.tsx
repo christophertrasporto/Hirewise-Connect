@@ -18,7 +18,7 @@ export default async function LaunchPage() {
     if (e instanceof ForbiddenError) return <Banner tone="warn" title="Requires settings.manage">Launch readiness is for the Super Admin.</Banner>;
     throw e;
   }
-  const Icon = ({ s }: { s: "pass" | "warn" | "fail" }) => (s === "pass" ? <CheckCircle2 className="h-5 w-5 text-brand-600" /> : s === "warn" ? <AlertTriangle className="h-5 w-5 text-gold-600" /> : <XCircle className="h-5 w-5 text-red-600" />);
+  const Icon = ({ s }: { s: "pass" | "warn" | "fail" }) => (s === "pass" ? <CheckCircle2 className="h-5 w-5 text-success-600" /> : s === "warn" ? <AlertTriangle className="h-5 w-5 text-gold-600" /> : <XCircle className="h-5 w-5 text-red-600" />);
   return (
     <>
       <PageHeader eyebrow="Launch prep" title="Launch readiness" description="Live checks against this environment: legal text, configuration, accounts, settings, and the worker. Fails block launch; warnings need a decision. See docs/launch-checklist.md for the deployment steps." />

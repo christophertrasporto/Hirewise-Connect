@@ -13,14 +13,14 @@ export function CandidateCard({ c, canShortlist = true }: { c: CandidateCardView
       <div className="flex items-start gap-3.5">
         <Link href={`/talent/${c.id}`} className="relative shrink-0">
           <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-ink-700 to-ink-900 font-display text-lg font-bold text-white">{initials}</span>
-          <span className={cn("absolute -right-1 -bottom-1 h-3.5 w-3.5 rounded-full ring-2 ring-white", c.availabilityStatus === "AVAILABLE" ? "bg-brand-500" : c.availabilityStatus === "AVAILABLE_SOON" ? "bg-gold-500" : "bg-ink-300")} title={labelFor(c.availabilityStatus)} />
+          <span className={cn("absolute -right-1 -bottom-1 h-3.5 w-3.5 rounded-full ring-2 ring-white", c.availabilityStatus === "AVAILABLE" ? "bg-success-500" : c.availabilityStatus === "AVAILABLE_SOON" ? "bg-gold-500" : "bg-ink-300")} title={labelFor(c.availabilityStatus)} />
         </Link>
         <div className="min-w-0 flex-1">
           <Link href={`/talent/${c.id}`} className="block truncate text-[16px] font-bold text-ink-900 hover:text-brand-700">{c.name}</Link>
           <p className="text-[13px] text-ink-500">{c.primaryRole ?? "Talent"}{c.yearsExperience ? ` · ${c.yearsExperience} yrs` : ""}</p>
           <p className="text-[11.5px] font-medium text-brand-700">{c.partnerTeam ? c.partnerTeam.name : "Hirewise Direct talent"}</p>
           <div className="mt-1.5 flex flex-wrap gap-1">
-            <span className="inline-flex items-center gap-1 rounded-full bg-brand-50 px-2 py-0.5 text-[11px] font-semibold text-brand-700 ring-1 ring-inset ring-brand-200"><BadgeCheck className="h-3 w-3" /> {labelFor(c.verificationLevel)}</span>
+            <span className="inline-flex items-center gap-1 rounded-full bg-success-50 px-2 py-0.5 text-[11px] font-semibold text-success-700 ring-1 ring-inset ring-success-200"><BadgeCheck className="h-3 w-3" /> {labelFor(c.verificationLevel)}</span>
             <StatusBadge status={c.availabilityStatus} />
           </div>
         </div>

@@ -10,7 +10,7 @@ import { PURCHASE_METHODS, PURCHASE_METHOD_LABEL, PURCHASE_STATUSES, PURCHASE_ST
 export const metadata: Metadata = { title: "Academy · All purchases" };
 
 const field = "mt-1 block h-10 rounded-xl border border-ink-200 bg-white px-3 text-[13.5px] text-ink-800";
-const STATUS_TONE: Record<PurchaseStatus, string> = { PAID: "bg-brand-50 text-brand-700", PENDING: "bg-amber-50 text-amber-800", REFUNDED: "bg-red-50 text-red-700", WAIVED: "bg-ink-100 text-ink-700" };
+const STATUS_TONE: Record<PurchaseStatus, string> = { PAID: "bg-success-50 text-success-700", PENDING: "bg-amber-50 text-amber-800", REFUNDED: "bg-red-50 text-red-700", WAIVED: "bg-ink-100 text-ink-700" };
 
 export default async function StaffAcademyPurchasesPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const actor = await requireActor();
