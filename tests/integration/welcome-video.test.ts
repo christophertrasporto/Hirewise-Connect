@@ -122,6 +122,23 @@ describe("a course cannot go live without its welcome video", () => {
     expect((await db.academyCourse.findUniqueOrThrow({ where: { id: c.id } })).status).toBe("PUBLISHED");
   });
 
+  it("unarchiving explains itself: only an archived course, and it needs a lesson, both in words an admin can read", async () => {
+    const live = await course("Not archived");
+    await welcome(live.moduleId, live.id);
+    await publishCourse(db, admin(), live.id, {});
+    await expect(restoreCourse(db, admin(), live.id)).rejects.toBeInstanceOf(UserMessageError);
+    await expect(restoreCourse(db, admin(), live.id)).rejects.toThrow(/Only an archived course can be unarchived/);
+    await expect(restoreCourse(db, sales(), live.id)).rejects.toBeInstanceOf(ForbiddenError);
+    await expect(restoreCourse(db, coach(), live.id)).rejects.toBeInstanceOf(ForbiddenError);
+    await archiveCourse(db, admin(), live.id);
+    await db.courseLesson.updateMany({ where: { moduleId: live.moduleId }, data: { status: "DRAFT" } });
+    await expect(restoreCourse(db, admin(), live.id)).rejects.toBeInstanceOf(UserMessageError);
+    await expect(restoreCourse(db, admin(), live.id)).rejects.toThrow(/at least one published lesson/);
+    await db.courseLesson.updateMany({ where: { moduleId: live.moduleId }, data: { status: "PUBLISHED" } });
+    await restoreCourse(db, admin(), live.id);
+    expect((await db.academyCourse.findUniqueOrThrow({ where: { id: live.id } })).status).toBe("PUBLISHED");
+  });
+
   it("roles that may not publish still get Forbidden, not the welcome message", async () => {
     const c = await course("Forbidden");
     await expect(publishCourse(db, sales(), c.id, {})).rejects.toBeInstanceOf(ForbiddenError);
