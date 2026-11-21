@@ -324,8 +324,8 @@ export async function restoreCourse(db: PrismaClient, actor: Actor, courseId: st
   authorize(actor, "course.manage");
   const c = await academyRepository.findCourse(db, courseId);
   if (!c) throw new NotFoundError();
-  if (c.status !== "ARCHIVED") throw new Error("Only an archived course can be restored.");
-  if (publishedLessonCount(c) === 0) throw new Error("The course needs at least one published lesson before it can go live again.");
+  if (c.status !== "ARCHIVED") throw new UserMessageError("Only an archived course can be unarchived.");
+  if (publishedLessonCount(c) === 0) throw new UserMessageError("The course needs at least one published lesson before it can go live again.");
   assertWelcomeVideo(c, UserMessageError);
   await db.$transaction(async (tx) => {
     await academyRepository.setCourseStatus(tx, c.id, "PUBLISHED", { publishedById: actor.userId, publishedAt: c.publishedAt ?? new Date() });

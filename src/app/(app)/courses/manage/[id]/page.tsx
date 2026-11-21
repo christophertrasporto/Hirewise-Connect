@@ -41,7 +41,8 @@ export default async function OverviewPage({ params }: { params: Promise<{ id: s
               {isAdmin && (course.status === "PENDING_APPROVAL" || course.status === "DRAFT") && <CourseWorkflowButton courseId={course.id} op="PUBLISH" label="Publish to catalog" variant="dark" templates={templates.map((t) => ({ id: t.id, name: t.name }))} />}
               {isAdmin && course.status === "PUBLISHED" && <CourseWorkflowButton courseId={course.id} op="ARCHIVE" label="Archive course" variant="outline" confirm="Archive this course? Enrolled learners keep their progress but new enrolments stop." />}
               {course.status === "PUBLISHED" && !isAdmin && <p className="text-[13.5px] text-ink-500">Live in the catalog. Keep improving it here; contact Admin only to archive.</p>}
-              {course.status === "ARCHIVED" && <p className="text-[13.5px] text-ink-500">Archived. Enrolled learners keep access.</p>}
+              {course.status === "ARCHIVED" && <p className="text-[13.5px] text-ink-500">Archived. Enrolled learners keep access.{isAdmin ? " Unarchive it to put it back in the catalog." : " Contact Admin to unarchive it."}</p>}
+              {isAdmin && course.status === "ARCHIVED" && <CourseWorkflowButton courseId={course.id} op="RESTORE" label="Unarchive course" variant="primary" confirm="Unarchive this course? It goes back into the catalog and new learners can enrol again." />}
             </div>
           </Card>
           <Card title="Coaches">

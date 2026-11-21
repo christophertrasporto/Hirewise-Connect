@@ -26,7 +26,7 @@ export default async function SettingsPage({ params }: { params: Promise<{ id: s
       </div>
       <div className="space-y-5">
         <Card title="Danger zone">
-          {isAdmin && course.status === "PUBLISHED" ? <CourseWorkflowButton courseId={course.id} op="ARCHIVE" label="Archive course" variant="outline" confirm="Archive this course? Enrolled learners keep their progress but new enrolments stop." /> : <p className="text-[13.5px] text-ink-500">{course.status === "ARCHIVED" ? "This course is archived." : isAdmin ? "Archiving is available once the course is published." : "Only Admin can archive a published course."}</p>}
+          {isAdmin && course.status === "PUBLISHED" ? <CourseWorkflowButton courseId={course.id} op="ARCHIVE" label="Archive course" variant="outline" confirm="Archive this course? Enrolled learners keep their progress but new enrolments stop." /> : isAdmin && course.status === "ARCHIVED" ? <CourseWorkflowButton courseId={course.id} op="RESTORE" label="Unarchive course" variant="primary" confirm="Unarchive this course? It goes back into the catalog and new learners can enrol again." /> : <p className="text-[13.5px] text-ink-500">{course.status === "ARCHIVED" ? "This course is archived." : isAdmin ? "Archiving is available once the course is published." : "Only Admin can archive a published course."}</p>}
         </Card>
       </div>
     </div>
