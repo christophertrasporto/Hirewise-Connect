@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { prisma } from "@/server/db/client";
 import { requireActor } from "@/server/auth/require-actor";
 import { toActionError, formList, formString, type ActionResult } from "@/server/http/action-result";
-import { personalSchema, professionalSchema, skillsSchema, experienceSchema, updatePersonal, updateProfessional, updateSkills, addExperience, removeExperience, submitForReview, reviewTransition } from "@/server/services/agent.service";
+import { personalSchema, professionalSchema, softwareSchema, experienceSchema, updatePersonal, updateProfessional, updateSoftware, addExperience, removeExperience, submitForReview, reviewTransition } from "@/server/services/agent.service";
 import { createUploadUrl, uploadRequestSchema, confirmResumeUpload, confirmVideoUpload, confirmRecordingUpload, confirmPhotoUpload, removeOwnPhoto, recordingKindSchema, mediaDownloadUrl } from "@/server/services/media.service";
 import { activateClient } from "@/server/services/client.service";
 import { markNotificationRead } from "@/server/services/dashboard.service";
@@ -67,16 +67,15 @@ export async function saveProfessionalAction(_prev: ActionResult, fd: FormData):
   }
 }
 
-export async function saveSkillsAction(_prev: ActionResult, fd: FormData): Promise<ActionResult> {
+export async function saveSoftwareAction(_prev: ActionResult, fd: FormData): Promise<ActionResult> {
   try {
     const actor = await requireActor();
-    const skills = formList(fd, "skills");
     const software: Array<{ softwareId: string; level: string }> = [];
     for (const [key, value] of fd.entries()) {
       if (typeof value !== "string" || !value) continue;
       if (key.startsWith("software:")) software.push({ softwareId: key.slice(9), level: value });
     }
-    await updateSkills(prisma, actor, skillsSchema.parse({ skills, software }));
+    await updateSoftware(prisma, actor, softwareSchema.parse({ software }));
     refreshProfile();
     return { ok: true };
   } catch (e) {

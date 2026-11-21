@@ -171,15 +171,13 @@ export async function decideTagRequest(db: PrismaClient, actor: Actor, raw: z.in
       const tag = await skillsRepository.createTag(tx, { name, category: input.category || "Other", slug, hashtag: hashtagFor(name), description: null });
       await audit(tx, { actor, action: "SKILL_TAG_CREATED", entityType: "Skill", entityId: tag.id, newValue: { name, fromRequest: r.id } });
       const u = await skillsRepository.decideRequest(tx, r.id, { status: "APPROVED", decidedById: actor.userId, note, createdSkillId: tag.id });
-      await tx.agentSkill.upsert({ where: { agentProfileId_skillId: { agentProfileId: (await requesterProfileId(tx, r.requestedById)) ?? "", skillId: tag.id } }, create: { agentProfileId: (await requesterProfileId(tx, r.requestedById)) ?? "", skillId: tag.id }, update: {} }).catch(() => null);
+      // The requester is not given the tag: skills come only from courses (skill-verification.service).
       return u;
     }
     if (input.decision === "MERGE") {
       if (!input.mergeIntoSkillId) throw new Error("Choose the tag to merge into.");
       const target = await skillsRepository.findTag(tx, input.mergeIntoSkillId);
       if (!target) throw new NotFoundError();
-      const pid = await requesterProfileId(tx, r.requestedById);
-      if (pid) await tx.agentSkill.upsert({ where: { agentProfileId_skillId: { agentProfileId: pid, skillId: target.id } }, create: { agentProfileId: pid, skillId: target.id }, update: {} });
       return skillsRepository.decideRequest(tx, r.id, { status: "MERGED", decidedById: actor.userId, note, mergedIntoSkillId: target.id });
     }
     if (!note) throw new Error("A note is required to reject.");
@@ -190,10 +188,6 @@ export async function decideTagRequest(db: PrismaClient, actor: Actor, raw: z.in
   return toSkillTagRequestView(decided);
 }
 
-async function requesterProfileId(db: Db, userId: string) {
-  const u = await db.user.findUnique({ where: { id: userId }, select: { agentProfiles: { where: { archivedAt: null }, select: { id: true }, take: 1 } } });
-  return u?.agentProfiles[0]?.id ?? null;
-}
 
 // ---------------------------------------------------------------------------
 // Opportunity requirements (opportunity.manage) and eligibility

@@ -13,7 +13,7 @@ export default async function ResumePage() {
   const p = await getOwnProfile(prisma, actor);
   return (
     <>
-      <PageHeader title="Résumé" description="Your résumé is private to Hirewise. Clients see the structured profile, not the file." />
+      <PageHeader title="Résumé (optional)" description="A résumé is not required. If you add one, it is private to Hirewise: clients see the structured profile, not the file." />
       <div className="grid gap-5 lg:grid-cols-2">
         <Card title="Upload">
           {p.privateContact?.hasResume && <div className="mb-4"><Banner tone="success" title="Résumé on file">Uploading a new file replaces it.</Banner></div>}

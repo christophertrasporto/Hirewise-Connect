@@ -10,8 +10,8 @@ const tabs = [
   { href: "/profile/professional", label: "Professional" },
   { href: "/profile/skills", label: "Skills" },
   { href: "/profile/experience", label: "Experience" },
-  { href: "/profile/resume", label: "Résumé" },
-  { href: "/profile/media", label: "Video & voice" },
+  { href: "/profile/resume", label: "Résumé (optional)" },
+  { href: "/profile/media", label: "Video & voice (optional)" },
 ];
 
 export function ProfileTabs() {
